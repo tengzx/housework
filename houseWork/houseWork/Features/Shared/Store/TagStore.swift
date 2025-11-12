@@ -2,7 +2,7 @@
 //  TagStore.swift
 //  houseWork
 //
-//  Centralized registry of household tags that can be extended from Settings.
+//  Syncs household tags with Firestore.
 //
 
 import Foundation
@@ -22,20 +22,41 @@ final class TagStore: ObservableObject {
     @Published var isLoading = true
     @Published var error: String?
     
-    private let householdId: String
+    private let householdStore: HouseholdStore
+    private var householdCancellable: AnyCancellable?
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
+    private var currentHouseholdId: String
     
-    init(householdId: String = "ImcHKHZEu59W1zT7S27H") {
-        self.householdId = householdId
-        attachListener()
+    init(householdStore: HouseholdStore) {
+        self.householdStore = householdStore
+        self.currentHouseholdId = householdStore.householdId
+        attachListener(to: currentHouseholdId)
+        householdCancellable = householdStore.$householdId
+            .removeDuplicates()
+            .sink { [weak self] newId in
+                guard let self else { return }
+                Task { @MainActor in
+                    await self.switchHousehold(to: newId)
+                }
+            }
     }
     
     deinit {
         listener?.remove()
+        householdCancellable?.cancel()
     }
     
-    private func attachListener() {
+    private func switchHousehold(to id: String) async {
+        guard !id.isEmpty, id != currentHouseholdId else { return }
+        listener?.remove()
+        currentHouseholdId = id
+        tags = []
+        isLoading = true
+        attachListener(to: id)
+    }
+    
+    private func attachListener(to householdId: String) {
         listener = db.collection("households")
             .document(householdId)
             .collection("tags")
@@ -107,6 +128,6 @@ final class TagStore: ObservableObject {
     }
     
     private var tagCollection: CollectionReference {
-        db.collection("households").document(householdId).collection("tags")
+        db.collection("households").document(currentHouseholdId).collection("tags")
     }
 }

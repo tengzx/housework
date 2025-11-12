@@ -108,7 +108,8 @@ struct ChoreTemplateForm: View {
 
 #Preview {
     NavigationStack {
+        let householdStore = HouseholdStore()
         ChoreTemplateForm(draft: .constant(.init()), isEditing: false) { _ in }
-            .environmentObject(TagStore())
+            .environmentObject(TagStore(householdStore: householdStore))
     }
 }

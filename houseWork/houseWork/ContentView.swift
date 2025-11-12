@@ -9,14 +9,21 @@ import SwiftUI
 import Combine
 
 struct ContentView: View {
+    @StateObject private var householdStore: HouseholdStore
     @StateObject private var taskBoardStore = TaskBoardStore()
     @StateObject private var authStore = AuthStore()
-    @StateObject private var tagStore = TagStore()
+    @StateObject private var tagStore: TagStore
+    
+    init() {
+        let householdStore = HouseholdStore()
+        _householdStore = StateObject(wrappedValue: householdStore)
+        _tagStore = StateObject(wrappedValue: TagStore(householdStore: householdStore))
+    }
     
     var body: some View {
         Group {
             if authStore.isLoading {
-                ProgressView("正在加载账号…")
+                ProgressView("Loading account…")
             } else if authStore.currentUser == nil {
                 LoginView()
             } else {
@@ -40,6 +47,7 @@ struct ContentView: View {
                 }
             }
         }
+        .environmentObject(householdStore)
         .environmentObject(taskBoardStore)
         .environmentObject(authStore)
         .environmentObject(tagStore)

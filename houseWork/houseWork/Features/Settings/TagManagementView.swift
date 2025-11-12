@@ -16,8 +16,11 @@ struct TagManagementView: View {
     
     var body: some View {
         List {
+            if tagStore.isLoading {
+                ProgressView("Loading tags…")
+            }
             Section("Existing tags") {
-                if tagStore.tags.isEmpty {
+                if tagStore.tags.isEmpty && !tagStore.isLoading {
                     Text("No tags yet. Add your first tag below.")
                         .foregroundStyle(.secondary)
                 } else {
@@ -54,9 +57,11 @@ struct TagManagementView: View {
         }
         .navigationTitle("Tags")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            #if os(iOS)
+            ToolbarItem(placement: .navigationBarTrailing) {
                 EditButton()
             }
+            #endif
         }
         .overlay(alignment: .bottom) {
             if let error = tagStore.error {
@@ -96,7 +101,9 @@ struct TagManagementView: View {
 
 #Preview {
     NavigationStack {
+        let householdStore = HouseholdStore()
         TagManagementView()
-            .environmentObject(TagStore())
+            .environmentObject(householdStore)
+            .environmentObject(TagStore(householdStore: householdStore))
     }
 }

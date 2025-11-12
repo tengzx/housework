@@ -10,6 +10,9 @@ import Combine
 
 struct SettingsView: View {
     @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @State private var householdNameDraft: String = ""
+    @State private var householdIdDraft: String = ""
     
     var body: some View {
         NavigationStack {
@@ -34,12 +37,23 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                     
-                    Text("Firebase Email/Password 登录")
+                    Text("Firebase Email/Password sign-in")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 
                 Section("Household") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Current: \(householdStore.householdName)")
+                        Text("ID: \(householdStore.householdId)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    NavigationLink {
+                        HouseholdManagementView()
+                    } label: {
+                        Label("Manage households", systemImage: "house")
+                    }
                     NavigationLink {
                         TagManagementView()
                     } label: {

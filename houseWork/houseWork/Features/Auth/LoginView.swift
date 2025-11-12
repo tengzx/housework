@@ -24,21 +24,21 @@ struct LoginView: View {
             VStack(spacing: 8) {
                 Text("houseWork")
                     .font(.largeTitle.bold())
-                Text(mode == .signIn ? "登录以同步家务数据" : "创建家务账户")
+                Text(mode == .signIn ? "Sign in to sync chores" : "Create your account")
                     .foregroundStyle(.secondary)
             }
             
             VStack(spacing: 16) {
                 if mode == .signUp {
-                    TextField("姓名", text: $fullName)
+                    TextField("Full Name", text: $fullName)
                         .textFieldStyle(.roundedBorder)
                 }
-                TextField("邮箱", text: $email)
+                TextField("Email", text: $email)
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .textFieldStyle(.roundedBorder)
-                SecureField("密码", text: $password)
+                SecureField("Password", text: $password)
                     .textFieldStyle(.roundedBorder)
             }
             .padding(.horizontal)
@@ -53,7 +53,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity)
                             .padding()
                     } else {
-                        Text(mode == .signIn ? "登录" : "注册")
+                        Text(mode == .signIn ? "Sign In" : "Sign Up")
                             .frame(maxWidth: .infinity)
                             .padding()
                     }
@@ -65,7 +65,7 @@ struct LoginView: View {
                     mode = (mode == .signIn) ? .signUp : .signIn
                     authStore.authError = nil
                 } label: {
-                    Text(mode == .signIn ? "没有账号？点击注册" : "已有账号？点击登录")
+                    Text(mode == .signIn ? "Need an account? Sign up" : "Already have an account? Sign in")
                         .font(.footnote)
                 }
             }

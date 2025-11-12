@@ -10,12 +10,15 @@ import SwiftUI
 struct TaskBoardView: View {
     @EnvironmentObject private var taskStore: TaskBoardStore
     @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var householdStore: HouseholdStore
     @State private var selectedFilter: TaskBoardFilter = .all
+    @State private var showingHouseholdSheet = false
     
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    householdHeader
                     filterPicker
                     summaryRow
                     ForEach(sections) { section in
@@ -30,6 +33,39 @@ struct TaskBoardView: View {
             }
             .background(Color(white: 0.95))
             .navigationTitle("Task Board")
+        }
+    }
+    
+    private var householdHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Menu {
+                ForEach(householdStore.households) { summary in
+                    Button {
+                        householdStore.select(summary)
+                    } label: {
+                        HStack {
+                            Text(summary.name)
+                            if summary.id == householdStore.householdId {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(householdStore.householdName)
+                            .font(.title2.bold())
+                        Text("ID: \(householdStore.householdId)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
     
