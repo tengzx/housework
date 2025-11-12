@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var taskBoardStore = TaskBoardStore()
+    @StateObject private var authStore = AuthStore()
     
     var body: some View {
         TabView {
@@ -24,8 +25,13 @@ struct ContentView: View {
                 .tabItem {
                     Label("Catalog", systemImage: "list.bullet.rectangle")
                 }
+            ProfileView()
+                .tabItem {
+                    Label("Profile", systemImage: "person.crop.circle")
+                }
         }
         .environmentObject(taskBoardStore)
+        .environmentObject(authStore)
     }
 }
 

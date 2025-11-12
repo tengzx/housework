@@ -2,11 +2,10 @@
 //  AnalyticsViewModel.swift
 //  houseWork
 //
-//  Supplies derived metrics for the Analytics dashboard.
+//  Aggregates live TaskBoard data into analytics-friendly structures.
 //
 
 import Foundation
-import SwiftUI
 import Combine
 
 enum AnalyticsRange: String, CaseIterable, Identifiable {
@@ -40,24 +39,30 @@ enum AnalyticsRange: String, CaseIterable, Identifiable {
 }
 
 final class AnalyticsViewModel: ObservableObject {
-    @Published var memberStats: [MemberPerformance]
-    @Published var trend: [CompletionTrend]
-    @Published var categoryShare: [CategoryShare]
-    @Published var selectedRange: AnalyticsRange
+    @Published var memberStats: [MemberPerformance] = []
+    @Published var selectedRange: AnalyticsRange = .weekly
     
-    init(selectedRange: AnalyticsRange = .weekly) {
-        self.selectedRange = selectedRange
-        let dataset = AnalyticsViewModel.dataset(for: selectedRange)
-        self.memberStats = dataset.memberStats
-        self.trend = dataset.trend
-        self.categoryShare = dataset.categoryShare
-    }
-    
-    func refreshData() {
-        let dataset = AnalyticsViewModel.dataset(for: selectedRange)
-        memberStats = dataset.memberStats
-        trend = dataset.trend
-        categoryShare = dataset.categoryShare
+    func refresh(using tasks: [TaskItem], customRange: DateInterval? = nil) {
+        let buckets: [AnalyticsBucket]
+        if let customRange {
+            buckets = AnalyticsBucket.customBucket(for: customRange)
+        } else {
+            buckets = AnalyticsBucket.makeBuckets(for: selectedRange)
+        }
+        guard !buckets.isEmpty else {
+            memberStats = []
+            return
+        }
+        
+        let windowStart = buckets.first!.interval.start
+        let windowEnd = buckets.last!.interval.end
+        let completedTasks = tasks.filter { task in
+            guard task.status == .completed else { return false }
+            let finishDate = task.completedAt ?? task.dueDate
+            return finishDate >= windowStart && finishDate <= windowEnd
+        }
+        
+        memberStats = buildMemberStats(from: completedTasks, buckets: buckets)
     }
     
     var totalPoints: Int {
@@ -75,127 +80,183 @@ final class AnalyticsViewModel: ObservableObject {
     }
     
     var topPerformer: MemberPerformance? {
-        memberStats.sorted { $0.pointsEarned > $1.pointsEarned }.first
+        memberStats.max(by: { $0.pointsEarned < $1.pointsEarned })
+    }
+    
+    // MARK: - Builders
+    
+    private func buildMemberStats(from tasks: [TaskItem], buckets: [AnalyticsBucket]) -> [MemberPerformance] {
+        var accumulators: [UUID: MemberAccumulator] = [:]
+        for task in tasks {
+            let completionDate = task.completedAt ?? task.dueDate
+            let bucketIndex = bucketIndex(for: completionDate, buckets: buckets)
+            for member in task.assignedMembers {
+                var entry = accumulators[member.id] ?? MemberAccumulator(member: member, bucketCount: buckets.count)
+                if let bucketIndex {
+                    entry.bucketCounts[bucketIndex] += 1
+                    if bucketIndex == buckets.count - 1 {
+                        entry.tasksCompleted += 1
+                        entry.pointsEarned += task.score
+                        entry.completionDates.append(completionDate)
+                    }
+                }
+                accumulators[member.id] = entry
+            }
+        }
+        
+        return accumulators.values
+            .map { accumulator in
+                let streak = streakDays(for: accumulator.completionDates)
+                let delta: Int
+                if accumulator.bucketCounts.count >= 2 {
+                    delta = accumulator.bucketCounts.last! - accumulator.bucketCounts[accumulator.bucketCounts.count - 2]
+                } else {
+                    delta = accumulator.bucketCounts.last ?? 0
+                }
+                return MemberPerformance(
+                    member: accumulator.member,
+                    tasksCompleted: accumulator.tasksCompleted,
+                    pointsEarned: accumulator.pointsEarned,
+                    streakDays: streak,
+                    weekOverWeekDelta: delta
+                )
+            }
+            .sorted { $0.pointsEarned > $1.pointsEarned }
+    }
+    
+    // MARK: - Helpers
+    
+    private func bucketIndex(for date: Date, buckets: [AnalyticsBucket]) -> Int? {
+        for (idx, bucket) in buckets.enumerated() where bucket.interval.contains(date) {
+            return idx
+        }
+        return nil
+    }
+    
+    private func streakDays(for dates: [Date]) -> Int {
+        guard !dates.isEmpty else { return 0 }
+        let calendar = Calendar.current
+        var uniqueDays = Set(dates.map { calendar.startOfDay(for: $0) })
+        var streak = 0
+        var cursor = calendar.startOfDay(for: Date())
+        while uniqueDays.contains(cursor) {
+            streak += 1
+            uniqueDays.remove(cursor)
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+        return streak
     }
 }
 
-// MARK: - Sample Data
+// MARK: - Supporting Types
 
-private struct AnalyticsDataset {
-    let memberStats: [MemberPerformance]
-    let trend: [CompletionTrend]
-    let categoryShare: [CategoryShare]
+private struct MemberAccumulator {
+    let member: HouseholdMember
+    var tasksCompleted: Int = 0
+    var pointsEarned: Int = 0
+    var completionDates: [Date] = []
+    var bucketCounts: [Int]
+    
+    init(member: HouseholdMember, bucketCount: Int) {
+        self.member = member
+        self.bucketCounts = Array(repeating: 0, count: bucketCount)
+    }
 }
 
-extension AnalyticsViewModel {
-    private static func dataset(for range: AnalyticsRange) -> AnalyticsDataset {
-        let baseStats = sampleMemberStats()
-        let shares = baseCategoryShare()
+private struct AnalyticsBucket {
+    let label: String
+    let interval: DateInterval
+    
+    static func customBucket(for interval: DateInterval) -> [AnalyticsBucket] {
+        guard interval.end > interval.start else { return [] }
+        return [AnalyticsBucket(label: "Custom", interval: interval)]
+    }
+    
+    static func makeBuckets(for range: AnalyticsRange, reference date: Date = Date()) -> [AnalyticsBucket] {
+        let calendar = Calendar.current
         switch range {
         case .daily:
-            return AnalyticsDataset(
-                memberStats: scale(stats: baseStats, factor: 0.2, streakMultiplier: 1.0, streakCap: 3),
-                trend: dailyTrend(),
-                categoryShare: shares
-            )
+            let startOfToday = calendar.startOfDay(for: date)
+            return (0..<7).reversed().map { offset in
+                let start = calendar.date(byAdding: .day, value: -offset, to: startOfToday)!
+                let end = calendar.date(byAdding: .day, value: 1, to: start)!
+                let label = DateFormatter.shortWeekday.string(from: start)
+                return AnalyticsBucket(label: label, interval: DateInterval(start: start, end: end))
+            }
         case .weekly:
-            return AnalyticsDataset(
-                memberStats: baseStats,
-                trend: weeklyTrend(),
-                categoryShare: shares
-            )
+            guard let currentWeek = calendar.dateInterval(of: .weekOfYear, for: date) else { return [] }
+            return (0..<5).reversed().map { offset in
+                let start = calendar.date(byAdding: .weekOfYear, value: -offset, to: currentWeek.start)!
+                let end = calendar.date(byAdding: .weekOfYear, value: 1, to: start)!
+                let weekNumber = calendar.component(.weekOfYear, from: start)
+                let label = "Week \(weekNumber)"
+                return AnalyticsBucket(label: label, interval: DateInterval(start: start, end: end))
+            }
         case .monthly:
-            return AnalyticsDataset(
-                memberStats: scale(stats: baseStats, factor: 4.0, streakMultiplier: 2.5, streakCap: 21),
-                trend: monthlyTrend(),
-                categoryShare: shares
-            )
+            guard let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: date)) else { return [] }
+            return (0..<6).reversed().map { offset in
+                let start = calendar.date(byAdding: .month, value: -offset, to: currentMonth)!
+                let end = calendar.date(byAdding: .month, value: 1, to: start)!
+                let label = DateFormatter.shortMonth.string(from: start)
+                return AnalyticsBucket(label: label, interval: DateInterval(start: start, end: end))
+            }
         case .quarterly:
-            return AnalyticsDataset(
-                memberStats: scale(stats: baseStats, factor: 12.0, streakMultiplier: 6.0, streakCap: 45),
-                trend: quarterlyTrend(),
-                categoryShare: shares
-            )
+            guard let currentQuarterStart = calendar.startOfQuarter(for: date) else { return [] }
+            return (0..<4).reversed().map { offset in
+                let start = calendar.date(byAdding: .month, value: -offset * 3, to: currentQuarterStart)!
+                let end = calendar.date(byAdding: .month, value: 3, to: start)!
+                let quarterNumber = calendar.quarterNumber(for: start)
+                let year = calendar.component(.year, from: start)
+                let label = "Q\(quarterNumber) \(year)"
+                return AnalyticsBucket(label: label, interval: DateInterval(start: start, end: end))
+            }
         case .yearly:
-            return AnalyticsDataset(
-                memberStats: scale(stats: baseStats, factor: 48.0, streakMultiplier: 10.0, streakCap: 160),
-                trend: yearlyTrend(),
-                categoryShare: shares
-            )
+            guard let currentYear = calendar.date(from: calendar.dateComponents([.year], from: date)) else { return [] }
+            return (0..<5).reversed().map { offset in
+                let start = calendar.date(byAdding: .year, value: -offset, to: currentYear)!
+                let end = calendar.date(byAdding: .year, value: 1, to: start)!
+                let label = DateFormatter.year.string(from: start)
+                return AnalyticsBucket(label: label, interval: DateInterval(start: start, end: end))
+            }
         }
     }
-    
-    private static func scale(stats: [MemberPerformance], factor: Double, streakMultiplier: Double, streakCap: Int) -> [MemberPerformance] {
-        stats.map { stat in
-            MemberPerformance(
-                member: stat.member,
-                tasksCompleted: max(1, Int((Double(stat.tasksCompleted) * factor).rounded())),
-                pointsEarned: max(1, Int((Double(stat.pointsEarned) * factor).rounded())),
-                streakDays: min(max(1, Int((Double(stat.streakDays) * streakMultiplier).rounded())), streakCap),
-                weekOverWeekDelta: stat.weekOverWeekDelta
-            )
-        }
+}
+
+private extension Calendar {
+    func startOfQuarter(for date: Date) -> Date? {
+        let comps = dateComponents([.year, .month], from: date)
+        guard let year = comps.year, let month = comps.month else { return nil }
+        let quarter = ((month - 1) / 3) + 1
+        let startMonth = (quarter - 1) * 3 + 1
+        return self.date(from: DateComponents(year: year, month: startMonth))
     }
     
-    private static func sampleMemberStats() -> [MemberPerformance] {
-        let members = HouseholdMember.samples
-        return [
-            MemberPerformance(member: members[0], tasksCompleted: 18, pointsEarned: 260, streakDays: 5, weekOverWeekDelta: 3),
-            MemberPerformance(member: members[1], tasksCompleted: 14, pointsEarned: 220, streakDays: 4, weekOverWeekDelta: -1),
-            MemberPerformance(member: members[2], tasksCompleted: 12, pointsEarned: 210, streakDays: 2, weekOverWeekDelta: 2),
-            MemberPerformance(member: members[3], tasksCompleted: 9, pointsEarned: 150, streakDays: 1, weekOverWeekDelta: 0),
-            MemberPerformance(member: members[4], tasksCompleted: 7, pointsEarned: 120, streakDays: 1, weekOverWeekDelta: 1)
-        ]
+    func quarterNumber(for date: Date) -> Int {
+        let month = component(.month, from: date)
+        return ((month - 1) / 3) + 1
     }
+}
+
+private extension DateFormatter {
+    static let shortWeekday: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("EEE")
+        return formatter
+    }()
     
-    private static func dailyTrend() -> [CompletionTrend] {
-        let labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        let values = [5, 6, 4, 7, 8, 6, 5]
-        return zip(labels, values).map { CompletionTrend(periodLabel: $0.0, completedTasks: $0.1) }
-    }
+    static let shortMonth: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("MMM")
+        return formatter
+    }()
     
-    private static func weeklyTrend() -> [CompletionTrend] {
-        [
-            CompletionTrend(periodLabel: "Week 40", completedTasks: 26),
-            CompletionTrend(periodLabel: "Week 41", completedTasks: 31),
-            CompletionTrend(periodLabel: "Week 42", completedTasks: 34),
-            CompletionTrend(periodLabel: "Week 43", completedTasks: 28),
-            CompletionTrend(periodLabel: "Week 44", completedTasks: 36)
-        ]
-    }
-    
-    private static func monthlyTrend() -> [CompletionTrend] {
-        let labels = ["May", "Jun", "Jul", "Aug", "Sep", "Oct"]
-        let values = [96, 104, 118, 110, 124, 132]
-        return zip(labels, values).map { CompletionTrend(periodLabel: $0.0, completedTasks: $0.1) }
-    }
-    
-    private static func quarterlyTrend() -> [CompletionTrend] {
-        [
-            CompletionTrend(periodLabel: "Q1 2025", completedTasks: 310),
-            CompletionTrend(periodLabel: "Q2 2025", completedTasks: 340),
-            CompletionTrend(periodLabel: "Q3 2025", completedTasks: 365),
-            CompletionTrend(periodLabel: "Q4 2025", completedTasks: 330)
-        ]
-    }
-    
-    private static func yearlyTrend() -> [CompletionTrend] {
-        [
-            CompletionTrend(periodLabel: "2021", completedTasks: 1120),
-            CompletionTrend(periodLabel: "2022", completedTasks: 1280),
-            CompletionTrend(periodLabel: "2023", completedTasks: 1420),
-            CompletionTrend(periodLabel: "2024", completedTasks: 1510),
-            CompletionTrend(periodLabel: "2025", completedTasks: 980)
-        ]
-    }
-    
-    private static func baseCategoryShare() -> [CategoryShare] {
-        [
-            CategoryShare(label: "Kitchen", percentage: 0.28, color: .orange),
-            CategoryShare(label: "Laundry", percentage: 0.18, color: .blue),
-            CategoryShare(label: "Cleaning", percentage: 0.32, color: .green),
-            CategoryShare(label: "Errands", percentage: 0.14, color: .purple),
-            CategoryShare(label: "Yard", percentage: 0.08, color: .pink)
-        ]
-    }
+    static let year: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("yyyy")
+        return formatter
+    }()
 }

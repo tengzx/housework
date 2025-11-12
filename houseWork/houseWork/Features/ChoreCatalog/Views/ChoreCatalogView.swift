@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ChoreCatalogView: View {
     @EnvironmentObject private var taskStore: TaskBoardStore
+    @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel = ChoreCatalogViewModel()
     @State private var showFormSheet = false
     @State private var draft = ChoreTemplateDraft()
@@ -129,8 +130,12 @@ struct ChoreCatalogView: View {
     }
     
     private func handleAddToBoard(_ template: ChoreTemplate) {
-        taskStore.enqueue(template: template)
-        successMessage = "\"\(template.title)\" added to backlog"
+        taskStore.enqueue(template: template, assignedTo: authStore.currentUser)
+        if let user = authStore.currentUser {
+            successMessage = "\"\(template.title)\" assigned to \(user.name)"
+        } else {
+            successMessage = "\"\(template.title)\" added to backlog"
+        }
         withAnimation(.spring()) {
             showSuccessBanner = true
         }
@@ -145,6 +150,7 @@ struct ChoreCatalogView: View {
 #Preview {
     ChoreCatalogView()
         .environmentObject(TaskBoardStore())
+        .environmentObject(AuthStore())
 }
 
 private struct SuccessBanner: View {

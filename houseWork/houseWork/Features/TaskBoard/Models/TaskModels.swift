@@ -66,6 +66,7 @@ struct TaskItem: Identifiable, Hashable {
     var roomTag: String
     var assignedMembers: [HouseholdMember]
     var originTemplateID: UUID?
+    var completedAt: Date?
     
     init(
         id: UUID = UUID(),
@@ -76,7 +77,8 @@ struct TaskItem: Identifiable, Hashable {
         score: Int,
         roomTag: String,
         assignedMembers: [HouseholdMember],
-        originTemplateID: UUID? = nil
+        originTemplateID: UUID? = nil,
+        completedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -87,6 +89,7 @@ struct TaskItem: Identifiable, Hashable {
         self.roomTag = roomTag
         self.assignedMembers = assignedMembers
         self.originTemplateID = originTemplateID
+        self.completedAt = completedAt
     }
 }
 
@@ -142,7 +145,8 @@ extension TaskItem {
                 dueDate: .now.addingTimeInterval(-60 * 60 * 5),
                 score: 25,
                 roomTag: "Errands",
-                assignedMembers: [members[1]]
+                assignedMembers: [members[1]],
+                completedAt: Date().addingTimeInterval(-60 * 60 * 5)
             )
         ]
     }

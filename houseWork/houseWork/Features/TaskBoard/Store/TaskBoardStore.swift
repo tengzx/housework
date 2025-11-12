@@ -11,17 +11,12 @@ import Combine
 
 final class TaskBoardStore: ObservableObject {
     @Published private(set) var tasks: [TaskItem]
-    @Published var currentMember: HouseholdMember
     
-    init(
-        tasks: [TaskItem] = TaskItem.fixtures(),
-        currentMember: HouseholdMember = HouseholdMember.samples.first ?? HouseholdMember(name: "You", accentColor: .blue)
-    ) {
+    init(tasks: [TaskItem] = TaskItem.fixtures()) {
         self.tasks = tasks
-        self.currentMember = currentMember
     }
     
-    func enqueue(template: ChoreTemplate) {
+    func enqueue(template: ChoreTemplate, assignedTo member: HouseholdMember?) {
         let newTask = TaskItem(
             title: template.title,
             details: template.details,
@@ -29,7 +24,7 @@ final class TaskBoardStore: ObservableObject {
             dueDate: Date().addingTimeInterval(60 * 60 * 24),
             score: template.baseScore,
             roomTag: template.tags.first ?? "General",
-            assignedMembers: [],
+            assignedMembers: member.map { [$0] } ?? [],
             originTemplateID: template.id
         )
         withAnimation {
@@ -37,12 +32,12 @@ final class TaskBoardStore: ObservableObject {
         }
     }
     
-    func startTask(_ task: TaskItem) {
+    func startTask(_ task: TaskItem, assignedTo member: HouseholdMember?) {
         update(task) { item in
             var updated = item
             updated.status = .inProgress
-            if updated.assignedMembers.isEmpty {
-                updated.assignedMembers = [currentMember]
+            if updated.assignedMembers.isEmpty, let member {
+                updated.assignedMembers = [member]
             }
             return updated
         }
@@ -52,6 +47,7 @@ final class TaskBoardStore: ObservableObject {
         update(task) { item in
             var updated = item
             updated.status = .completed
+            updated.completedAt = Date()
             return updated
         }
     }

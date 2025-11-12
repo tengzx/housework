@@ -9,6 +9,7 @@ import SwiftUI
 
 struct TaskBoardView: View {
     @EnvironmentObject private var taskStore: TaskBoardStore
+    @EnvironmentObject private var authStore: AuthStore
     @State private var selectedFilter: TaskBoardFilter = .all
     
     var body: some View {
@@ -20,7 +21,7 @@ struct TaskBoardView: View {
                     ForEach(sections) { section in
                         TaskSectionView(
                             section: section,
-                            startHandler: { taskStore.startTask($0) },
+                            startHandler: { taskStore.startTask($0, assignedTo: authStore.currentUser) },
                             completeHandler: { taskStore.completeTask($0) }
                         )
                     }
@@ -75,7 +76,8 @@ struct TaskBoardView: View {
         case .all:
             return true
         case .mine:
-            return task.assignedMembers.contains(where: { $0.id == taskStore.currentMember.id })
+            guard let user = authStore.currentUser else { return false }
+            return task.assignedMembers.contains(where: { $0.id == user.id })
         case .unassigned:
             return task.assignedMembers.isEmpty
         }
@@ -168,4 +170,5 @@ private struct SummaryCard: View {
 #Preview {
     TaskBoardView()
         .environmentObject(TaskBoardStore())
+        .environmentObject(AuthStore())
 }

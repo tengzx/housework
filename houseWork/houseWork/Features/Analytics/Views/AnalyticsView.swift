@@ -8,27 +8,44 @@
 import SwiftUI
 
 struct AnalyticsView: View {
+    @EnvironmentObject private var taskStore: TaskBoardStore
     @StateObject private var viewModel = AnalyticsViewModel()
+    @State private var useCustomRange = false
+    @State private var customStart = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
+    @State private var customEnd = Date()
     
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
                     rangePicker
+                    customRangeSection
                     metricsSection
                     leaderboardSection
-                    trendSection
-                    categorySection
                 }
                 .padding()
             }
             .background(Color(white: 0.95))
             .navigationTitle("Analytics")
+            .onAppear { refreshAnalytics() }
+            .onChange(of: taskStore.tasks) { _ in refreshAnalytics() }
             .onChange(of: viewModel.selectedRange) { _ in
-                viewModel.refreshData()
+                guard !useCustomRange else { return }
+                refreshAnalytics()
+            }
+            .onChange(of: useCustomRange) { _ in refreshAnalytics() }
+            .onChange(of: customStart) { newValue in
+                if newValue > customEnd { customEnd = newValue }
+                if useCustomRange { refreshAnalytics() }
+            }
+            .onChange(of: customEnd) { newValue in
+                if newValue < customStart { customStart = newValue }
+                if useCustomRange { refreshAnalytics() }
             }
         }
     }
+    
+    // MARK: - Sections
     
     private var rangePicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -36,8 +53,9 @@ struct AnalyticsView: View {
                 ForEach(AnalyticsRange.allCases) { range in
                     RangeChip(
                         label: range.label,
-                        isSelected: viewModel.selectedRange == range
+                        isSelected: viewModel.selectedRange == range && !useCustomRange
                     ) {
+                        useCustomRange = false
                         viewModel.selectedRange = range
                     }
                 }
@@ -46,29 +64,54 @@ struct AnalyticsView: View {
         }
     }
     
+    private var customRangeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $useCustomRange) {
+                Text("Custom Date Range")
+                    .font(.headline)
+            }
+            .toggleStyle(SwitchToggleStyle())
+            
+            if useCustomRange {
+                VStack(alignment: .leading, spacing: 12) {
+                    DatePicker("Start", selection: $customStart, displayedComponents: .date)
+                    DatePicker("End", selection: $customEnd, displayedComponents: .date)
+                }
+                .font(.subheadline)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
+    }
+    
     private var metricsSection: some View {
-        HStack(spacing: 12) {
-            MetricCardView(
-                title: "Total Points",
-                value: "\(viewModel.totalPoints)",
-                subtitle: viewModel.selectedRange.metricSubtitle,
-                icon: "star.fill",
-                tint: .yellow
-            )
-            MetricCardView(
-                title: "Avg Tasks",
-                value: "\(viewModel.averageTasksPerMember)",
-                subtitle: "Per member",
-                icon: "chart.bar.fill",
-                tint: .blue
-            )
-            MetricCardView(
-                title: "Top Streak",
-                value: "\(viewModel.householdStreak)d",
-                subtitle: "Active days",
-                icon: "flame.fill",
-                tint: .orange
-            )
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                MetricCardView(
+                    title: "Total Points",
+                    value: "\(viewModel.totalPoints)",
+                    subtitle: metricsSubtitle,
+                    icon: "star.fill",
+                    tint: .yellow
+                )
+                MetricCardView(
+                    title: "Avg Tasks",
+                    value: "\(viewModel.averageTasksPerMember)",
+                    subtitle: "Per member",
+                    icon: "chart.bar.fill",
+                    tint: .blue
+                )
+                MetricCardView(
+                    title: "Top Streak",
+                    value: "\(viewModel.householdStreak)d",
+                    subtitle: "Active days",
+                    icon: "flame.fill",
+                    tint: .orange
+                )
+            }
+            .padding(.horizontal, 4)
         }
     }
     
@@ -83,25 +126,27 @@ struct AnalyticsView: View {
         }
     }
     
-    private var trendSection: some View {
-        SectionCard(title: "Weekly Completions", icon: "chart.bar.xaxis") {
-            let maxValue = viewModel.trend.map(\.completedTasks).max() ?? 0
-            VStack(spacing: 14) {
-                ForEach(viewModel.trend) { trend in
-                    TrendBarView(trend: trend, maxValue: maxValue)
-                }
-            }
-        }
+    // MARK: - Helpers
+    
+    private func refreshAnalytics() {
+        viewModel.refresh(using: taskStore.tasks, customRange: activeCustomRange)
     }
     
-    private var categorySection: some View {
-        SectionCard(title: "Category Split", icon: "square.grid.2x2.fill") {
-            VStack(spacing: 16) {
-                ForEach(viewModel.categoryShare) { share in
-                    CategoryShareRow(share: share)
-                }
-            }
+    private var activeCustomRange: DateInterval? {
+        guard useCustomRange else { return nil }
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: customStart)
+        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: customEnd)) ?? customEnd
+        return DateInterval(start: start, end: end)
+    }
+    
+    private var metricsSubtitle: String {
+        if useCustomRange, let interval = activeCustomRange {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            return "\(formatter.string(from: interval.start)) – \(formatter.string(from: interval.end.addingTimeInterval(-1)))"
         }
+        return viewModel.selectedRange.metricSubtitle
     }
 }
 
@@ -148,4 +193,5 @@ private struct RangeChip: View {
 
 #Preview {
     AnalyticsView()
+        .environmentObject(TaskBoardStore())
 }
