@@ -14,23 +14,31 @@ struct ContentView: View {
     @StateObject private var tagStore = TagStore()
     
     var body: some View {
-        TabView {
-            TaskBoardView()
-                .tabItem {
-                    Label("Board", systemImage: "rectangle.grid.2x2")
+        Group {
+            if authStore.isLoading {
+                ProgressView("正在加载账号…")
+            } else if authStore.currentUser == nil {
+                LoginView()
+            } else {
+                TabView {
+                    TaskBoardView()
+                        .tabItem {
+                            Label("Board", systemImage: "rectangle.grid.2x2")
+                        }
+                    AnalyticsView()
+                        .tabItem {
+                            Label("Analytics", systemImage: "chart.line.uptrend.xyaxis")
+                        }
+                    ChoreCatalogView()
+                        .tabItem {
+                            Label("Catalog", systemImage: "list.bullet.rectangle")
+                        }
+                    SettingsView()
+                        .tabItem {
+                            Label("Settings", systemImage: "gear")
+                        }
                 }
-            AnalyticsView()
-                .tabItem {
-                    Label("Analytics", systemImage: "chart.line.uptrend.xyaxis")
-                }
-            ChoreCatalogView()
-                .tabItem {
-                    Label("Catalog", systemImage: "list.bullet.rectangle")
-                }
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gear")
-                }
+            }
         }
         .environmentObject(taskBoardStore)
         .environmentObject(authStore)

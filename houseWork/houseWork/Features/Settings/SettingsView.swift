@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct SettingsView: View {
     @EnvironmentObject private var authStore: AuthStore
@@ -33,9 +34,9 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                     
-                    NavigationLink("Switch household member") {
-                        MemberPickerView()
-                    }
+                    Text("Firebase Email/Password 登录")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 
                 Section("Household") {
@@ -48,34 +49,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
-    }
-}
-
-private struct MemberPickerView: View {
-    @EnvironmentObject private var authStore: AuthStore
-    
-    var body: some View {
-        List(authStore.availableMembers) { member in
-            Button {
-                authStore.login(as: member)
-            } label: {
-                HStack {
-                    AvatarCircle(member: member)
-                    VStack(alignment: .leading) {
-                        Text(member.name)
-                        Text("Tap to sign in")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if authStore.currentUser?.id == member.id {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    }
-                }
-            }
-        }
-        .navigationTitle("Switch Member")
     }
 }
 
