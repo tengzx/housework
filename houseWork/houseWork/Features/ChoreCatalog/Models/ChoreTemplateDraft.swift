@@ -9,12 +9,25 @@
 import Foundation
 
 struct ChoreTemplateDraft {
+    var templateID: UUID?
     var title: String = ""
     var details: String = ""
     var tagsText: String = ""
     var frequency: ChoreFrequency = .weekly
     var baseScore: Int = 20
     var estimatedMinutes: Int = 30
+    
+    init() {}
+    
+    init(template: ChoreTemplate) {
+        templateID = template.id
+        title = template.title
+        details = template.details
+        tagsText = template.tags.joined(separator: ", ")
+        frequency = template.frequency
+        baseScore = template.baseScore
+        estimatedMinutes = template.estimatedMinutes
+    }
     
     mutating func reset() {
         self = ChoreTemplateDraft()
@@ -31,6 +44,7 @@ struct ChoreTemplateDraft {
             .filter { !$0.isEmpty }
         
         return ChoreTemplate(
+            id: templateID ?? UUID(),
             title: trimmedTitle,
             details: trimmedDetails.isEmpty ? "No description yet." : trimmedDetails,
             tags: tags.isEmpty ? ["General"] : tags,

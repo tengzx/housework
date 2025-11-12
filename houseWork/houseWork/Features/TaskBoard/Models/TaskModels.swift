@@ -40,8 +40,24 @@ enum TaskStatus: String, CaseIterable, Identifiable {
     }
 }
 
+enum TaskBoardFilter: String, CaseIterable, Identifiable {
+    case all
+    case mine
+    case unassigned
+    
+    var id: String { rawValue }
+    
+    var label: String {
+        switch self {
+        case .all: "All"
+        case .mine: "My Tasks"
+        case .unassigned: "Unassigned"
+        }
+    }
+}
+
 struct TaskItem: Identifiable, Hashable {
-    let id: UUID
+    var id: UUID
     var title: String
     var details: String
     var status: TaskStatus
@@ -49,6 +65,7 @@ struct TaskItem: Identifiable, Hashable {
     var score: Int
     var roomTag: String
     var assignedMembers: [HouseholdMember]
+    var originTemplateID: UUID?
     
     init(
         id: UUID = UUID(),
@@ -58,7 +75,8 @@ struct TaskItem: Identifiable, Hashable {
         dueDate: Date,
         score: Int,
         roomTag: String,
-        assignedMembers: [HouseholdMember]
+        assignedMembers: [HouseholdMember],
+        originTemplateID: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -68,6 +86,7 @@ struct TaskItem: Identifiable, Hashable {
         self.score = score
         self.roomTag = roomTag
         self.assignedMembers = assignedMembers
+        self.originTemplateID = originTemplateID
     }
 }
 

@@ -49,4 +49,11 @@ final class ChoreCatalogViewModel: ObservableObject {
             templates.insert(template, at: 0)
         }
     }
+    
+    func updateTemplate(_ template: ChoreTemplate) {
+        guard let index = templates.firstIndex(where: { $0.id == template.id }) else { return }
+        withAnimation {
+            templates[index] = template
+        }
+    }
 }

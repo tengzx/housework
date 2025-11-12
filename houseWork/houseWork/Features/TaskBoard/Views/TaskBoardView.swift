@@ -8,7 +8,8 @@
 import SwiftUI
 
 struct TaskBoardView: View {
-    @StateObject private var viewModel = TaskBoardViewModel()
+    @EnvironmentObject private var taskStore: TaskBoardStore
+    @State private var selectedFilter: TaskBoardFilter = .all
     
     var body: some View {
         NavigationStack {
@@ -16,11 +17,11 @@ struct TaskBoardView: View {
                 VStack(spacing: 16) {
                     filterPicker
                     summaryRow
-                    ForEach(viewModel.sections) { section in
+                    ForEach(sections) { section in
                         TaskSectionView(
                             section: section,
-                            startHandler: { viewModel.startTask($0) },
-                            completeHandler: { viewModel.completeTask($0) }
+                            startHandler: { taskStore.startTask($0) },
+                            completeHandler: { taskStore.completeTask($0) }
                         )
                     }
                 }
@@ -32,7 +33,7 @@ struct TaskBoardView: View {
     }
     
     private var filterPicker: some View {
-        Picker("Filter", selection: $viewModel.selectedFilter) {
+        Picker("Filter", selection: $selectedFilter) {
             ForEach(TaskBoardFilter.allCases) { filter in
                 Text(filter.label).tag(filter)
             }
@@ -44,18 +45,39 @@ struct TaskBoardView: View {
         HStack(spacing: 12) {
             SummaryCard(
                 title: "Completion",
-                value: "\(Int(viewModel.completionRate * 100))%",
+                value: "\(Int(taskStore.completionRate * 100))%",
                 subtitle: "of tasks done",
                 icon: "checkmark.seal.fill",
                 tint: .green
             )
             SummaryCard(
                 title: "Overdue",
-                value: "\(viewModel.overdueCount)",
+                value: "\(taskStore.overdueCount)",
                 subtitle: "need attention",
                 icon: "exclamationmark.triangle.fill",
-                tint: viewModel.overdueCount > 0 ? .orange : .secondary
+                tint: taskStore.overdueCount > 0 ? .orange : .secondary
             )
+        }
+    }
+    
+    private var sections: [TaskSection] {
+        TaskStatus.allCases.map { status in
+            let tasks = taskStore.tasks
+                .filter { $0.status == status && filterPredicate($0) }
+                .sorted { $0.dueDate < $1.dueDate }
+            return TaskSection(status: status, tasks: tasks)
+        }
+        .filter { !$0.tasks.isEmpty }
+    }
+    
+    private func filterPredicate(_ task: TaskItem) -> Bool {
+        switch selectedFilter {
+        case .all:
+            return true
+        case .mine:
+            return task.assignedMembers.contains(where: { $0.id == taskStore.currentMember.id })
+        case .unassigned:
+            return task.assignedMembers.isEmpty
         }
     }
 }
@@ -145,4 +167,5 @@ private struct SummaryCard: View {
 
 #Preview {
     TaskBoardView()
+        .environmentObject(TaskBoardStore())
 }

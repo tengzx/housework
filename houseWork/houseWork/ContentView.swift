@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var taskBoardStore = TaskBoardStore()
+    
     var body: some View {
         TabView {
             TaskBoardView()
@@ -23,6 +25,7 @@ struct ContentView: View {
                     Label("Catalog", systemImage: "list.bullet.rectangle")
                 }
         }
+        .environmentObject(taskBoardStore)
     }
 }
 

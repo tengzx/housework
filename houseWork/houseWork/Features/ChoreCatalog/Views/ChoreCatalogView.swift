@@ -8,9 +8,13 @@
 import SwiftUI
 
 struct ChoreCatalogView: View {
+    @EnvironmentObject private var taskStore: TaskBoardStore
     @StateObject private var viewModel = ChoreCatalogViewModel()
-    @State private var showCreateSheet = false
+    @State private var showFormSheet = false
     @State private var draft = ChoreTemplateDraft()
+    @State private var editingTemplate: ChoreTemplate?
+    @State private var successMessage: String?
+    @State private var showSuccessBanner = false
     
     var body: some View {
         NavigationStack {
@@ -21,26 +25,48 @@ struct ChoreCatalogView: View {
             }
             .padding(.horizontal)
             .padding(.top, 16)
+            .overlay(alignment: .top) {
+                if showSuccessBanner, let message = successMessage {
+                    SuccessBanner(message: message)
+                        .padding(.top, 8)
+                }
+            }
             .navigationTitle("Chore Catalog")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        draft = ChoreTemplateDraft()
-                        showCreateSheet = true
+                        presentCreateForm()
                     } label: {
                         Label("New Template", systemImage: "plus.circle.fill")
                     }
                 }
             }
         }
-        .sheet(isPresented: $showCreateSheet) {
+        .sheet(isPresented: $showFormSheet) {
             NavigationStack {
-                ChoreTemplateForm(draft: $draft) { template in
-                    viewModel.addTemplate(template)
-                    showCreateSheet = false
+                ChoreTemplateForm(draft: $draft, isEditing: editingTemplate != nil) { template in
+                    if editingTemplate != nil {
+                        viewModel.updateTemplate(template)
+                    } else {
+                        viewModel.addTemplate(template)
+                    }
+                    editingTemplate = nil
+                    showFormSheet = false
                 }
             }
         }
+    }
+    
+    private func presentCreateForm() {
+        draft = ChoreTemplateDraft()
+        editingTemplate = nil
+        showFormSheet = true
+    }
+    
+    private func presentEditForm(for template: ChoreTemplate) {
+        draft = ChoreTemplateDraft(template: template)
+        editingTemplate = template
+        showFormSheet = true
     }
     
     private var searchField: some View {
@@ -90,15 +116,47 @@ struct ChoreCatalogView: View {
                 )
             } else {
                 ForEach(viewModel.filteredTemplates) { template in
-                    ChoreTemplateRow(template: template)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
+                    ChoreTemplateRow(
+                        template: template,
+                        onAddToBoard: { handleAddToBoard(template) },
+                        onEdit: { presentEditForm(for: template) }
+                    )
+                    .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
                 }
             }
         }
         .listStyle(.plain)
     }
+    
+    private func handleAddToBoard(_ template: ChoreTemplate) {
+        taskStore.enqueue(template: template)
+        successMessage = "\"\(template.title)\" added to backlog"
+        withAnimation(.spring()) {
+            showSuccessBanner = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.easeOut) {
+                showSuccessBanner = false
+            }
+        }
+    }
 }
 
 #Preview {
     ChoreCatalogView()
+        .environmentObject(TaskBoardStore())
+}
+
+private struct SuccessBanner: View {
+    let message: String
+    
+    var body: some View {
+        Text(message)
+            .font(.subheadline.bold())
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(.thinMaterial, in: Capsule())
+            .shadow(radius: 4)
+            .transition(.move(edge: .top).combined(with: .opacity))
+    }
 }

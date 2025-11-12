@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ChoreTemplateForm: View {
     @Binding var draft: ChoreTemplateDraft
+    var isEditing: Bool
     var onSave: (ChoreTemplate) -> Void
     @Environment(\.dismiss) private var dismiss
     
@@ -48,7 +49,7 @@ struct ChoreTemplateForm: View {
                 TextField("Tags (comma separated)", text: $draft.tagsText)
             }
         }
-        .navigationTitle("New Chore Template")
+        .navigationTitle(isEditing ? "Edit Chore Template" : "New Chore Template")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
@@ -69,6 +70,6 @@ struct ChoreTemplateForm: View {
 
 #Preview {
     NavigationStack {
-        ChoreTemplateForm(draft: .constant(.init())) { _ in }
+        ChoreTemplateForm(draft: .constant(.init()), isEditing: false) { _ in }
     }
 }

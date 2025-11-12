@@ -9,6 +9,8 @@ import SwiftUI
 
 struct ChoreTemplateRow: View {
     let template: ChoreTemplate
+    var onAddToBoard: () -> Void
+    var onEdit: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -38,6 +40,31 @@ struct ChoreTemplateRow: View {
                             .clipShape(Capsule())
                     }
                 }
+            }
+            
+            HStack(spacing: 8) {
+                Button(action: onAddToBoard) {
+                    Label("Add to Board", systemImage: "plus.circle")
+                        .font(.caption.bold())
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .background(Color.secondary.opacity(0.15))
+                        .foregroundColor(.primary)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                
+                Button(action: onEdit) {
+                    Label("Edit", systemImage: "pencil")
+                        .font(.caption.bold())
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .background(Color.secondary.opacity(0.1))
+                        .foregroundColor(.primary)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                Spacer()
             }
         }
     }
