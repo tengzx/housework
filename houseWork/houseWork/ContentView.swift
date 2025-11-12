@@ -6,10 +6,12 @@
 //
 
 import SwiftUI
+import Combine
 
 struct ContentView: View {
     @StateObject private var taskBoardStore = TaskBoardStore()
     @StateObject private var authStore = AuthStore()
+    @StateObject private var tagStore = TagStore()
     
     var body: some View {
         TabView {
@@ -25,13 +27,14 @@ struct ContentView: View {
                 .tabItem {
                     Label("Catalog", systemImage: "list.bullet.rectangle")
                 }
-            ProfileView()
+            SettingsView()
                 .tabItem {
-                    Label("Profile", systemImage: "person.crop.circle")
+                    Label("Settings", systemImage: "gear")
                 }
         }
         .environmentObject(taskBoardStore)
         .environmentObject(authStore)
+        .environmentObject(tagStore)
     }
 }
 
