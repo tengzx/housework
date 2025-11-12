@@ -1,0 +1,151 @@
+//
+//  AnalyticsView.swift
+//  houseWork
+//
+//  Household performance dashboard with leaderboards and trends.
+//
+
+import SwiftUI
+
+struct AnalyticsView: View {
+    @StateObject private var viewModel = AnalyticsViewModel()
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    rangePicker
+                    metricsSection
+                    leaderboardSection
+                    trendSection
+                    categorySection
+                }
+                .padding()
+            }
+            .background(Color(white: 0.95))
+            .navigationTitle("Analytics")
+            .onChange(of: viewModel.selectedRange) { _ in
+                viewModel.refreshData()
+            }
+        }
+    }
+    
+    private var rangePicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(AnalyticsRange.allCases) { range in
+                    RangeChip(
+                        label: range.label,
+                        isSelected: viewModel.selectedRange == range
+                    ) {
+                        viewModel.selectedRange = range
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+    
+    private var metricsSection: some View {
+        HStack(spacing: 12) {
+            MetricCardView(
+                title: "Total Points",
+                value: "\(viewModel.totalPoints)",
+                subtitle: viewModel.selectedRange.metricSubtitle,
+                icon: "star.fill",
+                tint: .yellow
+            )
+            MetricCardView(
+                title: "Avg Tasks",
+                value: "\(viewModel.averageTasksPerMember)",
+                subtitle: "Per member",
+                icon: "chart.bar.fill",
+                tint: .blue
+            )
+            MetricCardView(
+                title: "Top Streak",
+                value: "\(viewModel.householdStreak)d",
+                subtitle: "Active days",
+                icon: "flame.fill",
+                tint: .orange
+            )
+        }
+    }
+    
+    private var leaderboardSection: some View {
+        SectionCard(title: "Leaderboard", icon: "trophy.fill") {
+            ForEach(Array(viewModel.memberStats.enumerated()), id: \.element.id) { index, stat in
+                LeaderboardRow(performance: stat, rank: index + 1)
+                if index != viewModel.memberStats.count - 1 {
+                    Divider()
+                }
+            }
+        }
+    }
+    
+    private var trendSection: some View {
+        SectionCard(title: "Weekly Completions", icon: "chart.bar.xaxis") {
+            let maxValue = viewModel.trend.map(\.completedTasks).max() ?? 0
+            VStack(spacing: 14) {
+                ForEach(viewModel.trend) { trend in
+                    TrendBarView(trend: trend, maxValue: maxValue)
+                }
+            }
+        }
+    }
+    
+    private var categorySection: some View {
+        SectionCard(title: "Category Split", icon: "square.grid.2x2.fill") {
+            VStack(spacing: 16) {
+                ForEach(viewModel.categoryShare) { share in
+                    CategoryShareRow(share: share)
+                }
+            }
+        }
+    }
+}
+
+private struct SectionCard<Content: View>: View {
+    let title: String
+    let icon: String
+    @ViewBuilder var content: Content
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label(title, systemImage: icon)
+                .font(.headline)
+            content
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
+    }
+}
+
+private struct RangeChip: View {
+    let label: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.footnote)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(isSelected ? Color.accentColor.opacity(0.16) : Color.white)
+                .foregroundStyle(isSelected ? Color.accentColor : .primary)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+#Preview {
+    AnalyticsView()
+}

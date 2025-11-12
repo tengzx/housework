@@ -30,7 +30,10 @@ final class TaskBoardViewModel: ObservableObject {
     @Published var selectedFilter: TaskBoardFilter = .all
     @Published var currentMember: HouseholdMember
     
-    init(tasks: [TaskItem] = TaskItem.fixtures(), currentMember: HouseholdMember = TaskItem.sampleMembers[0]) {
+    init(
+        tasks: [TaskItem] = TaskItem.fixtures(),
+        currentMember: HouseholdMember = HouseholdMember.samples.first ?? HouseholdMember(name: "You", accentColor: .blue)
+    ) {
         self.tasks = tasks
         self.currentMember = currentMember
     }

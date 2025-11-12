@@ -14,6 +14,10 @@ struct ContentView: View {
                 .tabItem {
                     Label("Board", systemImage: "rectangle.grid.2x2")
                 }
+            AnalyticsView()
+                .tabItem {
+                    Label("Analytics", systemImage: "chart.line.uptrend.xyaxis")
+                }
             ChoreCatalogView()
                 .tabItem {
                     Label("Catalog", systemImage: "list.bullet.rectangle")

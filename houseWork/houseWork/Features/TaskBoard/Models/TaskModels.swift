@@ -8,27 +8,6 @@
 import Foundation
 import SwiftUI
 
-struct HouseholdMember: Identifiable, Hashable {
-    let id: UUID
-    var name: String
-    var initials: String
-    var accentColor: Color
-    
-    init(id: UUID = UUID(), name: String, initials: String? = nil, accentColor: Color) {
-        self.id = id
-        self.name = name
-        self.initials = initials ?? HouseholdMember.initials(from: name)
-        self.accentColor = accentColor
-    }
-    
-    private static func initials(from name: String) -> String {
-        let components = name
-            .split(separator: " ")
-            .compactMap { $0.first }
-        return String(components.prefix(2))
-    }
-}
-
 enum TaskStatus: String, CaseIterable, Identifiable {
     case backlog
     case inProgress
@@ -99,14 +78,7 @@ struct TaskSection: Identifiable {
 }
 
 extension TaskItem {
-    static let sampleMembers: [HouseholdMember] = [
-        HouseholdMember(name: "Alex", accentColor: .pink),
-        HouseholdMember(name: "Jamie", accentColor: .blue),
-        HouseholdMember(name: "Morgan", accentColor: .green),
-        HouseholdMember(name: "Taylor", accentColor: .purple)
-    ]
-    
-    static func fixtures() -> [TaskItem] {
+    static func fixtures(members: [HouseholdMember] = HouseholdMember.samples) -> [TaskItem] {
         [
             TaskItem(
                 title: "Kitchen reset",
@@ -115,7 +87,7 @@ extension TaskItem {
                 dueDate: .now.addingTimeInterval(60 * 60 * 4),
                 score: 15,
                 roomTag: "Kitchen",
-                assignedMembers: [sampleMembers[0]]
+                assignedMembers: [members[0]]
             ),
             TaskItem(
                 title: "Laundry cycle",
@@ -124,7 +96,7 @@ extension TaskItem {
                 dueDate: .now.addingTimeInterval(60 * 60 * 8),
                 score: 20,
                 roomTag: "Laundry",
-                assignedMembers: [sampleMembers[1], sampleMembers[2]]
+                assignedMembers: [members[1], members[2]]
             ),
             TaskItem(
                 title: "Living room vacuum",
@@ -142,7 +114,7 @@ extension TaskItem {
                 dueDate: .now.addingTimeInterval(60 * 60 * 30),
                 score: 30,
                 roomTag: "Bathroom",
-                assignedMembers: [sampleMembers[3]]
+                assignedMembers: [members[3]]
             ),
             TaskItem(
                 title: "Grocery run",
@@ -151,7 +123,7 @@ extension TaskItem {
                 dueDate: .now.addingTimeInterval(-60 * 60 * 5),
                 score: 25,
                 roomTag: "Errands",
-                assignedMembers: [sampleMembers[1]]
+                assignedMembers: [members[1]]
             )
         ]
     }
