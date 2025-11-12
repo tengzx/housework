@@ -6,50 +6,107 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
+import Combine
+import FirebaseFirestore
 
 struct TagItem: Identifiable, Hashable {
-    let id: UUID
+    let id: String
     var name: String
-    
-    init(id: UUID = UUID(), name: String) {
-        self.id = id
-        self.name = name
-    }
+    var colorHex: String?
 }
 
+@MainActor
 final class TagStore: ObservableObject {
-    @Published private(set) var tags: [TagItem]
+    @Published private(set) var tags: [TagItem] = []
+    @Published var isLoading = true
+    @Published var error: String?
     
-    init(initialTags: [String] = ["Kitchen", "Laundry", "Cleaning", "Errands", "Yard"]) {
-        self.tags = initialTags
-            .map { TagItem(name: $0) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    private let householdId: String
+    private let db = Firestore.firestore()
+    private var listener: ListenerRegistration?
+    
+    init(householdId: String = "ImcHKHZEu59W1zT7S27H") {
+        self.householdId = householdId
+        attachListener()
     }
     
-    func addTag(named name: String) {
+    deinit {
+        listener?.remove()
+    }
+    
+    private func attachListener() {
+        listener = db.collection("households")
+            .document(householdId)
+            .collection("tags")
+            .order(by: "name", descending: false)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self else { return }
+                Task { @MainActor in
+                    if let error {
+                        self.error = error.localizedDescription
+                        self.isLoading = false
+                        return
+                    }
+                    guard let documents = snapshot?.documents else { return }
+                    self.tags = documents.compactMap { doc in
+                        guard let name = doc.get("name") as? String else { return nil }
+                        let color = doc.get("color") as? String
+                        return TagItem(id: doc.documentID, name: name, colorHex: color)
+                    }
+                    self.isLoading = false
+                }
+            }
+    }
+    
+    func addTag(named name: String) async {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !tags.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
-        withAnimation {
-            tags.append(TagItem(name: trimmed))
-            tags.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        guard !trimmed.isEmpty else { return }
+        do {
+            try await tagCollection.document().setData([
+                "name": trimmed,
+                "createdAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
         }
     }
     
-    func rename(tag: TagItem, to newName: String) {
-        guard let index = tags.firstIndex(where: { $0.id == tag.id }) else { return }
+    func rename(tag: TagItem, to newName: String) async {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        withAnimation {
-            tags[index].name = trimmed
-            tags.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        do {
+            try await tagCollection.document(tag.id).updateData([
+                "name": trimmed,
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
         }
     }
     
     func delete(at offsets: IndexSet) {
-        withAnimation {
-            tags.remove(atOffsets: offsets)
+        let items = offsets.compactMap { tags.indices.contains($0) ? tags[$0] : nil }
+        Task {
+            for tag in items {
+                await delete(tag: tag)
+            }
         }
+    }
+    
+    func delete(tag: TagItem) async {
+        do {
+            try await tagCollection.document(tag.id).delete()
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+    
+    private var tagCollection: CollectionReference {
+        db.collection("households").document(householdId).collection("tags")
     }
 }

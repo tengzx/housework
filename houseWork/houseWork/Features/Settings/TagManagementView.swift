@@ -40,16 +40,34 @@ struct TagManagementView: View {
                 HStack {
                     TextField("Tag name", text: $newTagName)
                     Button {
-                        tagStore.addTag(named: newTagName)
-                        newTagName = ""
+                        let name = newTagName
+                        Task {
+                            await tagStore.addTag(named: name)
+                            await MainActor.run { newTagName = "" }
+                        }
                     } label: {
                         Image(systemName: "plus.circle.fill")
                     }
-                    .disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty || tagStore.isLoading)
                 }
             }
         }
         .navigationTitle("Tags")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                EditButton()
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let error = tagStore.error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(8)
+                    .background(Color.red.opacity(0.8), in: Capsule())
+                    .padding()
+            }
+        }
         .sheet(item: $editingTag) { tag in
             NavigationStack {
                 Form {
@@ -62,8 +80,11 @@ struct TagManagementView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            tagStore.rename(tag: tag, to: editedName)
-                            editingTag = nil
+                            let name = editedName
+                            Task {
+                                await tagStore.rename(tag: tag, to: name)
+                                await MainActor.run { editingTag = nil }
+                            }
                         }
                         .disabled(editedName.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
