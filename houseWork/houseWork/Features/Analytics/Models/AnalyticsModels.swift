@@ -12,6 +12,7 @@ struct MemberPerformance: Identifiable {
     var member: HouseholdMember
     var tasksCompleted: Int
     var pointsEarned: Int
+    var minutesLogged: Int
     var streakDays: Int
     var weekOverWeekDelta: Int
 }

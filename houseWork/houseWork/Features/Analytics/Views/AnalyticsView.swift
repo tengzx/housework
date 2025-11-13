@@ -26,7 +26,6 @@ struct AnalyticsView: View {
                 .padding()
             }
             .background(Color(white: 0.95))
-            .navigationTitle("Analytics")
             .onAppear { refreshAnalytics() }
             .onChange(of: taskStore.tasks) { _ in refreshAnalytics() }
             .onChange(of: viewModel.selectedRange) { _ in

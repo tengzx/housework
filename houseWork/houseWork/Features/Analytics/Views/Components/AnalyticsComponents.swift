@@ -52,15 +52,15 @@ struct LeaderboardRow: View {
                 Text("\(performance.tasksCompleted) tasks · \(performance.pointsEarned) pts")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Text("\(performance.minutesLogged) min logged")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
                 Text("\(performance.weekOverWeekDelta >= 0 ? "+" : "")\(performance.weekOverWeekDelta) WoW")
                     .font(.caption2)
                     .foregroundStyle(performance.weekOverWeekDelta >= 0 ? .green : .red)
-                Text("\(performance.streakDays)d streak")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 8)

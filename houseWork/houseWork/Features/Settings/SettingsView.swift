@@ -46,7 +46,6 @@ struct SettingsView: View {
                     HouseholdSection()
                 }
             }
-            .navigationTitle("Settings")
         }
     }
 }

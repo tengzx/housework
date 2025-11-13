@@ -107,7 +107,8 @@ final class TaskBoardStore: ObservableObject {
             score: template.baseScore,
             roomTag: template.tags.first ?? "General",
             assignedMembers: member.map { [$0] } ?? [],
-            originTemplateID: template.id
+            originTemplateID: template.id,
+            estimatedMinutes: template.estimatedMinutes
         )
         return await createTask(task)
     }
@@ -136,7 +137,8 @@ final class TaskBoardStore: ObservableObject {
         dueDate: Date,
         score: Int,
         roomTag: String,
-        assignedMembers: [HouseholdMember]
+        assignedMembers: [HouseholdMember],
+        estimatedMinutes: Int
     ) async -> Bool {
         let newTask = TaskItem(
             title: title,
@@ -145,7 +147,8 @@ final class TaskBoardStore: ObservableObject {
             dueDate: dueDate,
             score: score,
             roomTag: roomTag,
-            assignedMembers: assignedMembers
+            assignedMembers: assignedMembers,
+            estimatedMinutes: estimatedMinutes
         )
         return await createTask(newTask)
     }

@@ -19,6 +19,7 @@ struct TaskComposerView: View {
     @State private var selectingTag = false
     @State private var score: Int = 10
     @State private var dueDate: Date = Date().addingTimeInterval(60 * 60 * 24)
+    @State private var estimatedMinutes: Int = 30
     @State private var isSaving = false
     @State private var localError: String?
     
@@ -44,6 +45,14 @@ struct TaskComposerView: View {
                             .frame(width: 80)
                         Stepper("", value: $score, in: 5...100, step: 5)
                             .labelsHidden()
+                    }
+                    Stepper(value: $estimatedMinutes, in: 5...240, step: 5) {
+                        HStack {
+                            Text("Estimated Time")
+                            Spacer()
+                            Text("\(estimatedMinutes) min")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 
@@ -95,7 +104,8 @@ struct TaskComposerView: View {
                 dueDate: dueDate,
                 score: score,
                 roomTag: roomTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "General" : roomTag,
-                assignedMembers: authStore.currentUser.map { [$0] } ?? []
+                assignedMembers: authStore.currentUser.map { [$0] } ?? [],
+                estimatedMinutes: estimatedMinutes
             )
             await MainActor.run {
                 isSaving = false

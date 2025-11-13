@@ -97,6 +97,7 @@ final class AnalyticsViewModel: ObservableObject {
                     if bucketIndex == buckets.count - 1 {
                         entry.tasksCompleted += 1
                         entry.pointsEarned += task.score
+                        entry.minutesLogged += task.estimatedMinutes
                         entry.completionDates.append(completionDate)
                     }
                 }
@@ -117,6 +118,7 @@ final class AnalyticsViewModel: ObservableObject {
                     member: accumulator.member,
                     tasksCompleted: accumulator.tasksCompleted,
                     pointsEarned: accumulator.pointsEarned,
+                    minutesLogged: accumulator.minutesLogged,
                     streakDays: streak,
                     weekOverWeekDelta: delta
                 )
@@ -155,6 +157,7 @@ private struct MemberAccumulator {
     let member: HouseholdMember
     var tasksCompleted: Int = 0
     var pointsEarned: Int = 0
+    var minutesLogged: Int = 0
     var completionDates: [Date] = []
     var bucketCounts: [Int]
     

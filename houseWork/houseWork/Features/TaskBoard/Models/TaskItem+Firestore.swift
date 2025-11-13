@@ -17,6 +17,7 @@ extension TaskItem {
               let status = TaskStatus(rawValue: statusRaw) else { return nil }
         guard let dueTimestamp = data["dueDate"] as? Timestamp else { return nil }
         guard let score = Self.intValue(from: data["score"]) else { return nil }
+        let estimatedMinutes = Self.intValue(from: data["estimatedMinutes"]) ?? 30
         
         let roomTag = data["roomTag"] as? String ?? "General"
         let assignedArray = data["assignedMembers"] as? [[String: Any]] ?? []
@@ -35,7 +36,8 @@ extension TaskItem {
             roomTag: roomTag,
             assignedMembers: assignedMembers,
             originTemplateID: originTemplateId,
-            completedAt: completedAt
+            completedAt: completedAt,
+            estimatedMinutes: estimatedMinutes
         )
     }
     
@@ -63,7 +65,8 @@ extension TaskItem {
             "dueDate": Timestamp(date: dueDate),
             "score": score,
             "roomTag": roomTag,
-            "assignedMembers": assignedMembers.map { $0.firestoreData }
+            "assignedMembers": assignedMembers.map { $0.firestoreData },
+            "estimatedMinutes": estimatedMinutes
         ]
         if let originTemplateID {
             payload["originTemplateId"] = originTemplateID.uuidString

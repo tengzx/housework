@@ -29,28 +29,21 @@ struct ChoreCatalogView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                searchField
-                tagFilter
-                templateList
-            }
-            .padding(.horizontal)
-            .padding(.top, 16)
-            .overlay(alignment: .top) {
-                if showSuccessBanner, let message = successMessage {
-                    SuccessBanner(message: message)
-                        .padding(.top, 8)
+            ZStack(alignment: .bottomTrailing) {
+                VStack(spacing: 12) {
+                    searchField
+                    tagFilter
+                    templateList
                 }
-            }
-            .navigationTitle("Chore Catalog")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        presentCreateForm()
-                    } label: {
-                        Label("New Template", systemImage: "plus.circle.fill")
+                .padding(.horizontal)
+                .padding(.top, 16)
+                .overlay(alignment: .top) {
+                    if showSuccessBanner, let message = successMessage {
+                        SuccessBanner(message: message)
+                            .padding(.top, 8)
                     }
                 }
+                floatingAddButton
             }
         }
         .sheet(isPresented: $showFormSheet) {
@@ -106,6 +99,22 @@ struct ChoreCatalogView: View {
         draft = ChoreTemplateDraft(template: template)
         editingTemplate = template
         showFormSheet = true
+    }
+
+    private var floatingAddButton: some View {
+        Button {
+            presentCreateForm()
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 56, height: 56)
+                .background(Color.accentColor, in: Circle())
+                .shadow(color: Color.accentColor.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+        .padding(.trailing, 16)
+        .padding(.bottom, 16)
+        .accessibilityLabel("New Template")
     }
     
     private var searchField: some View {

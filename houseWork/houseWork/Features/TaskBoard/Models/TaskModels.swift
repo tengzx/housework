@@ -67,6 +67,7 @@ struct TaskItem: Identifiable, Hashable {
     var assignedMembers: [HouseholdMember]
     var originTemplateID: UUID?
     var completedAt: Date?
+    var estimatedMinutes: Int
     
     init(
         id: UUID = UUID(),
@@ -78,7 +79,8 @@ struct TaskItem: Identifiable, Hashable {
         roomTag: String,
         assignedMembers: [HouseholdMember],
         originTemplateID: UUID? = nil,
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        estimatedMinutes: Int = 30
     ) {
         self.id = id
         self.title = title
@@ -90,6 +92,7 @@ struct TaskItem: Identifiable, Hashable {
         self.assignedMembers = assignedMembers
         self.originTemplateID = originTemplateID
         self.completedAt = completedAt
+        self.estimatedMinutes = estimatedMinutes
     }
 }
 
@@ -109,7 +112,8 @@ extension TaskItem {
                 dueDate: .now.addingTimeInterval(60 * 60 * 4),
                 score: 15,
                 roomTag: "Kitchen",
-                assignedMembers: [members[0]]
+                assignedMembers: [members[0]],
+                estimatedMinutes: 25
             ),
             TaskItem(
                 title: "Laundry cycle",
@@ -118,7 +122,8 @@ extension TaskItem {
                 dueDate: .now.addingTimeInterval(60 * 60 * 8),
                 score: 20,
                 roomTag: "Laundry",
-                assignedMembers: [members[1], members[2]]
+                assignedMembers: [members[1], members[2]],
+                estimatedMinutes: 45
             ),
             TaskItem(
                 title: "Living room vacuum",
@@ -127,7 +132,8 @@ extension TaskItem {
                 dueDate: .now.addingTimeInterval(60 * 60 * 24),
                 score: 18,
                 roomTag: "Living Room",
-                assignedMembers: []
+                assignedMembers: [],
+                estimatedMinutes: 20
             ),
             TaskItem(
                 title: "Bathroom deep clean",
@@ -136,7 +142,8 @@ extension TaskItem {
                 dueDate: .now.addingTimeInterval(60 * 60 * 30),
                 score: 30,
                 roomTag: "Bathroom",
-                assignedMembers: [members[3]]
+                assignedMembers: [members[3]],
+                estimatedMinutes: 50
             ),
             TaskItem(
                 title: "Grocery run",
@@ -146,7 +153,8 @@ extension TaskItem {
                 score: 25,
                 roomTag: "Errands",
                 assignedMembers: [members[1]],
-                completedAt: Date().addingTimeInterval(-60 * 60 * 5)
+                completedAt: Date().addingTimeInterval(-60 * 60 * 5),
+                estimatedMinutes: 60
             )
         ]
     }
