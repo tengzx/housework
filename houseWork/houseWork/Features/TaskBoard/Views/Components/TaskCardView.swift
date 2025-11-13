@@ -11,6 +11,7 @@ struct TaskCardView: View {
     let task: TaskItem
     var primaryButton: TaskCardButton?
     var secondaryButton: TaskCardButton?
+    var isActionEnabled: Bool = true
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -43,9 +44,11 @@ struct TaskCardView: View {
                 HStack {
                     if let button = primaryButton {
                         TaskCardButtonView(configuration: button)
+                            .disabled(!isActionEnabled)
                     }
                     if let button = secondaryButton {
                         TaskCardButtonView(configuration: button)
+                            .disabled(!isActionEnabled)
                     }
                 }
             }

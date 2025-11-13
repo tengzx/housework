@@ -114,6 +114,10 @@ final class TaskBoardStore: ObservableObject {
     
     @discardableResult
     func startTask(_ task: TaskItem, assignedTo member: HouseholdMember?) async -> Bool {
+        guard canMutate(task: task, actingUser: member) else {
+            mutationError = "You can only start tasks assigned to you."
+            return false
+        }
         return await updateTask(task) { item in
             var updated = item
             updated.status = .inProgress
@@ -147,7 +151,11 @@ final class TaskBoardStore: ObservableObject {
     }
     
     @discardableResult
-    func completeTask(_ task: TaskItem) async -> Bool {
+    func completeTask(_ task: TaskItem, actingUser: HouseholdMember?) async -> Bool {
+        guard canMutate(task: task, actingUser: actingUser) else {
+            mutationError = "You can only update tasks assigned to you."
+            return false
+        }
         return await updateTask(task) { item in
             var updated = item
             updated.status = .completed
@@ -246,3 +254,7 @@ extension TaskBoardStore {
         }
     }
 }
+    private func canMutate(task: TaskItem, actingUser: HouseholdMember?) -> Bool {
+        guard let user = actingUser else { return false }
+        return task.assignedMembers.contains(where: { $0.id == user.id })
+    }

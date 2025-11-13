@@ -80,8 +80,7 @@ struct TaskComposerView: View {
     }
     
     private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
     private func saveTask() {
@@ -89,9 +88,10 @@ struct TaskComposerView: View {
         localError = nil
         isSaving = true
         Task {
+            let trimmedDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
             let success = await taskStore.createTask(
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                details: details.trimmingCharacters(in: .whitespacesAndNewlines),
+                details: trimmedDetails.isEmpty ? "No details yet." : trimmedDetails,
                 dueDate: dueDate,
                 score: score,
                 roomTag: roomTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "General" : roomTag,

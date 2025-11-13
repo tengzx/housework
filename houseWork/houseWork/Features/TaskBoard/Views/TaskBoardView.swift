@@ -93,6 +93,7 @@ struct TaskBoardView: View {
                 ForEach(visibleSections) { section in
                     TaskSectionView(
                         section: section,
+                        currentUser: authStore.currentUser,
                         startHandler: { task in
                             Task {
                                 await taskStore.startTask(task, assignedTo: authStore.currentUser)
@@ -100,7 +101,7 @@ struct TaskBoardView: View {
                         },
                         completeHandler: { task in
                             Task {
-                                await taskStore.completeTask(task)
+                                await taskStore.completeTask(task, actingUser: authStore.currentUser)
                             }
                         }
                     )
@@ -210,9 +211,17 @@ struct TaskBoardView: View {
     }
 
     private func tasks(for status: TaskStatus) -> [TaskItem] {
-        taskStore.tasks
+        let userId = authStore.currentUser?.id
+        return taskStore.tasks
             .filter { $0.status == status && filterPredicate($0) }
-            .sorted { $0.dueDate < $1.dueDate }
+            .sorted { lhs, rhs in
+                let lhsMine = userId.map { id in lhs.assignedMembers.contains { $0.id == id } } ?? false
+                let rhsMine = userId.map { id in rhs.assignedMembers.contains { $0.id == id } } ?? false
+                if lhsMine != rhsMine {
+                    return lhsMine && !rhsMine
+                }
+                return lhs.dueDate < rhs.dueDate
+            }
     }
 
     private func taskCount(for status: TaskStatus?) -> Int {
@@ -269,6 +278,7 @@ private struct StatusSegment: Identifiable {
 
 private struct TaskSectionView: View {
     let section: TaskSection
+    let currentUser: HouseholdMember?
     let startHandler: (TaskItem) -> Void
     let completeHandler: (TaskItem) -> Void
     
@@ -279,7 +289,8 @@ private struct TaskSectionView: View {
                     TaskCardView(
                         task: task,
                         primaryButton: primaryButton(for: task),
-                        secondaryButton: secondaryButton(for: task)
+                        secondaryButton: secondaryButton(for: task),
+                        isActionEnabled: canMutate(task: task)
                     )
                 }
             }
@@ -287,6 +298,7 @@ private struct TaskSectionView: View {
     }
     
     private func primaryButton(for task: TaskItem) -> TaskCardButton? {
+        guard canMutate(task: task) else { return nil }
         switch task.status {
         case .backlog:
             return TaskCardButton(
@@ -306,6 +318,7 @@ private struct TaskSectionView: View {
     }
     
     private func secondaryButton(for task: TaskItem) -> TaskCardButton? {
+        guard canMutate(task: task) else { return nil }
         switch task.status {
         case .backlog:
             return TaskCardButton(
@@ -318,6 +331,11 @@ private struct TaskSectionView: View {
         case .completed:
             return nil
         }
+    }
+    
+    private func canMutate(task: TaskItem) -> Bool {
+        guard let currentUser else { return false }
+        return task.assignedMembers.contains(where: { $0.id == currentUser.id })
     }
 }
 
