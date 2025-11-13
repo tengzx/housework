@@ -12,6 +12,7 @@ struct TaskBoardView: View {
     @EnvironmentObject private var authStore: AuthStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @State private var selectedFilter: TaskBoardFilter = .all
+    @State private var selectedStatus: TaskStatus = .backlog
     @State private var showingHouseholdSheet = false
     
     var body: some View {
@@ -79,34 +80,30 @@ struct TaskBoardView: View {
     }
     
     private var summaryRow: some View {
-        HStack(spacing: 12) {
-            SummaryCard(
-                title: "Completion",
-                value: "\(Int(taskStore.completionRate * 100))%",
-                subtitle: "of tasks done",
-                icon: "checkmark.seal.fill",
-                tint: .green
-            )
-            SummaryCard(
-                title: "Overdue",
-                value: "\(taskStore.overdueCount)",
-                subtitle: "need attention",
-                icon: "exclamationmark.triangle.fill",
-                tint: taskStore.overdueCount > 0 ? .orange : .secondary
-            )
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 12)], spacing: 12) {
+            ForEach(TaskStatus.allCases) { status in
+                Button {
+                    selectedStatus = status
+                } label: {
+                    StatusSummaryCard(
+                        title: status.label,
+                        value: "\(taskCount(for: status))",
+                        subtitle: subtitle(for: status),
+                        icon: status.iconName,
+                        tint: status.accentColor,
+                        isSelected: status == selectedStatus
+                    )
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
-    
+
     private var sections: [TaskSection] {
-        TaskStatus.allCases.map { status in
-            let tasks = taskStore.tasks
-                .filter { $0.status == status && filterPredicate($0) }
-                .sorted { $0.dueDate < $1.dueDate }
-            return TaskSection(status: status, tasks: tasks)
-        }
-        .filter { !$0.tasks.isEmpty }
+        let tasks = tasks(for: selectedStatus)
+        return [TaskSection(status: selectedStatus, tasks: tasks)]
     }
-    
+
     private func filterPredicate(_ task: TaskItem) -> Bool {
         switch selectedFilter {
         case .all:
@@ -116,6 +113,27 @@ struct TaskBoardView: View {
             return task.assignedMembers.contains(where: { $0.id == user.id })
         case .unassigned:
             return task.assignedMembers.isEmpty
+        }
+    }
+
+    private func tasks(for status: TaskStatus) -> [TaskItem] {
+        taskStore.tasks
+            .filter { $0.status == status && filterPredicate($0) }
+            .sorted { $0.dueDate < $1.dueDate }
+    }
+
+    private func taskCount(for status: TaskStatus) -> Int {
+        tasks(for: status).count
+    }
+
+    private func subtitle(for status: TaskStatus) -> String {
+        switch status {
+        case .backlog:
+            return "待开始"
+        case .inProgress:
+            return "进行中"
+        case .completed:
+            return "已完成"
         }
     }
 }
@@ -179,13 +197,14 @@ private struct TaskSectionView: View {
     }
 }
 
-private struct SummaryCard: View {
+private struct StatusSummaryCard: View {
     let title: String
     let value: String
     let subtitle: String
     let icon: String
     let tint: Color
-    
+    let isSelected: Bool
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: icon)
@@ -193,13 +212,21 @@ private struct SummaryCard: View {
                 .foregroundStyle(tint)
             Text(value)
                 .font(.title2.bold())
+                .foregroundStyle(isSelected ? tint : .primary)
             Text(subtitle)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSelected ? tint.opacity(0.8) : .secondary)
         }
         .padding()
         .frame(maxWidth: .infinity)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isSelected ? tint.opacity(0.2) : Color(.systemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isSelected ? tint : Color.primary.opacity(0.05), lineWidth: isSelected ? 2 : 1)
+        )
     }
 }
 
