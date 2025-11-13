@@ -221,10 +221,6 @@ struct TaskBoardView: View {
                 .listRowBackground(Color.clear)
                 .padding(.vertical, 2)
             }
-        } header: {
-            Text(section.status.label)
-                .font(.headline)
-                .textCase(.none)
         }
     }
 
