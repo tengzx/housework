@@ -15,7 +15,7 @@ struct SettingsView: View {
     @State private var householdIdDraft: String = ""
     
     var body: some View {
-        NavigationStack {
+        navigationContainer {
             List {
                 Section("Account") {
                     if let user = authStore.currentUser {
@@ -103,6 +103,19 @@ private struct AvatarCircle: View {
 }
 
 #Preview {
-    SettingsView()
-        .environmentObject(AuthStore())
+    navigationContainer {
+        SettingsView()
+            .environmentObject(AuthStore())
+            .environmentObject(HouseholdStore())
+    }
+}
+
+@ViewBuilder
+private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    if #available(iOS 16.0, *) {
+        NavigationStack { content() }
+    } else {
+        NavigationView { content() }
+            .navigationViewStyle(StackNavigationViewStyle())
+    }
 }

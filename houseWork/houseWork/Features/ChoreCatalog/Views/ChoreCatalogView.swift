@@ -29,7 +29,7 @@ struct ChoreCatalogView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        navigationContainer {
             ZStack(alignment: .bottomTrailing) {
                 VStack(spacing: 12) {
                     searchField
@@ -48,7 +48,7 @@ struct ChoreCatalogView: View {
             }
         }
         .sheet(isPresented: $showFormSheet) {
-            NavigationStack {
+            navigationContainer {
                 ChoreTemplateForm(draft: $draft, isEditing: editingTemplate != nil) { template in
                     let isEditingExistingTemplate = editingTemplate != nil
                     Task {
@@ -179,8 +179,8 @@ struct ChoreCatalogView: View {
                 }
                 .listRowInsets(EdgeInsets(top: 32, leading: 0, bottom: 32, trailing: 0))
             } else if viewModel.filteredTemplates.isEmpty {
-                ContentUnavailableView(
-                    "No chores found",
+                placeholderView(
+                    title: "No chores found",
                     systemImage: "square.dashed.inset.filled",
                     description: Text("Try clearing the filters or creating a new template.")
                 )
@@ -260,5 +260,41 @@ private struct SuccessBanner: View {
             .background(.thinMaterial, in: Capsule())
             .shadow(radius: 4)
             .transition(.move(edge: .top).combined(with: .opacity))
+    }
+}
+
+@ViewBuilder
+private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    if #available(iOS 16.0, *) {
+        NavigationStack { content() }
+    } else {
+        NavigationView { content() }
+            .navigationViewStyle(StackNavigationViewStyle())
+    }
+}
+
+@ViewBuilder
+private func placeholderView(title: String, systemImage: String, description: Text? = nil) -> some View {
+    if #available(iOS 17.0, *) {
+        if let description {
+            ContentUnavailableView(title, systemImage: systemImage, description: description)
+        } else {
+            ContentUnavailableView(title, systemImage: systemImage)
+        }
+    } else {
+        VStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+            if let description {
+                description
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
     }
 }

@@ -25,14 +25,14 @@ struct TaskBoardView: View {
     @State private var editingTask: TaskItem?
     
     var body: some View {
-        NavigationStack {
+        navigationContainer {
             ZStack(alignment: .bottomTrailing) {
                 List {
                     headerSection
                     boardContent
                 }
                 .listStyle(.plain)
-                .scrollContentBackground(.hidden)
+                .applyScrollContentBackgroundHidden()
                 .background(Color(.systemGroupedBackground))
                 .refreshable {
                     await taskStore.refresh()
@@ -103,8 +103,8 @@ struct TaskBoardView: View {
             let allTasks = taskStore.tasks.filter(filterPredicate)
             if allTasks.isEmpty {
                 Section {
-                    ContentUnavailableView(
-                        "No tasks yet",
+                    placeholderView(
+                        title: "No tasks yet",
                         systemImage: "tray"
                     )
                     .frame(maxWidth: .infinity)
@@ -118,7 +118,7 @@ struct TaskBoardView: View {
                 
                 if visibleSections.isEmpty {
                     Section {
-                        ContentUnavailableView("No tasks match", systemImage: "tray")
+                        placeholderView(title: "No tasks match", systemImage: "tray")
                     }
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -445,12 +445,39 @@ private struct StatusSummaryCard: View {
     }
 }
 
+@ViewBuilder
+private func placeholderView(title: String, systemImage: String, description: Text? = nil) -> some View {
+    if #available(iOS 17.0, *) {
+        if let description {
+            ContentUnavailableView(title, systemImage: systemImage, description: description)
+        } else {
+            ContentUnavailableView(title, systemImage: systemImage)
+        }
+    } else {
+        VStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            if let description {
+                description
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+    }
+}
+
 private struct TaskDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let task: TaskItem
     
     var body: some View {
-        NavigationStack {
+        navigationContainer {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     statusRow
@@ -564,12 +591,11 @@ private struct TaskEditorView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        navigationContainer {
             Form {
                 Section("Basics") {
                     TextField("Title", text: $title)
-                    TextField("Details", text: $details, axis: .vertical)
-                        .lineLimit(3, reservesSpace: true)
+                    detailsField
                 }
                 
                 Section("Scheduling") {
@@ -628,6 +654,17 @@ private struct TaskEditorView: View {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
+    @ViewBuilder
+    private var detailsField: some View {
+        if #available(iOS 16.0, *) {
+            TextField("Details", text: $details, axis: .vertical)
+                .lineLimit(3, reservesSpace: true)
+        } else {
+            TextEditor(text: $details)
+                .frame(minHeight: 80)
+        }
+    }
+    
     private func saveTask() {
         guard canSave, !isSaving else { return }
         isSaving = true
@@ -663,4 +700,25 @@ private struct TaskEditorView: View {
         .environmentObject(AuthStore())
         .environmentObject(HouseholdStore())
         .environmentObject(TagStore(householdStore: HouseholdStore()))
+}
+
+@ViewBuilder
+private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    if #available(iOS 16.0, *) {
+        NavigationStack { content() }
+    } else {
+        NavigationView { content() }
+            .navigationViewStyle(StackNavigationViewStyle())
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func applyScrollContentBackgroundHidden() -> some View {
+        if #available(iOS 16.0, *) {
+            self.scrollContentBackground(.hidden)
+        } else {
+            self
+        }
+    }
 }

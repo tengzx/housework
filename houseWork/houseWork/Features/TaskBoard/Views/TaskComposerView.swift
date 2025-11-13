@@ -24,12 +24,11 @@ struct TaskComposerView: View {
     @State private var localError: String?
     
     var body: some View {
-        NavigationStack {
+        navigationContainer {
             Form {
                 Section("Basics") {
                     TextField("Title", text: $title)
-                    TextField("Details", text: $details, axis: .vertical)
-                        .lineLimit(3, reservesSpace: true)
+                    descriptionField
                 }
                 
                 Section("Scheduling") {
@@ -119,8 +118,35 @@ struct TaskComposerView: View {
     }
 }
 
+private extension TaskComposerView {
+    var descriptionField: some View {
+        Group {
+            if #available(iOS 16.0, *) {
+                TextField("Details", text: $details, axis: .vertical)
+                    .lineLimit(3, reservesSpace: true)
+            } else {
+                TextEditor(text: $details)
+                    .frame(minHeight: 80)
+            }
+        }
+    }
+}
+
+@ViewBuilder
+private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    if #available(iOS 16.0, *) {
+        NavigationStack { content() }
+    } else {
+        NavigationView { content() }
+            .navigationViewStyle(StackNavigationViewStyle())
+    }
+}
+
 #Preview {
-    TaskComposerView()
-        .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
-        .environmentObject(AuthStore())
+    navigationContainer {
+        TaskComposerView()
+            .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
+            .environmentObject(AuthStore())
+            .environmentObject(TagStore(householdStore: HouseholdStore()))
+    }
 }

@@ -15,7 +15,7 @@ struct AnalyticsView: View {
     @State private var customEnd = Date()
     
     var body: some View {
-        NavigationStack {
+        navigationContainer {
             ScrollView {
                 VStack(spacing: 20) {
                     rangePicker
@@ -197,6 +197,18 @@ private struct RangeChip: View {
 }
 
 #Preview {
-    AnalyticsView()
-        .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
+    navigationContainer {
+        AnalyticsView()
+            .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
+    }
+}
+
+@ViewBuilder
+private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    if #available(iOS 16.0, *) {
+        NavigationStack { content() }
+    } else {
+        NavigationView { content() }
+            .navigationViewStyle(StackNavigationViewStyle())
+    }
 }

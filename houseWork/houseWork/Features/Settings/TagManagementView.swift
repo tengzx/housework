@@ -74,7 +74,7 @@ struct TagManagementView: View {
             }
         }
         .sheet(item: $editingTag) { tag in
-            NavigationStack {
+            navigationContainer {
                 Form {
                     TextField("Tag name", text: $editedName)
                 }
@@ -100,10 +100,20 @@ struct TagManagementView: View {
 }
 
 #Preview {
-    NavigationStack {
-        let householdStore = HouseholdStore()
+    let householdStore = HouseholdStore()
+    navigationContainer {
         TagManagementView()
             .environmentObject(householdStore)
             .environmentObject(TagStore(householdStore: householdStore))
+    }
+}
+
+@ViewBuilder
+private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    if #available(iOS 16.0, *) {
+        NavigationStack { content() }
+    } else {
+        NavigationView { content() }
+            .navigationViewStyle(StackNavigationViewStyle())
     }
 }

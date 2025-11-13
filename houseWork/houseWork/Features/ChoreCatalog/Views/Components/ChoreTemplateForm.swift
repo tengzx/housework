@@ -18,8 +18,7 @@ struct ChoreTemplateForm: View {
         Form {
             Section("Basics") {
                 TextField("Title", text: $draft.title)
-                TextField("Description", text: $draft.details, axis: .vertical)
-                    .lineLimit(3, reservesSpace: true)
+                descriptionField
             }
             
             Section("Scoring & Effort") {
@@ -104,12 +103,34 @@ struct ChoreTemplateForm: View {
         }
         draft.tagsText = tags.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }.joined(separator: ", ")
     }
+    
+    private var descriptionField: some View {
+        Group {
+            if #available(iOS 16.0, *) {
+                TextField("Description", text: $draft.details, axis: .vertical)
+                    .lineLimit(3, reservesSpace: true)
+            } else {
+                TextEditor(text: $draft.details)
+                    .frame(minHeight: 80)
+            }
+        }
+    }
 }
 
 #Preview {
-    NavigationStack {
-        let householdStore = HouseholdStore()
+    let householdStore = HouseholdStore()
+    navigationPreviewContainer {
         ChoreTemplateForm(draft: .constant(.init()), isEditing: false) { _ in }
             .environmentObject(TagStore(householdStore: householdStore))
+    }
+}
+
+@ViewBuilder
+private func navigationPreviewContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    if #available(iOS 16.0, *) {
+        NavigationStack { content() }
+    } else {
+        NavigationView { content() }
+            .navigationViewStyle(StackNavigationViewStyle())
     }
 }

@@ -132,7 +132,7 @@ struct HouseholdManagementView: View {
             }
         }
         .sheet(isPresented: $showAddSheet) {
-            NavigationStack {
+            navigationContainer {
                 Form {
                     TextField("Household name", text: $draftName)
                 }
@@ -157,7 +157,7 @@ struct HouseholdManagementView: View {
             }
         }
         .sheet(item: $editingHousehold) { summary in
-            NavigationStack {
+            navigationContainer {
                 Form {
                     TextField("Household name", text: $draftName)
                 }
@@ -225,9 +225,17 @@ struct HouseholdManagementView: View {
     }
 }
 
-#Preview {
-    NavigationStack {
-        HouseholdManagementView()
-            .environmentObject(HouseholdStore())
+@ViewBuilder
+private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    if #available(iOS 16.0, *) {
+        NavigationStack { content() }
+    } else {
+        NavigationView { content() }
+            .navigationViewStyle(StackNavigationViewStyle())
     }
+}
+
+#Preview {
+    HouseholdManagementView()
+        .environmentObject(HouseholdStore())
 }
