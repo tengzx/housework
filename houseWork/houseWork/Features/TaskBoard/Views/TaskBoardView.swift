@@ -179,7 +179,8 @@ struct TaskBoardView: View {
     }
     
     private var summaryRow: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 12)], spacing: 12) {
+        let columns = Array(repeating: GridItem(.flexible(minimum: 160), spacing: 12), count: 2)
+        return LazyVGrid(columns: columns, spacing: 12) {
             ForEach(statusSegments) { segment in
                 Button {
                     selectedStatus = segment.status
