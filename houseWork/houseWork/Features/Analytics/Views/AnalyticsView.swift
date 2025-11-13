@@ -193,5 +193,5 @@ private struct RangeChip: View {
 
 #Preview {
     AnalyticsView()
-        .environmentObject(TaskBoardStore())
+        .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
 }

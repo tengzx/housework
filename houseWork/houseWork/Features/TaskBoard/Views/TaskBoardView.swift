@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct TaskBoardView: View {
     @EnvironmentObject private var taskStore: TaskBoardStore
@@ -14,6 +15,7 @@ struct TaskBoardView: View {
     @State private var selectedFilter: TaskBoardFilter = .all
     @State private var selectedStatus: TaskStatus = .backlog
     @State private var showingHouseholdSheet = false
+    @State private var alertMessage: String?
     
     var body: some View {
         NavigationStack {
@@ -22,18 +24,66 @@ struct TaskBoardView: View {
                     householdHeader
                     filterPicker
                     summaryRow
-                    ForEach(sections) { section in
-                        TaskSectionView(
-                            section: section,
-                            startHandler: { taskStore.startTask($0, assignedTo: authStore.currentUser) },
-                            completeHandler: { taskStore.completeTask($0) }
-                        )
-                    }
+                    boardContent
                 }
                 .padding()
             }
             .background(Color(white: 0.95))
             .navigationTitle("Task Board")
+        }
+        .onReceive(taskStore.$error.compactMap { $0 }) { alertMessage = $0 }
+        .onReceive(taskStore.$mutationError.compactMap { $0 }) { alertMessage = $0 }
+        .alert(
+            "Task Board Error",
+            isPresented: Binding(
+                get: { alertMessage != nil },
+                set: { if !$0 { alertMessage = nil } }
+            ),
+            actions: {
+                Button("OK", role: .cancel) { }
+            },
+            message: {
+                Text(alertMessage ?? "")
+            }
+        )
+    }
+    
+    @ViewBuilder
+    private var boardContent: some View {
+        if taskStore.isLoading && taskStore.tasks.isEmpty {
+            HStack {
+                Spacer()
+                ProgressView("Loading tasks…")
+                    .padding(.vertical, 40)
+                Spacer()
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
+            )
+        } else if taskStore.tasks.isEmpty {
+            ContentUnavailableView(
+                "No tasks yet",
+                systemImage: "tray"
+            )
+            .frame(maxWidth: .infinity)
+        } else {
+            ForEach(sections) { section in
+                TaskSectionView(
+                    section: section,
+                    startHandler: {
+                        Task {
+                            await taskStore.startTask($0, assignedTo: authStore.currentUser)
+                        }
+                    },
+                    completeHandler: {
+                        Task {
+                            await taskStore.completeTask($0)
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -232,6 +282,7 @@ private struct StatusSummaryCard: View {
 
 #Preview {
     TaskBoardView()
-        .environmentObject(TaskBoardStore())
+        .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
         .environmentObject(AuthStore())
+        .environmentObject(HouseholdStore())
 }

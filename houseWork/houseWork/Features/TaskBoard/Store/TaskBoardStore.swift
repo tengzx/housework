@@ -2,22 +2,98 @@
 //  TaskBoardStore.swift
 //  houseWork
 //
-//  Shared store that owns the household task list and exposes helpers to mutate it.
+//  Shared store that syncs the household task board with Firestore.
 //
 
 import Foundation
 import SwiftUI
 import Combine
+import FirebaseFirestore
 
+@MainActor
 final class TaskBoardStore: ObservableObject {
     @Published private(set) var tasks: [TaskItem]
+    @Published private(set) var isLoading: Bool
+    @Published var error: String?
+    @Published var mutationError: String?
+    @Published private(set) var isMutating = false
     
-    init(tasks: [TaskItem] = TaskItem.fixtures()) {
-        self.tasks = tasks
+    private let db = Firestore.firestore()
+    private var listener: ListenerRegistration?
+    private var householdCancellable: AnyCancellable?
+    private weak var householdStore: HouseholdStore?
+    private var currentHouseholdId: String = ""
+    private let isPreviewMode: Bool
+    
+    init(householdStore: HouseholdStore) {
+        self.householdStore = householdStore
+        self.tasks = []
+        self.isLoading = true
+        self.isPreviewMode = false
+        self.currentHouseholdId = householdStore.householdId
+        attachListener(to: currentHouseholdId)
+        householdCancellable = householdStore.$householdId
+            .removeDuplicates()
+            .sink { [weak self] newId in
+                guard let self else { return }
+                Task { @MainActor in
+                    await self.switchHousehold(to: newId)
+                }
+            }
     }
     
-    func enqueue(template: ChoreTemplate, assignedTo member: HouseholdMember?) {
-        let newTask = TaskItem(
+    private init(previewTasks: [TaskItem]) {
+        self.tasks = previewTasks
+        self.isLoading = false
+        self.isPreviewMode = true
+        self.householdStore = nil
+    }
+    
+    convenience init(previewTasks: [TaskItem] = TaskItem.fixtures()) {
+        self.init(previewTasks: previewTasks)
+    }
+    
+    deinit {
+        listener?.remove()
+        householdCancellable?.cancel()
+    }
+    
+    // MARK: - Firestore sync
+    
+    private func switchHousehold(to id: String) async {
+        guard !isPreviewMode else { return }
+        guard !id.isEmpty, id != currentHouseholdId else { return }
+        listener?.remove()
+        currentHouseholdId = id
+        tasks = []
+        isLoading = true
+        attachListener(to: id)
+    }
+    
+    private func attachListener(to householdId: String) {
+        guard !isPreviewMode, !householdId.isEmpty else { return }
+        listener = taskCollection(for: householdId)
+            .order(by: "dueDate", descending: false)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self else { return }
+                Task { @MainActor in
+                    if let error {
+                        self.error = error.localizedDescription
+                        self.isLoading = false
+                        return
+                    }
+                    guard let documents = snapshot?.documents else { return }
+                    self.tasks = documents.compactMap(TaskItem.init(document:))
+                    self.isLoading = false
+                }
+            }
+    }
+    
+    // MARK: - Mutations
+    
+    @discardableResult
+    func enqueue(template: ChoreTemplate, assignedTo member: HouseholdMember?) async -> Bool {
+        let task = TaskItem(
             title: template.title,
             details: template.details,
             status: .backlog,
@@ -27,30 +103,97 @@ final class TaskBoardStore: ObservableObject {
             assignedMembers: member.map { [$0] } ?? [],
             originTemplateID: template.id
         )
-        withAnimation {
-            tasks.insert(newTask, at: 0)
-        }
+        return await createTask(task)
     }
     
-    func startTask(_ task: TaskItem, assignedTo member: HouseholdMember?) {
-        update(task) { item in
+    @discardableResult
+    func startTask(_ task: TaskItem, assignedTo member: HouseholdMember?) async -> Bool {
+        return await updateTask(task) { item in
             var updated = item
             updated.status = .inProgress
             if updated.assignedMembers.isEmpty, let member {
                 updated.assignedMembers = [member]
             }
+            updated.completedAt = nil
             return updated
         }
     }
     
-    func completeTask(_ task: TaskItem) {
-        update(task) { item in
+    @discardableResult
+    func completeTask(_ task: TaskItem) async -> Bool {
+        return await updateTask(task) { item in
             var updated = item
             updated.status = .completed
             updated.completedAt = Date()
             return updated
         }
     }
+    
+    private func createTask(_ task: TaskItem) async -> Bool {
+        if isPreviewMode {
+            withAnimation {
+                tasks.insert(task, at: 0)
+            }
+            return true
+        }
+        
+        return await performMutation {
+            let householdId = try requireHouseholdId()
+            try await taskCollection(for: householdId)
+                .document(task.id.uuidString)
+                .setData(task.firestoreCreatePayload)
+        }
+    }
+    
+    private func updateTask(_ task: TaskItem, transform: (TaskItem) -> TaskItem) async -> Bool {
+        let updatedTask = transform(task)
+        if isPreviewMode {
+            applyLocalUpdate(updatedTask)
+            return true
+        }
+        
+        return await performMutation {
+            let householdId = try requireHouseholdId()
+            try await taskCollection(for: householdId)
+                .document(task.id.uuidString)
+                .setData(updatedTask.firestoreUpdatePayload, merge: true)
+        }
+    }
+    
+    private func applyLocalUpdate(_ task: TaskItem) {
+        guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        withAnimation {
+            tasks[index] = task
+        }
+    }
+    
+    private func performMutation(_ work: () async throws -> Void) async -> Bool {
+        isMutating = true
+        defer { isMutating = false }
+        do {
+            try await work()
+            mutationError = nil
+            return true
+        } catch {
+            mutationError = error.localizedDescription
+            return false
+        }
+    }
+    
+    private func requireHouseholdId() throws -> String {
+        guard !currentHouseholdId.isEmpty else {
+            throw TaskBoardError.missingHousehold
+        }
+        return currentHouseholdId
+    }
+    
+    private func taskCollection(for householdId: String) -> CollectionReference {
+        db.collection("households")
+            .document(householdId)
+            .collection("chores")
+    }
+    
+    // MARK: - Metrics
     
     var completionRate: Double {
         let total = Double(tasks.count)
@@ -62,12 +205,17 @@ final class TaskBoardStore: ObservableObject {
     var overdueCount: Int {
         tasks.filter { $0.status != .completed && $0.dueDate < Date() }.count
     }
-    
-    private func update(_ task: TaskItem, transform: (TaskItem) -> TaskItem) {
-        guard let idx = tasks.firstIndex(of: task) else { return }
-        let newValue = transform(task)
-        withAnimation {
-            tasks[idx] = newValue
+}
+
+extension TaskBoardStore {
+    enum TaskBoardError: LocalizedError {
+        case missingHousehold
+        
+        var errorDescription: String? {
+            switch self {
+            case .missingHousehold:
+                return "Missing household context. Select a household and try again."
+            }
         }
     }
 }

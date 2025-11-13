@@ -184,18 +184,23 @@ struct ChoreCatalogView: View {
     }
     
     private func handleAddToBoard(_ template: ChoreTemplate) {
-        taskStore.enqueue(template: template, assignedTo: authStore.currentUser)
-        if let user = authStore.currentUser {
-            successMessage = "\"\(template.title)\" assigned to \(user.name)"
-        } else {
-            successMessage = "\"\(template.title)\" added to backlog"
-        }
-        withAnimation(.spring()) {
-            showSuccessBanner = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            withAnimation(.easeOut) {
-                showSuccessBanner = false
+        Task {
+            let succeeded = await taskStore.enqueue(template: template, assignedTo: authStore.currentUser)
+            guard succeeded else { return }
+            await MainActor.run {
+                if let user = authStore.currentUser {
+                    successMessage = "\"\(template.title)\" assigned to \(user.name)"
+                } else {
+                    successMessage = "\"\(template.title)\" added to backlog"
+                }
+                withAnimation(.spring()) {
+                    showSuccessBanner = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    withAnimation(.easeOut) {
+                        showSuccessBanner = false
+                    }
+                }
             }
         }
     }
@@ -207,7 +212,7 @@ struct ChoreCatalogView_Previews: PreviewProvider {
         let householdStore = HouseholdStore()
         let tagStore = TagStore(householdStore: householdStore)
         return ChoreCatalogView(viewModelBuilder: { ChoreCatalogViewModel(templates: ChoreTemplate.samples) })
-            .environmentObject(TaskBoardStore())
+            .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
             .environmentObject(AuthStore())
             .environmentObject(householdStore)
             .environmentObject(tagStore)

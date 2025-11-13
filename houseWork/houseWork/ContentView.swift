@@ -10,13 +10,15 @@ import Combine
 
 struct ContentView: View {
     @StateObject private var householdStore: HouseholdStore
-    @StateObject private var taskBoardStore = TaskBoardStore()
+    @StateObject private var taskBoardStore: TaskBoardStore
     @StateObject private var authStore = AuthStore()
     @StateObject private var tagStore: TagStore
     
     init() {
         let householdStore = HouseholdStore()
+        let taskBoardStore = TaskBoardStore(householdStore: householdStore)
         _householdStore = StateObject(wrappedValue: householdStore)
+        _taskBoardStore = StateObject(wrappedValue: taskBoardStore)
         _tagStore = StateObject(wrappedValue: TagStore(householdStore: householdStore))
     }
     

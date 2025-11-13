@@ -20,7 +20,7 @@ struct HouseholdMember: Identifiable, Hashable {
         self.accentColor = accentColor
     }
     
-    private static func initials(from name: String) -> String {
+    static func initials(from name: String) -> String {
         let components = name
             .split(separator: " ")
             .compactMap { $0.first }
