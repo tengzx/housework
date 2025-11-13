@@ -24,15 +24,13 @@ struct TaskBoardView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
-                ScrollView {
-                    VStack(spacing: 16) {
-                        householdHeader
-                        filterPicker
-                        summaryRow
-                        boardContent
-                    }
-                    .padding()
+                List {
+                    headerSection
+                    boardContent
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color(white: 0.95))
                 .refreshable {
                     await taskStore.refresh()
                 }
@@ -62,57 +60,61 @@ struct TaskBoardView: View {
         }
     }
     
+    private var headerSection: some View {
+        Section {
+            householdHeader
+            filterPicker
+            summaryRow
+        }
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+    
     @ViewBuilder
     private var boardContent: some View {
         if taskStore.isLoading && taskStore.tasks.isEmpty {
-            HStack {
-                Spacer()
-                ProgressView("Loading tasks…")
-                    .padding(.vertical, 40)
-                Spacer()
+            Section {
+                HStack {
+                    Spacer()
+                    ProgressView("Loading tasks…")
+                        .padding(.vertical, 40)
+                    Spacer()
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white)
+                        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
+                )
             }
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
-            )
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         } else {
             let allTasks = taskStore.tasks.filter(filterPredicate)
             if allTasks.isEmpty {
-                ContentUnavailableView(
-                    "No tasks yet",
-                    systemImage: "tray"
-                )
-                .frame(maxWidth: .infinity)
+                Section {
+                    ContentUnavailableView(
+                        "No tasks yet",
+                        systemImage: "tray"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             } else {
                 let visibleSections = (selectedStatus == nil)
                 ? sections.filter { !$0.tasks.isEmpty }
                 : sections
                 
                 if visibleSections.isEmpty {
-                    ContentUnavailableView("No tasks match", systemImage: "tray")
+                    Section {
+                        ContentUnavailableView("No tasks match", systemImage: "tray")
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
                 
                 ForEach(visibleSections) { section in
-                    TaskSectionView(
-                        section: section,
-                        currentUser: authStore.currentUser,
-                        startHandler: { task in
-                            Task {
-                                await taskStore.startTask(task, assignedTo: authStore.currentUser)
-                            }
-                        },
-                        completeHandler: { task in
-                            Task {
-                                await taskStore.completeTask(task, actingUser: authStore.currentUser)
-                            }
-                        },
-                        deleteHandler: { task in
-                            Task {
-                                await taskStore.deleteTask(task)
-                            }
-                        }
-                    )
+                    taskSectionView(for: section)
                 }
             }
         }
@@ -195,6 +197,36 @@ struct TaskBoardView: View {
             }
         }
     }
+    
+    @ViewBuilder
+    private func taskSectionView(for section: TaskSection) -> some View {
+        Section {
+            ForEach(section.tasks) { task in
+                TaskCardView(
+                    task: task,
+                    primaryButton: primaryButton(for: task),
+                    secondaryButton: secondaryButton(for: task),
+                    isActionEnabled: canMutate(task: task)
+                )
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        Task {
+                            await taskStore.deleteTask(task)
+                        }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .padding(.vertical, 2)
+            }
+        } header: {
+            Text(section.status.label)
+                .font(.headline)
+                .textCase(.none)
+        }
+    }
 
     private var sections: [TaskSection] {
         if let status = selectedStatus {
@@ -250,6 +282,57 @@ struct TaskBoardView: View {
         }
     }
     
+    private func primaryButton(for task: TaskItem) -> TaskCardButton? {
+        guard canMutate(task: task) else { return nil }
+        switch task.status {
+        case .backlog:
+            return TaskCardButton(
+                title: "Start",
+                systemImage: "play.circle.fill",
+                style: .borderedProminent
+            ) {
+                Task {
+                    await taskStore.startTask(task, assignedTo: authStore.currentUser)
+                }
+            }
+        case .inProgress:
+            return TaskCardButton(
+                title: "Complete",
+                systemImage: "checkmark.circle.fill",
+                style: .borderedProminent
+            ) {
+                Task {
+                    await taskStore.completeTask(task, actingUser: authStore.currentUser)
+                }
+            }
+        case .completed:
+            return nil
+        }
+    }
+    
+    private func secondaryButton(for task: TaskItem) -> TaskCardButton? {
+        guard canMutate(task: task) else { return nil }
+        switch task.status {
+        case .backlog:
+            return TaskCardButton(
+                title: "Quick Done",
+                systemImage: "checkmark.circle",
+                style: .bordered
+            ) {
+                Task {
+                    await taskStore.completeTask(task, actingUser: authStore.currentUser)
+                }
+            }
+        case .inProgress, .completed:
+            return nil
+        }
+    }
+    
+    private func canMutate(task: TaskItem) -> Bool {
+        guard let currentUser = authStore.currentUser else { return false }
+        return task.assignedMembers.contains(where: { $0.matches(currentUser) })
+    }
+    
     private var statusSegments: [StatusSegment] {
         var items: [StatusSegment] = [
             StatusSegment(
@@ -297,77 +380,6 @@ private struct StatusSegment: Identifiable {
     let icon: String
     let background: Color
     let status: TaskStatus?
-}
-
-private struct TaskSectionView: View {
-    let section: TaskSection
-    let currentUser: HouseholdMember?
-    let startHandler: (TaskItem) -> Void
-    let completeHandler: (TaskItem) -> Void
-    let deleteHandler: (TaskItem) -> Void
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            LazyVStack(spacing: 12) {
-                ForEach(section.tasks) { task in
-                    TaskCardView(
-                        task: task,
-                        primaryButton: primaryButton(for: task),
-                        secondaryButton: secondaryButton(for: task),
-                        isActionEnabled: canMutate(task: task)
-                    )
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            deleteHandler(task)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private func primaryButton(for task: TaskItem) -> TaskCardButton? {
-        guard canMutate(task: task) else { return nil }
-        switch task.status {
-        case .backlog:
-            return TaskCardButton(
-                title: "Start",
-                systemImage: "play.circle.fill",
-                style: .borderedProminent
-            ) { startHandler(task) }
-        case .inProgress:
-            return TaskCardButton(
-                title: "Complete",
-                systemImage: "checkmark.circle.fill",
-                style: .borderedProminent
-            ) { completeHandler(task) }
-        case .completed:
-            return nil
-        }
-    }
-    
-    private func secondaryButton(for task: TaskItem) -> TaskCardButton? {
-        guard canMutate(task: task) else { return nil }
-        switch task.status {
-        case .backlog:
-            return TaskCardButton(
-                title: "Quick Done",
-                systemImage: "checkmark.circle",
-                style: .bordered
-            ) { completeHandler(task) }
-        case .inProgress:
-            return nil
-        case .completed:
-            return nil
-        }
-    }
-    
-    private func canMutate(task: TaskItem) -> Bool {
-        guard let currentUser else { return false }
-        return task.assignedMembers.contains(where: { $0.matches(currentUser) })
-    }
 }
 
 private struct StatusSummaryCard: View {
