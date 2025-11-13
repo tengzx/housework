@@ -42,15 +42,11 @@ final class TaskBoardStore: ObservableObject {
             }
     }
     
-    private init(previewTasks: [TaskItem]) {
+    init(previewTasks: [TaskItem] = TaskItem.fixtures()) {
         self.tasks = previewTasks
         self.isLoading = false
         self.isPreviewMode = true
         self.householdStore = nil
-    }
-    
-    convenience init(previewTasks: [TaskItem] = TaskItem.fixtures()) {
-        self.init(previewTasks: previewTasks)
     }
     
     deinit {

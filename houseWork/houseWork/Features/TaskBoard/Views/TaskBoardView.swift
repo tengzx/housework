@@ -64,27 +64,38 @@ struct TaskBoardView: View {
                     .fill(Color.white)
                     .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
             )
-        } else if taskStore.tasks.isEmpty {
-            ContentUnavailableView(
-                "No tasks yet",
-                systemImage: "tray"
-            )
-            .frame(maxWidth: .infinity)
         } else {
-            ForEach(sections) { section in
-                TaskSectionView(
-                    section: section,
-                    startHandler: { task in
-                        Task {
-                            await taskStore.startTask(task, assignedTo: authStore.currentUser)
-                        }
-                    },
-                    completeHandler: { task in
-                        Task {
-                            await taskStore.completeTask(task)
-                        }
-                    }
+            let allTasks = taskStore.tasks.filter(filterPredicate)
+            if allTasks.isEmpty {
+                ContentUnavailableView(
+                    "No tasks yet",
+                    systemImage: "tray"
                 )
+                .frame(maxWidth: .infinity)
+            } else {
+                let visibleSections = (selectedStatus == nil)
+                ? sections.filter { !$0.tasks.isEmpty }
+                : sections
+                
+                if visibleSections.isEmpty {
+                    ContentUnavailableView("No tasks match", systemImage: "tray")
+                }
+                
+                ForEach(visibleSections) { section in
+                    TaskSectionView(
+                        section: section,
+                        startHandler: { task in
+                            Task {
+                                await taskStore.startTask(task, assignedTo: authStore.currentUser)
+                            }
+                        },
+                        completeHandler: { task in
+                            Task {
+                                await taskStore.completeTask(task)
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -238,11 +249,6 @@ private struct TaskSectionView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("\(section.status.label) · \(section.tasks.count)", systemImage: section.status.iconName)
-                    .font(.headline)
-                Spacer()
-            }
             LazyVStack(spacing: 12) {
                 ForEach(section.tasks) { task in
                     TaskCardView(

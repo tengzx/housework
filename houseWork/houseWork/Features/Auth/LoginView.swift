@@ -34,8 +34,10 @@ struct LoginView: View {
                         .textFieldStyle(.roundedBorder)
                 }
                 TextField("Email", text: $email)
+#if os(iOS)
                     .keyboardType(.emailAddress)
-                    .autocapitalization(.none)
+                    .textInputAutocapitalization(.never)
+#endif
                     .disableAutocorrection(true)
                     .textFieldStyle(.roundedBorder)
                 SecureField("Password", text: $password)
