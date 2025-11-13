@@ -26,6 +26,14 @@ struct HouseholdMember: Identifiable, Hashable {
             .compactMap { $0.first }
         return String(components.prefix(2))
     }
+    
+    func matches(_ other: HouseholdMember) -> Bool {
+        if id == other.id { return true }
+        let normalizedSelf = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedOther = other.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedSelf.isEmpty, !normalizedOther.isEmpty else { return false }
+        return normalizedSelf == normalizedOther
+    }
 }
 
 extension HouseholdMember {

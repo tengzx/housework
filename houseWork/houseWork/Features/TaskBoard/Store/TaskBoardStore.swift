@@ -167,6 +167,16 @@ final class TaskBoardStore: ObservableObject {
         }
     }
     
+    func refresh() async {
+        guard !isPreviewMode else { return }
+        guard !currentHouseholdId.isEmpty else { return }
+        listener?.remove()
+        listener = nil
+        isLoading = true
+        tasks = []
+        attachListener(to: currentHouseholdId)
+    }
+    
     @discardableResult
     func deleteTask(_ task: TaskItem) async -> Bool {
         if isPreviewMode {
@@ -253,6 +263,11 @@ final class TaskBoardStore: ObservableObject {
             .collection("chores")
     }
     
+    private func canMutate(task: TaskItem, actingUser: HouseholdMember?) -> Bool {
+        guard let user = actingUser else { return false }
+        return task.assignedMembers.contains(where: { $0.matches(user) })
+    }
+    
     // MARK: - Metrics
     
     var completionRate: Double {
@@ -279,7 +294,3 @@ extension TaskBoardStore {
         }
     }
 }
-    private func canMutate(task: TaskItem, actingUser: HouseholdMember?) -> Bool {
-        guard let user = actingUser else { return false }
-        return task.assignedMembers.contains(where: { $0.id == user.id })
-    }

@@ -205,6 +205,9 @@ struct ChoreCatalogView: View {
             }
         }
         .listStyle(.plain)
+        .refreshable {
+            await viewModel.refresh()
+        }
         .simultaneousGesture(
             TapGesture().onEnded { dismissSearchFieldFocus() }
         )

@@ -33,6 +33,9 @@ struct TaskBoardView: View {
                     }
                     .padding()
                 }
+                .refreshable {
+                    await taskStore.refresh()
+                }
                 floatingAddButton
             }
             .background(Color(white: 0.95))
@@ -209,19 +212,19 @@ struct TaskBoardView: View {
             return true
         case .mine:
             guard let user = authStore.currentUser else { return false }
-            return task.assignedMembers.contains(where: { $0.id == user.id })
+            return task.assignedMembers.contains(where: { $0.matches(user) })
         case .unassigned:
             return task.assignedMembers.isEmpty
         }
     }
 
     private func tasks(for status: TaskStatus) -> [TaskItem] {
-        let userId = authStore.currentUser?.id
+        let currentUser = authStore.currentUser
         return taskStore.tasks
             .filter { $0.status == status && filterPredicate($0) }
             .sorted { lhs, rhs in
-                let lhsMine = userId.map { id in lhs.assignedMembers.contains { $0.id == id } } ?? false
-                let rhsMine = userId.map { id in rhs.assignedMembers.contains { $0.id == id } } ?? false
+                let lhsMine = currentUser.map { user in lhs.assignedMembers.contains { $0.matches(user) } } ?? false
+                let rhsMine = currentUser.map { user in rhs.assignedMembers.contains { $0.matches(user) } } ?? false
                 if lhsMine != rhsMine {
                     return lhsMine && !rhsMine
                 }
@@ -363,7 +366,7 @@ private struct TaskSectionView: View {
     
     private func canMutate(task: TaskItem) -> Bool {
         guard let currentUser else { return false }
-        return task.assignedMembers.contains(where: { $0.id == currentUser.id })
+        return task.assignedMembers.contains(where: { $0.matches(currentUser) })
     }
 }
 

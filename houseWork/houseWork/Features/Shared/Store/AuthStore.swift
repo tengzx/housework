@@ -21,6 +21,7 @@ final class AuthStore: ObservableObject {
     private var authListener: AuthStateDidChangeListenerHandle?
     private let defaults = UserDefaults.standard
     private let storedUserIdKey = "authStore.userId"
+    private let memberUUIDKeyPrefix = "authStore.memberUUID."
     
     init() {
         authListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
@@ -29,7 +30,7 @@ final class AuthStore: ObservableObject {
                 self.isLoading = false
                 if let user {
                     self.firebaseUserId = user.uid
-                    self.currentUser = Self.makeMember(from: user)
+                    self.currentUser = self.makeMember(from: user)
                 } else {
                     self.firebaseUserId = nil
                     self.currentUser = nil
@@ -79,7 +80,7 @@ final class AuthStore: ObservableObject {
         do {
             let result = try await action()
             firebaseUserId = result.user.uid
-            currentUser = AuthStore.makeMember(from: result.user)
+            currentUser = makeMember(from: result.user)
             defaults.set(result.user.uid, forKey: storedUserIdKey)
         } catch {
             authError = error.localizedDescription
@@ -87,13 +88,25 @@ final class AuthStore: ObservableObject {
         isProcessing = false
     }
     
-    private static func makeMember(from user: User) -> HouseholdMember {
+    private func makeMember(from user: User) -> HouseholdMember {
         let name = user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let initialsSource = name?.isEmpty == false ? name! : user.email ?? "User"
+        let memberId = memberIdentifier(for: user.uid)
         return HouseholdMember(
+            id: memberId,
             name: name?.isEmpty == false ? name! : (user.email ?? "Unnamed"),
             initials: initialsSource.split(separator: " ").compactMap { $0.first }.prefix(2).map(String.init).joined(),
             accentColor: .blue
         )
+    }
+    
+    private func memberIdentifier(for userId: String) -> UUID {
+        let key = memberUUIDKeyPrefix + userId
+        if let cached = defaults.string(forKey: key), let uuid = UUID(uuidString: cached) {
+            return uuid
+        }
+        let newValue = UUID()
+        defaults.set(newValue.uuidString, forKey: key)
+        return newValue
     }
 }

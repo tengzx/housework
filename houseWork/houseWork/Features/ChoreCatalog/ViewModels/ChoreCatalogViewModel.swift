@@ -112,6 +112,14 @@ final class ChoreCatalogViewModel: ObservableObject {
         }
     }
     
+    func refresh() async {
+        guard let householdId = currentHouseholdId else { return }
+        listener?.remove()
+        listener = nil
+        currentHouseholdId = nil
+        startListening(for: householdId)
+    }
+    
     private func catalogCollection(for householdId: String) -> CollectionReference {
         db.collection("households")
             .document(householdId)

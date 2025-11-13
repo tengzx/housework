@@ -25,6 +25,12 @@ struct AnalyticsView: View {
                 }
                 .padding()
             }
+            .refreshable {
+                await taskStore.refresh()
+                await MainActor.run {
+                    refreshAnalytics()
+                }
+            }
             .background(Color(white: 0.95))
             .onAppear { refreshAnalytics() }
             .onChange(of: taskStore.tasks) { _ in refreshAnalytics() }
