@@ -59,14 +59,18 @@ final class HouseholdStore: ObservableObject {
         guard !trimmedName.isEmpty else { return false }
         let docRef = db.collection("households").document()
         do {
+            let inviteCode = generateInviteCode()
             try await docRef.setData([
                 "name": trimmedName,
                 "ownerId": userId,
                 "memberIds": [userId],
+                "inviteCode": inviteCode,
                 "createdAt": FieldValue.serverTimestamp(),
                 "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
-            update(name: trimmedName, id: docRef.documentID)
+            let summary = HouseholdSummary(id: docRef.documentID, name: trimmedName, inviteCode: inviteCode)
+            households = [summary] + households.filter { $0.id != summary.id }
+            select(summary)
             error = nil
             return true
         } catch {
@@ -119,6 +123,63 @@ final class HouseholdStore: ObservableObject {
         attachListener(for: userId)
     }
     
+    func refreshInviteCode(for household: HouseholdSummary) async -> String? {
+        guard let userId = currentUserId else {
+            error = "Please sign in."
+            return nil
+        }
+        guard households.contains(where: { $0.id == household.id }) else {
+            error = "Household not found."
+            return nil
+        }
+        let newCode = generateInviteCode()
+        do {
+            try await db.collection("households").document(household.id).updateData([
+                "inviteCode": newCode,
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
+            error = nil
+            return newCode
+        } catch {
+            self.error = error.localizedDescription
+            return nil
+        }
+    }
+    
+    @discardableResult
+    func joinHousehold(using inviteCode: String) async -> Bool {
+        guard let userId = currentUserId else {
+            error = "Please sign in."
+            return false
+        }
+        let trimmed = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !trimmed.isEmpty else { return false }
+        do {
+            let snapshot = try await db.collection("households")
+                .whereField("inviteCode", isEqualTo: trimmed)
+                .limit(to: 1)
+                .getDocuments()
+            guard let document = snapshot.documents.first else {
+                error = "Invite code not found."
+                return false
+            }
+            try await document.reference.updateData([
+                "memberIds": FieldValue.arrayUnion([userId]),
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
+            let name = document.get("name") as? String ?? "Household"
+            let inviteCode = document.get("inviteCode") as? String
+            let summary = HouseholdSummary(id: document.documentID, name: name, inviteCode: inviteCode)
+            households = [summary] + households.filter { $0.id != summary.id }
+            select(summary)
+            error = nil
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+    
     private func attachListener(for userId: String) {
         listener = db.collection("households")
             .whereField("memberIds", arrayContains: userId)
@@ -139,7 +200,8 @@ final class HouseholdStore: ObservableObject {
                     }
                     self.households = documents.compactMap { doc in
                         let name = doc.get("name") as? String ?? "Unnamed"
-                        return HouseholdSummary(id: doc.documentID, name: name)
+                        let code = doc.get("inviteCode") as? String
+                        return HouseholdSummary(id: doc.documentID, name: name, inviteCode: code)
                     }
                     if let active = self.households.first(where: { $0.id == self.householdId }) {
                         self.select(active)
@@ -159,9 +221,21 @@ final class HouseholdStore: ObservableObject {
         defaults.removeObject(forKey: idKey)
         defaults.removeObject(forKey: nameKey)
     }
+    
+    private func generateInviteCode(length: Int = 6) -> String {
+        let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+        var result = ""
+        for _ in 0..<length {
+            if let char = alphabet.randomElement() {
+                result.append(char)
+            }
+        }
+        return result
+    }
 }
 
 struct HouseholdSummary: Identifiable, Hashable {
     let id: String
     var name: String
+    var inviteCode: String?
 }
