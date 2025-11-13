@@ -33,13 +33,13 @@ struct TaskBoardView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .background(Color(white: 0.95))
+                .background(Color(.systemGroupedBackground))
                 .refreshable {
                     await taskStore.refresh()
                 }
                 floatingAddButton
             }
-            .background(Color(white: 0.95))
+            .background(Color(.systemGroupedBackground))
         }
         .onReceive(taskStore.$error.compactMap { $0 }) { alertMessage = $0 }
         .onReceive(taskStore.$mutationError.compactMap { $0 }) { alertMessage = $0 }
@@ -91,11 +91,11 @@ struct TaskBoardView: View {
                         .padding(.vertical, 40)
                     Spacer()
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
-                )
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(.secondarySystemGroupedBackground))
+                            .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
+                    )
             }
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
@@ -402,22 +402,22 @@ private struct StatusSummaryCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color.black.opacity(0.08))
+                        .fill(Color.primary.opacity(0.12))
                         .frame(width: 36, height: 36)
                     Image(systemName: icon)
                         .font(.subheadline.bold())
-                        .foregroundStyle(.black)
+                        .foregroundStyle(Color.primary)
                 }
                 Spacer(minLength: 0)
                 Text(title)
                     .font(.headline)
-                    .foregroundStyle(.black.opacity(0.85))
+                    .foregroundStyle(Color.primary.opacity(0.85))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(value)
                 .font(.title.bold())
-                .foregroundStyle(.black)
+                .foregroundStyle(Color.primary.opacity(0.9))
                 .frame(alignment: .center)
         }
         .padding(16)
@@ -425,12 +425,23 @@ private struct StatusSummaryCard: View {
         .frame(height: 120)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(background ?? Color(.systemBackground))
+                .fill(backgroundColor)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isSelected ? Color.black.opacity(0.2) : .clear, lineWidth: 2)
+                .stroke(isSelected ? Color.primary.opacity(0.25) : .clear, lineWidth: 2)
         )
+    }
+    
+    private var backgroundColor: Color {
+        if let background {
+            return Color(uiColor: UIColor(dynamicProvider: { trait in
+                let light = background
+                let dark = background.opacity(0.35)
+                return trait.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light)
+            }))
+        }
+        return Color(.secondarySystemBackground)
     }
 }
 

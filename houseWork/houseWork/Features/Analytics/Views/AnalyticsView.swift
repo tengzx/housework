@@ -31,7 +31,7 @@ struct AnalyticsView: View {
                     refreshAnalytics()
                 }
             }
-            .background(Color(white: 0.95))
+            .background(Color(.systemGroupedBackground))
             .onAppear { refreshAnalytics() }
             .onChange(of: taskStore.tasks) { _ in refreshAnalytics() }
             .onChange(of: viewModel.selectedRange) { _ in
@@ -87,7 +87,7 @@ struct AnalyticsView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
     }
     
@@ -168,7 +168,7 @@ private struct SectionCard<Content: View>: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
     }
 }
@@ -184,7 +184,7 @@ private struct RangeChip: View {
                 .font(.footnote)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(isSelected ? Color.accentColor.opacity(0.16) : Color.white)
+                .background(isSelected ? Color.accentColor.opacity(0.16) : Color(.secondarySystemGroupedBackground))
                 .foregroundStyle(isSelected ? Color.accentColor : .primary)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)

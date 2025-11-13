@@ -80,7 +80,7 @@ struct TaskCardView: View {
             }
         }
         .padding()
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
     }
 }
