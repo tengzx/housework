@@ -167,6 +167,21 @@ final class TaskBoardStore: ObservableObject {
         }
     }
     
+    @discardableResult
+    func deleteTask(_ task: TaskItem) async -> Bool {
+        if isPreviewMode {
+            removeLocalTask(task)
+            return true
+        }
+        
+        return await performMutation {
+            let householdId = try requireHouseholdId()
+            try await taskCollection(for: householdId)
+                .document(task.id.uuidString)
+                .delete()
+        }
+    }
+    
     private func createTask(_ task: TaskItem) async -> Bool {
         if isPreviewMode {
             withAnimation {
@@ -202,6 +217,13 @@ final class TaskBoardStore: ObservableObject {
         guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
         withAnimation {
             tasks[index] = task
+        }
+    }
+    
+    private func removeLocalTask(_ task: TaskItem) {
+        guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        withAnimation {
+            tasks.remove(at: index)
         }
     }
     

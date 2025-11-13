@@ -103,6 +103,11 @@ struct TaskBoardView: View {
                             Task {
                                 await taskStore.completeTask(task, actingUser: authStore.currentUser)
                             }
+                        },
+                        deleteHandler: { task in
+                            Task {
+                                await taskStore.deleteTask(task)
+                            }
                         }
                     )
                 }
@@ -296,6 +301,7 @@ private struct TaskSectionView: View {
     let currentUser: HouseholdMember?
     let startHandler: (TaskItem) -> Void
     let completeHandler: (TaskItem) -> Void
+    let deleteHandler: (TaskItem) -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -307,6 +313,13 @@ private struct TaskSectionView: View {
                         secondaryButton: secondaryButton(for: task),
                         isActionEnabled: canMutate(task: task)
                     )
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            deleteHandler(task)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
             }
         }
