@@ -116,6 +116,27 @@ final class TaskBoardStore: ObservableObject {
     }
     
     @discardableResult
+    func createTask(
+        title: String,
+        details: String,
+        dueDate: Date,
+        score: Int,
+        roomTag: String,
+        assignedMembers: [HouseholdMember]
+    ) async -> Bool {
+        let newTask = TaskItem(
+            title: title,
+            details: details,
+            status: .backlog,
+            dueDate: dueDate,
+            score: score,
+            roomTag: roomTag,
+            assignedMembers: assignedMembers
+        )
+        return await createTask(newTask)
+    }
+    
+    @discardableResult
     func completeTask(_ task: TaskItem) async -> Bool {
         return await updateTask(task) { item in
             var updated = item

@@ -19,17 +19,21 @@ struct TaskBoardView: View {
     @State private var selectedStatus: TaskStatus?
     @State private var showingHouseholdSheet = false
     @State private var alertMessage: String?
+    @State private var showingTaskComposer = false
     
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    householdHeader
-                    filterPicker
-                    summaryRow
-                    boardContent
+            ZStack(alignment: .bottomTrailing) {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        householdHeader
+                        filterPicker
+                        summaryRow
+                        boardContent
+                    }
+                    .padding()
                 }
-                .padding()
+                floatingAddButton
             }
             .background(Color(white: 0.95))
         }
@@ -48,6 +52,11 @@ struct TaskBoardView: View {
                 Text(alertMessage ?? "")
             }
         )
+        .sheet(isPresented: $showingTaskComposer) {
+            TaskComposerView()
+                .environmentObject(taskStore)
+                .environmentObject(authStore)
+        }
     }
     
     @ViewBuilder
@@ -98,6 +107,22 @@ struct TaskBoardView: View {
                 }
             }
         }
+    }
+    
+    private var floatingAddButton: some View {
+        Button {
+            showingTaskComposer = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 56, height: 56)
+                .background(Color.accentColor, in: Circle())
+                .shadow(color: Color.accentColor.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+        .padding(.trailing, 16)
+        .padding(.bottom, 16)
+        .accessibilityLabel("Add Task")
     }
     
     private var householdHeader: some View {
