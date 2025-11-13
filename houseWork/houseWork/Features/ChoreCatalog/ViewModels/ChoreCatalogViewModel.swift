@@ -7,14 +7,28 @@
 
 import SwiftUI
 import Combine
+import FirebaseFirestore
 
+@MainActor
 final class ChoreCatalogViewModel: ObservableObject {
-    @Published var templates: [ChoreTemplate]
+    @Published private(set) var templates: [ChoreTemplate]
     @Published var searchText: String = ""
     @Published var selectedTag: String?
+    @Published private(set) var isLoading = false
+    @Published var error: String?
+    @Published var mutationError: String?
+    @Published private(set) var isMutating = false
     
-    init(templates: [ChoreTemplate] = ChoreTemplate.samples) {
+    private let db = Firestore.firestore()
+    private var listener: ListenerRegistration?
+    private var currentHouseholdId: String?
+    
+    init(templates: [ChoreTemplate] = []) {
         self.templates = templates
+    }
+    
+    deinit {
+        listener?.remove()
     }
     
     var availableTags: [String] {
@@ -44,16 +58,94 @@ final class ChoreCatalogViewModel: ObservableObject {
         }
     }
     
-    func addTemplate(_ template: ChoreTemplate) {
-        withAnimation {
-            templates.insert(template, at: 0)
+    func startListening(for householdId: String) {
+        guard !householdId.isEmpty else { return }
+        guard householdId != currentHouseholdId else { return }
+        
+        listener?.remove()
+        currentHouseholdId = householdId
+        isLoading = true
+        templates = []
+        error = nil
+        
+        listener = catalogCollection(for: householdId)
+            .order(by: "title", descending: false)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self else { return }
+                Task { @MainActor in
+                    if let error {
+                        self.error = error.localizedDescription
+                        self.isLoading = false
+                        return
+                    }
+                    guard let documents = snapshot?.documents else { return }
+                    self.templates = documents.compactMap { ChoreTemplate(document: $0) }
+                    self.isLoading = false
+                }
+            }
+    }
+    
+    func createTemplate(_ template: ChoreTemplate) async {
+        await performMutation {
+            let householdId = try requireHouseholdId()
+            try await catalogCollection(for: householdId)
+                .document(template.id.uuidString)
+                .setData(template.firestoreCreatePayload)
         }
     }
     
-    func updateTemplate(_ template: ChoreTemplate) {
-        guard let index = templates.firstIndex(where: { $0.id == template.id }) else { return }
-        withAnimation {
-            templates[index] = template
+    func updateTemplate(_ template: ChoreTemplate) async {
+        await performMutation {
+            let householdId = try requireHouseholdId()
+            try await catalogCollection(for: householdId)
+                .document(template.id.uuidString)
+                .setData(template.firestoreUpdatePayload, merge: true)
+        }
+    }
+    
+    func deleteTemplate(_ template: ChoreTemplate) async {
+        await performMutation {
+            let householdId = try requireHouseholdId()
+            try await catalogCollection(for: householdId)
+                .document(template.id.uuidString)
+                .delete()
+        }
+    }
+    
+    private func catalogCollection(for householdId: String) -> CollectionReference {
+        db.collection("households")
+            .document(householdId)
+            .collection("choreTemplates")
+    }
+    
+    private func requireHouseholdId() throws -> String {
+        guard let currentHouseholdId else {
+            throw CatalogError.missingHousehold
+        }
+        return currentHouseholdId
+    }
+    
+    private func performMutation(_ work: () async throws -> Void) async {
+        isMutating = true
+        defer { isMutating = false }
+        do {
+            try await work()
+            mutationError = nil
+        } catch {
+            mutationError = error.localizedDescription
+        }
+    }
+}
+
+extension ChoreCatalogViewModel {
+    enum CatalogError: LocalizedError {
+        case missingHousehold
+        
+        var errorDescription: String? {
+            switch self {
+            case .missingHousehold:
+                return "Missing household context. Select a household and try again."
+            }
         }
     }
 }

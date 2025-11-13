@@ -6,16 +6,26 @@
 //
 
 import SwiftUI
+import Combine
 
 struct ChoreCatalogView: View {
     @EnvironmentObject private var taskStore: TaskBoardStore
     @EnvironmentObject private var authStore: AuthStore
-    @StateObject private var viewModel = ChoreCatalogViewModel()
+    @EnvironmentObject private var householdStore: HouseholdStore
+    @StateObject private var viewModel: ChoreCatalogViewModel
     @State private var showFormSheet = false
     @State private var draft = ChoreTemplateDraft()
     @State private var editingTemplate: ChoreTemplate?
     @State private var successMessage: String?
     @State private var showSuccessBanner = false
+    @State private var alertMessage: String?
+    
+    typealias ViewModelBuilder = @MainActor () -> ChoreCatalogViewModel
+    
+    @MainActor
+    init(viewModelBuilder: @escaping ViewModelBuilder = { ChoreCatalogViewModel() }) {
+        _viewModel = StateObject(wrappedValue: viewModelBuilder())
+    }
     
     var body: some View {
         NavigationStack {
@@ -46,16 +56,44 @@ struct ChoreCatalogView: View {
         .sheet(isPresented: $showFormSheet) {
             NavigationStack {
                 ChoreTemplateForm(draft: $draft, isEditing: editingTemplate != nil) { template in
-                    if editingTemplate != nil {
-                        viewModel.updateTemplate(template)
-                    } else {
-                        viewModel.addTemplate(template)
+                    let isEditingExistingTemplate = editingTemplate != nil
+                    Task {
+                        if isEditingExistingTemplate {
+                            await viewModel.updateTemplate(template)
+                        } else {
+                            await viewModel.createTemplate(template)
+                        }
                     }
                     editingTemplate = nil
                     showFormSheet = false
                 }
             }
         }
+        .task {
+            viewModel.startListening(for: householdStore.householdId)
+        }
+        .onChange(of: householdStore.householdId) { newId in
+            viewModel.startListening(for: newId)
+        }
+        .onReceive(viewModel.$error.compactMap { $0 }) { message in
+            alertMessage = message
+        }
+        .onReceive(viewModel.$mutationError.compactMap { $0 }) { message in
+            alertMessage = message
+        }
+        .alert(
+            "Catalog Error",
+            isPresented: Binding(
+                get: { alertMessage != nil },
+                set: { if !$0 { alertMessage = nil } }
+            ),
+            actions: {
+                Button("OK", role: .cancel) { }
+            },
+            message: {
+                Text(alertMessage ?? "")
+            }
+        )
     }
     
     private func presentCreateForm() {
@@ -109,7 +147,14 @@ struct ChoreCatalogView: View {
     
     private var templateList: some View {
         List {
-            if viewModel.filteredTemplates.isEmpty {
+            if viewModel.isLoading && viewModel.templates.isEmpty {
+                HStack {
+                    Spacer()
+                    ProgressView("Loading catalog…")
+                    Spacer()
+                }
+                .listRowInsets(EdgeInsets(top: 32, leading: 0, bottom: 32, trailing: 0))
+            } else if viewModel.filteredTemplates.isEmpty {
                 ContentUnavailableView(
                     "No chores found",
                     systemImage: "square.dashed.inset.filled",
@@ -123,6 +168,15 @@ struct ChoreCatalogView: View {
                         onEdit: { presentEditForm(for: template) }
                     )
                     .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            Task {
+                                await viewModel.deleteTemplate(template)
+                            }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
             }
         }
@@ -147,10 +201,17 @@ struct ChoreCatalogView: View {
     }
 }
 
-#Preview {
-    ChoreCatalogView()
-        .environmentObject(TaskBoardStore())
-        .environmentObject(AuthStore())
+struct ChoreCatalogView_Previews: PreviewProvider {
+    @MainActor
+    static var previews: some View {
+        let householdStore = HouseholdStore()
+        let tagStore = TagStore(householdStore: householdStore)
+        return ChoreCatalogView(viewModelBuilder: { ChoreCatalogViewModel(templates: ChoreTemplate.samples) })
+            .environmentObject(TaskBoardStore())
+            .environmentObject(AuthStore())
+            .environmentObject(householdStore)
+            .environmentObject(tagStore)
+    }
 }
 
 private struct SuccessBanner: View {
