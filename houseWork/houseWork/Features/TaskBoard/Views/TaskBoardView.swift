@@ -179,7 +179,7 @@ struct TaskBoardView: View {
                         value: "\(taskCount(for: segment.status))",
                         subtitle: segment.subtitle,
                         icon: segment.icon,
-                        tint: segment.tint,
+                        background: segment.background,
                         isSelected: segment.status == selectedStatus
                     )
                 }
@@ -249,7 +249,7 @@ struct TaskBoardView: View {
                 title: "All",
                 subtitle: "All tasks",
                 icon: "rectangle.grid.2x2",
-                tint: .accentColor,
+                background: hexColor("D6D8FF", fallback: Color(.systemBlue).opacity(0.3)),
                 status: nil
             )
         ]
@@ -259,11 +259,26 @@ struct TaskBoardView: View {
                 title: status.label,
                 subtitle: subtitle(for: status),
                 icon: status.iconName,
-                tint: status.accentColor,
+                background: segmentBackground(for: status),
                 status: status
             )
         }
         return items
+    }
+    
+    private func segmentBackground(for status: TaskStatus) -> Color {
+        switch status {
+        case .backlog:
+            return hexColor("FFF4A9", fallback: Color.yellow.opacity(0.3))
+        case .inProgress:
+            return hexColor("FAD2E7", fallback: Color.pink.opacity(0.3))
+        case .completed:
+            return hexColor("D8F4F0", fallback: Color.green.opacity(0.3))
+        }
+    }
+    
+    private func hexColor(_ hex: String, fallback: Color) -> Color {
+        Color(hex: hex) ?? fallback
     }
 }
 
@@ -272,7 +287,7 @@ private struct StatusSegment: Identifiable {
     let title: String
     let subtitle: String
     let icon: String
-    let tint: Color
+    let background: Color
     let status: TaskStatus?
 }
 
@@ -344,34 +359,30 @@ private struct StatusSummaryCard: View {
     let value: String
     let subtitle: String
     let icon: String
-    let tint: Color
+    let background: Color?
     let isSelected: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: icon)
                 .font(.caption)
-                .foregroundStyle(tint)
+                .foregroundStyle(.black)
             Text(value)
                 .font(.title2.bold())
-                .foregroundStyle(isSelected ? tint : .primary)
+                .foregroundStyle(.black)
             Text(subtitle)
                 .font(.caption)
-                .foregroundStyle(isSelected ? tint.opacity(0.8) : .secondary)
+                .foregroundStyle(Color.black.opacity(0.7))
         }
         .padding()
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-#if canImport(UIKit)
-                .fill(isSelected ? tint.opacity(0.2) : Color(UIColor.systemBackground))
-#else
-                .fill(isSelected ? tint.opacity(0.2) : Color.white)
-#endif
+                .fill(background ?? Color(.systemBackground))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isSelected ? tint : Color.primary.opacity(0.05), lineWidth: isSelected ? 2 : 1)
+                .stroke(isSelected ? Color.black.opacity(0.35) : .clear, lineWidth: 2)
         )
     }
 }
