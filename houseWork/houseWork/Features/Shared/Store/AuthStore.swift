@@ -13,6 +13,7 @@ import Combine
 @MainActor
 final class AuthStore: ObservableObject {
     @Published var currentUser: HouseholdMember?
+    @Published private(set) var firebaseUserId: String?
     @Published var isLoading: Bool = true
     @Published var isProcessing: Bool = false
     @Published var authError: String?
@@ -24,6 +25,7 @@ final class AuthStore: ObservableObject {
             guard let self else { return }
             Task { @MainActor in
                 self.isLoading = false
+                self.firebaseUserId = user?.uid
                 self.currentUser = user.map(Self.makeMember(from:))
             }
         }
@@ -55,6 +57,7 @@ final class AuthStore: ObservableObject {
     func logout() {
         do {
             try Auth.auth().signOut()
+            firebaseUserId = nil
             currentUser = nil
         } catch {
             authError = error.localizedDescription
@@ -66,6 +69,7 @@ final class AuthStore: ObservableObject {
         authError = nil
         do {
             let result = try await action()
+            firebaseUserId = result.user.uid
             currentUser = AuthStore.makeMember(from: result.user)
         } catch {
             authError = error.localizedDescription

@@ -53,6 +53,12 @@ struct ContentView: View {
         .environmentObject(taskBoardStore)
         .environmentObject(authStore)
         .environmentObject(tagStore)
+        .onAppear {
+            householdStore.updateUserContext(userId: authStore.firebaseUserId)
+        }
+        .onChange(of: authStore.firebaseUserId) { newValue in
+            householdStore.updateUserContext(userId: newValue)
+        }
     }
 }
 

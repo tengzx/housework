@@ -22,13 +22,13 @@ final class HouseholdStore: ObservableObject {
     private let nameKey = "householdName"
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
+    private var currentUserId: String?
     
     init() {
         let savedId = defaults.string(forKey: idKey)
         let savedName = defaults.string(forKey: nameKey)
         self.householdId = savedId?.isEmpty == false ? savedId! : "demo-household"
         self.householdName = savedName?.isEmpty == false ? savedName! : "Demo Household"
-        attachListener()
     }
     
     deinit {
@@ -50,12 +50,18 @@ final class HouseholdStore: ObservableObject {
     }
     
     func addHousehold(name: String, id: String) async {
+        guard let userId = currentUserId else {
+            error = "Please sign in to create a household."
+            return
+        }
         let trimmedId = id.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedId.isEmpty, !trimmedName.isEmpty else { return }
         do {
             try await db.collection("households").document(trimmedId).setData([
                 "name": trimmedName,
+                "ownerId": userId,
+                "memberIds": FieldValue.arrayUnion([userId]),
                 "createdAt": FieldValue.serverTimestamp(),
                 "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
@@ -95,8 +101,22 @@ final class HouseholdStore: ObservableObject {
         }
     }
     
-    private func attachListener() {
+    func updateUserContext(userId: String?) {
+        guard userId != currentUserId else { return }
+        listener?.remove()
+        currentUserId = userId
+        households = []
+        isLoading = true
+        guard let userId else {
+            isLoading = false
+            return
+        }
+        attachListener(for: userId)
+    }
+    
+    private func attachListener(for userId: String) {
         listener = db.collection("households")
+            .whereField("memberIds", arrayContains: userId)
             .order(by: "name", descending: false)
             .addSnapshotListener { [weak self] snapshot, error in
                 guard let self else { return }
@@ -106,10 +126,18 @@ final class HouseholdStore: ObservableObject {
                         self.isLoading = false
                         return
                     }
-                    guard let documents = snapshot?.documents else { return }
+                    guard let documents = snapshot?.documents else {
+                        self.households = []
+                        self.isLoading = false
+                        return
+                    }
                     self.households = documents.compactMap { doc in
                         let name = doc.get("name") as? String ?? "Unnamed"
                         return HouseholdSummary(id: doc.documentID, name: name)
+                    }
+                    if !self.households.contains(where: { $0.id == self.householdId }),
+                       let first = self.households.first {
+                        self.select(first)
                     }
                     self.isLoading = false
                 }
