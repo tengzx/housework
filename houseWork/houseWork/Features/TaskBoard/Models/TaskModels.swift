@@ -58,6 +58,7 @@ enum TaskBoardFilter: String, CaseIterable, Identifiable {
 
 struct TaskItem: Identifiable, Hashable {
     var id: UUID
+    var documentID: String
     var title: String
     var details: String
     var status: TaskStatus
@@ -72,6 +73,7 @@ struct TaskItem: Identifiable, Hashable {
     init(
         id: UUID = UUID(),
         title: String,
+        documentID: String? = nil,
         details: String,
         status: TaskStatus,
         dueDate: Date,
@@ -83,6 +85,7 @@ struct TaskItem: Identifiable, Hashable {
         estimatedMinutes: Int = 30
     ) {
         self.id = id
+        self.documentID = documentID ?? id.uuidString
         self.title = title
         self.details = details
         self.status = status

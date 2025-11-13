@@ -6,12 +6,26 @@
 //
 
 import SwiftUI
+import Foundation
 
 struct TaskCardView: View {
     let task: TaskItem
     var primaryButton: TaskCardButton?
     var secondaryButton: TaskCardButton?
     var isActionEnabled: Bool = true
+    var showsDetails: Bool = true
+    
+    private var isOverdue: Bool {
+        task.dueDate < Date() && task.status != .completed
+    }
+    
+    private var condensedDueDateText: String {
+        TaskCardView.fullDateFormatter.string(from: task.dueDate)
+    }
+    
+    private var shortDueDateText: String {
+        task.dueDate.formatted(date: .abbreviated, time: .shortened)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -19,26 +33,38 @@ struct TaskCardView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(task.title)
                         .font(.headline)
-                    Text(task.details)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    if showsDetails {
+                        Text(task.details)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 ScoreBadge(score: task.score)
             }
             
-            HStack {
-                Label(task.roomTag, systemImage: "tag.fill")
-                    .font(.caption)
-                    .padding(6)
-                    .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                Spacer()
-                Text(task.dueDate, style: .time)
-                    .font(.caption)
-                    .foregroundStyle(task.dueDate < Date() && task.status != .completed ? Color.red : .secondary)
+            if showsDetails {
+                HStack {
+                    Label(task.roomTag, systemImage: "tag.fill")
+                        .font(.caption)
+                        .padding(6)
+                        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    Spacer()
+                    Text(shortDueDateText)
+                        .font(.caption)
+                        .foregroundStyle(isOverdue ? Color.red : .secondary)
+                }
+                MemberAvatarStack(members: task.assignedMembers)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .center) {
+                    MemberAvatarStack(members: task.assignedMembers)
+                    Spacer()
+                    Text(condensedDueDateText)
+                        .font(.caption)
+                        .foregroundStyle(isOverdue ? Color.red : .secondary)
+                }
             }
-            
-            MemberAvatarStack(members: task.assignedMembers)
             
             if primaryButton != nil || secondaryButton != nil {
                 HStack {
@@ -141,7 +167,14 @@ struct MemberAvatarStack: View {
                         .background(Color.secondary.opacity(0.1), in: Circle())
                 }
             }
-            Spacer()
         }
     }
+}
+
+private extension TaskCardView {
+    static let fullDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }()
 }

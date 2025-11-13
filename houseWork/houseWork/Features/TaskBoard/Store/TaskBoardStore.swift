@@ -187,10 +187,33 @@ final class TaskBoardStore: ObservableObject {
         return await performMutation {
             let householdId = try requireHouseholdId()
             try await taskCollection(for: householdId)
-                .document(task.id.uuidString)
+                .document(task.documentID)
                 .delete()
         }
     }
+    
+    @discardableResult
+    func updateTaskDetails(
+        _ task: TaskItem,
+        title: String,
+        details: String,
+        dueDate: Date,
+        score: Int,
+        roomTag: String,
+        estimatedMinutes: Int
+    ) async -> Bool {
+        return await updateTask(task) { item in
+            var updated = item
+            updated.title = title
+            updated.details = details
+            updated.dueDate = dueDate
+            updated.score = score
+            updated.roomTag = roomTag
+            updated.estimatedMinutes = estimatedMinutes
+            return updated
+        }
+    }
+    
     
     private func createTask(_ task: TaskItem) async -> Bool {
         if isPreviewMode {
@@ -203,7 +226,7 @@ final class TaskBoardStore: ObservableObject {
         return await performMutation {
             let householdId = try requireHouseholdId()
             try await taskCollection(for: householdId)
-                .document(task.id.uuidString)
+                .document(task.documentID)
                 .setData(task.firestoreCreatePayload)
         }
     }
@@ -215,12 +238,21 @@ final class TaskBoardStore: ObservableObject {
             return true
         }
         
-        return await performMutation {
+        let payload = updatedTask.firestoreDiffPayload(comparedTo: task)
+        guard !payload.isEmpty else { return true }
+        
+        let success = await performMutation {
             let householdId = try requireHouseholdId()
             try await taskCollection(for: householdId)
-                .document(task.id.uuidString)
-                .setData(updatedTask.firestoreUpdatePayload, merge: true)
+                .document(task.documentID)
+                .updateData(payload)
         }
+        if success {
+            await MainActor.run {
+                self.applyLocalUpdate(updatedTask)
+            }
+        }
+        return success
     }
     
     private func applyLocalUpdate(_ task: TaskItem) {

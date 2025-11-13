@@ -24,11 +24,13 @@ extension TaskItem {
         let assignedMembers = assignedArray.compactMap(HouseholdMember.init(firestoreData:))
         let originTemplateId = (data["originTemplateId"] as? String).flatMap(UUID.init(uuidString:))
         let completedAt = (data["completedAt"] as? Timestamp)?.dateValue()
-        let id = UUID(uuidString: document.documentID) ?? UUID()
+        let documentID = document.documentID
+        let id = UUID(uuidString: documentID) ?? UUID()
         
         self.init(
             id: id,
             title: title,
+            documentID: documentID,
             details: details,
             status: status,
             dueDate: dueTimestamp.dateValue(),
@@ -55,6 +57,61 @@ extension TaskItem {
             payload["completedAt"] = FieldValue.delete()
         }
         return payload
+    }
+    
+    func firestoreDiffPayload(comparedTo original: TaskItem) -> [String: Any] {
+        var payload: [String: Any] = [:]
+        
+        if title != original.title {
+            payload["title"] = title
+        }
+        if details != original.details {
+            payload["details"] = details
+        }
+        if status != original.status {
+            payload["status"] = status.rawValue
+        }
+        if dueDate != original.dueDate {
+            payload["dueDate"] = Timestamp(date: dueDate)
+        }
+        if score != original.score {
+            payload["score"] = score
+        }
+        if roomTag != original.roomTag {
+            payload["roomTag"] = roomTag
+        }
+        if estimatedMinutes != original.estimatedMinutes {
+            payload["estimatedMinutes"] = estimatedMinutes
+        }
+        if originTemplateID != original.originTemplateID {
+            payload["originTemplateId"] = originTemplateID?.uuidString ?? FieldValue.delete()
+        }
+        if completionDateFieldNeedsUpdate(comparedTo: original) {
+            if let completedAt {
+                payload["completedAt"] = Timestamp(date: completedAt)
+            } else {
+                payload["completedAt"] = FieldValue.delete()
+            }
+        }
+        if assignedMembers != original.assignedMembers {
+            payload["assignedMembers"] = assignedMembers.map { $0.firestoreData }
+        }
+        
+        if !payload.isEmpty {
+            payload["updatedAt"] = FieldValue.serverTimestamp()
+        }
+        return payload
+    }
+
+    private func completionDateFieldNeedsUpdate(comparedTo original: TaskItem) -> Bool {
+        switch (completedAt, original.completedAt) {
+        case (nil, nil):
+            return false
+        case let (lhs?, rhs?):
+            return lhs != rhs
+        default:
+            return true
+        }
     }
     
     private var firestoreBody: [String: Any] {

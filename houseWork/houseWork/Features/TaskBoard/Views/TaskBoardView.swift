@@ -15,11 +15,14 @@ struct TaskBoardView: View {
     @EnvironmentObject private var taskStore: TaskBoardStore
     @EnvironmentObject private var authStore: AuthStore
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var tagStore: TagStore
     @State private var selectedFilter: TaskBoardFilter = .all
     @State private var selectedStatus: TaskStatus?
     @State private var showingHouseholdSheet = false
     @State private var alertMessage: String?
     @State private var showingTaskComposer = false
+    @State private var inspectingTask: TaskItem?
+    @State private var editingTask: TaskItem?
     
     var body: some View {
         NavigationStack {
@@ -57,6 +60,14 @@ struct TaskBoardView: View {
             TaskComposerView()
                 .environmentObject(taskStore)
                 .environmentObject(authStore)
+        }
+        .sheet(item: $inspectingTask) { task in
+            TaskDetailView(task: task)
+        }
+        .sheet(item: $editingTask) { task in
+            TaskEditorView(task: task)
+                .environmentObject(taskStore)
+                .environmentObject(tagStore)
         }
     }
     
@@ -206,9 +217,21 @@ struct TaskBoardView: View {
                     task: task,
                     primaryButton: primaryButton(for: task),
                     secondaryButton: secondaryButton(for: task),
-                    isActionEnabled: canMutate(task: task)
+                    isActionEnabled: canMutate(task: task),
+                    showsDetails: false
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .onTapGesture {
+                    inspectingTask = task
+                }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button {
+                        editingTask = task
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .tint(.orange)
+                    
                     Button(role: .destructive) {
                         Task {
                             await taskStore.deleteTask(task)
@@ -216,6 +239,7 @@ struct TaskBoardView: View {
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
+                    .tint(.red)
                 }
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -410,9 +434,222 @@ private struct StatusSummaryCard: View {
     }
 }
 
+private struct TaskDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    let task: TaskItem
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    statusRow
+                    detailRow(title: "Due Date", value: task.dueDate.formatted(date: .abbreviated, time: .shortened))
+                    detailRow(title: "Room Tag", value: task.roomTag)
+                    detailRow(title: "Score", value: "\(task.score)")
+                    detailRow(title: "Estimated Minutes", value: "\(task.estimatedMinutes)")
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Details")
+                            .font(.headline)
+                        Text(task.details)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding()
+                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Assigned Members")
+                            .font(.headline)
+                        if task.assignedMembers.isEmpty {
+                            Text("Unassigned")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(task.assignedMembers, id: \.id) { member in
+                                HStack(spacing: 12) {
+                                    Text(member.initials)
+                                        .font(.subheadline.bold())
+                                        .foregroundColor(.white)
+                                        .frame(width: 36, height: 36)
+                                        .background(member.accentColor, in: Circle())
+                                    VStack(alignment: .leading) {
+                                        Text(member.name)
+                                            .font(.subheadline)
+                                        Text(member.id.uuidString)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .padding()
+            }
+            .navigationTitle(task.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
+    }
+    
+    private var statusRow: some View {
+        HStack {
+            Label(task.status.label, systemImage: task.status.iconName)
+                .font(.headline)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(task.status.accentColor.opacity(0.2), in: Capsule())
+            Spacer()
+            Text(task.status == .completed ? "Finished" : "Active")
+                .font(.subheadline.bold())
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    private func detailRow(title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.subheadline.bold())
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct TaskEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var taskStore: TaskBoardStore
+    @EnvironmentObject private var tagStore: TagStore
+    
+    let task: TaskItem
+    @State private var title: String
+    @State private var details: String
+    @State private var dueDate: Date
+    @State private var score: Int
+    @State private var roomTag: String
+    @State private var estimatedMinutes: Int
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+    
+    init(task: TaskItem) {
+        self.task = task
+        _title = State(initialValue: task.title)
+        _details = State(initialValue: task.details)
+        _dueDate = State(initialValue: task.dueDate)
+        _score = State(initialValue: task.score)
+        _roomTag = State(initialValue: task.roomTag)
+        _estimatedMinutes = State(initialValue: task.estimatedMinutes)
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Basics") {
+                    TextField("Title", text: $title)
+                    TextField("Details", text: $details, axis: .vertical)
+                        .lineLimit(3, reservesSpace: true)
+                }
+                
+                Section("Scheduling") {
+                    DatePicker("Due Date", selection: $dueDate, displayedComponents: [.date, .hourAndMinute])
+                    Stepper(value: $estimatedMinutes, in: 5...240, step: 5) {
+                        HStack {
+                            Text("Estimated Time")
+                            Spacer()
+                            Text("\(estimatedMinutes) min")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Stepper(value: $score, in: 5...100, step: 5) {
+                        HStack {
+                            Text("Score")
+                            Spacer()
+                            Text("\(score)")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                
+                Section("Tags") {
+                    Picker("Room / Tag", selection: $roomTag) {
+                        Text("General").tag("General")
+                        ForEach(tagStore.tags) { tag in
+                            Text(tag.name).tag(tag.name)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+                
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: saveTask)
+                        .disabled(!canSave || isSaving)
+                }
+            }
+        }
+    }
+    
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    private func saveTask() {
+        guard canSave, !isSaving else { return }
+        isSaving = true
+        errorMessage = nil
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTag = roomTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task {
+            let success = await taskStore.updateTaskDetails(
+                task,
+                title: trimmedTitle,
+                details: trimmedDetails.isEmpty ? "No details yet." : trimmedDetails,
+                dueDate: dueDate,
+                score: score,
+                roomTag: trimmedTag.isEmpty ? "General" : trimmedTag,
+                estimatedMinutes: estimatedMinutes
+            )
+            await MainActor.run {
+                isSaving = false
+                if success {
+                    dismiss()
+                } else {
+                    errorMessage = taskStore.mutationError ?? "Failed to save task."
+                }
+            }
+        }
+    }
+}
+
 #Preview {
     TaskBoardView()
         .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
         .environmentObject(AuthStore())
         .environmentObject(HouseholdStore())
+        .environmentObject(TagStore(householdStore: HouseholdStore()))
 }
