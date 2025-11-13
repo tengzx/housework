@@ -19,6 +19,7 @@ struct ChoreCatalogView: View {
     @State private var successMessage: String?
     @State private var showSuccessBanner = false
     @State private var alertMessage: String?
+    @FocusState private var isSearchFieldFocused: Bool
     
     typealias ViewModelBuilder = @MainActor () -> ChoreCatalogViewModel
     
@@ -90,15 +91,21 @@ struct ChoreCatalogView: View {
     }
     
     private func presentCreateForm() {
+        dismissSearchFieldFocus()
         draft = ChoreTemplateDraft()
         editingTemplate = nil
         showFormSheet = true
     }
     
     private func presentEditForm(for template: ChoreTemplate) {
+        dismissSearchFieldFocus()
         draft = ChoreTemplateDraft(template: template)
         editingTemplate = template
         showFormSheet = true
+    }
+    
+    private func dismissSearchFieldFocus() {
+        isSearchFieldFocused = false
     }
 
     private var floatingAddButton: some View {
@@ -122,6 +129,7 @@ struct ChoreCatalogView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField("Search chores or details", text: $viewModel.searchText)
+                .focused($isSearchFieldFocused)
             if !viewModel.searchText.isEmpty {
                 Button {
                     viewModel.searchText = ""
@@ -142,16 +150,23 @@ struct ChoreCatalogView: View {
                 FilterChip(
                     label: "All",
                     isSelected: viewModel.selectedTag == nil
-                ) { viewModel.selectedTag = nil }
+                ) {
+                    dismissSearchFieldFocus()
+                    viewModel.selectedTag = nil
+                }
                 
                 ForEach(viewModel.availableTags, id: \.self) { tag in
                     FilterChip(label: tag, isSelected: viewModel.selectedTag == tag) {
+                        dismissSearchFieldFocus()
                         viewModel.selectedTag = tag
                     }
                 }
             }
             .padding(.vertical, 4)
         }
+        .simultaneousGesture(
+            TapGesture().onEnded { dismissSearchFieldFocus() }
+        )
     }
     
     private var templateList: some View {
@@ -190,6 +205,9 @@ struct ChoreCatalogView: View {
             }
         }
         .listStyle(.plain)
+        .simultaneousGesture(
+            TapGesture().onEnded { dismissSearchFieldFocus() }
+        )
     }
     
     private func handleAddToBoard(_ template: ChoreTemplate) {
