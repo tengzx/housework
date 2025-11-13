@@ -12,7 +12,6 @@ struct HouseholdManagementView: View {
     @State private var showAddSheet = false
     @State private var editingHousehold: HouseholdSummary?
     @State private var draftName: String = ""
-    @State private var draftId: String = ""
     
     var body: some View {
         List {
@@ -54,7 +53,6 @@ struct HouseholdManagementView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
                     draftName = ""
-                    draftId = ""
                     showAddSheet = true
                 } label: {
                     Image(systemName: "plus")
@@ -65,8 +63,6 @@ struct HouseholdManagementView: View {
             NavigationStack {
                 Form {
                     TextField("Household name", text: $draftName)
-                    TextField("Household ID", text: $draftId)
-                        .autocapitalization(.none)
                 }
                 .navigationTitle("New Household")
                 .toolbar {
@@ -76,14 +72,14 @@ struct HouseholdManagementView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Create") {
                             let name = draftName
-                            let id = draftId
                             Task {
-                                await householdStore.addHousehold(name: name, id: id)
-                                await MainActor.run { showAddSheet = false }
+                                let success = await householdStore.createHousehold(named: name)
+                                await MainActor.run {
+                                    if success { showAddSheet = false }
+                                }
                             }
                         }
-                        .disabled(draftName.trimmingCharacters(in: .whitespaces).isEmpty ||
-                                  draftId.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(draftName.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
             }

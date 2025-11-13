@@ -49,25 +49,29 @@ final class HouseholdStore: ObservableObject {
         update(name: summary.name, id: summary.id)
     }
     
-    func addHousehold(name: String, id: String) async {
+    @discardableResult
+    func createHousehold(named name: String) async -> Bool {
         guard let userId = currentUserId else {
             error = "Please sign in to create a household."
-            return
+            return false
         }
-        let trimmedId = id.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedId.isEmpty, !trimmedName.isEmpty else { return }
+        guard !trimmedName.isEmpty else { return false }
+        let docRef = db.collection("households").document()
         do {
-            try await db.collection("households").document(trimmedId).setData([
+            try await docRef.setData([
                 "name": trimmedName,
                 "ownerId": userId,
-                "memberIds": FieldValue.arrayUnion([userId]),
+                "memberIds": [userId],
                 "createdAt": FieldValue.serverTimestamp(),
                 "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
+            update(name: trimmedName, id: docRef.documentID)
             error = nil
+            return true
         } catch {
             self.error = error.localizedDescription
+            return false
         }
     }
     
@@ -101,11 +105,12 @@ final class HouseholdStore: ObservableObject {
         }
     }
     
-    func updateUserContext(userId: String?) {
-        guard userId != currentUserId else { return }
+    func updateUserContext(userId: String?, force: Bool = false) {
+        if !force, userId == currentUserId { return }
         listener?.remove()
         currentUserId = userId
         households = []
+        clearSelection()
         isLoading = true
         guard let userId else {
             isLoading = false
@@ -129,19 +134,30 @@ final class HouseholdStore: ObservableObject {
                     guard let documents = snapshot?.documents else {
                         self.households = []
                         self.isLoading = false
+                        self.clearSelection()
                         return
                     }
                     self.households = documents.compactMap { doc in
                         let name = doc.get("name") as? String ?? "Unnamed"
                         return HouseholdSummary(id: doc.documentID, name: name)
                     }
-                    if !self.households.contains(where: { $0.id == self.householdId }),
-                       let first = self.households.first {
+                    if let active = self.households.first(where: { $0.id == self.householdId }) {
+                        self.select(active)
+                    } else if let first = self.households.first {
                         self.select(first)
+                    } else {
+                        self.clearSelection()
                     }
                     self.isLoading = false
                 }
             }
+    }
+    
+    private func clearSelection() {
+        householdId = ""
+        householdName = "No Household"
+        defaults.removeObject(forKey: idKey)
+        defaults.removeObject(forKey: nameKey)
     }
 }
 

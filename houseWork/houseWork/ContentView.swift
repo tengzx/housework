@@ -28,6 +28,10 @@ struct ContentView: View {
                 ProgressView("Loading account…")
             } else if authStore.currentUser == nil {
                 LoginView()
+            } else if householdStore.isLoading {
+                ProgressView("Loading household…")
+            } else if householdStore.households.isEmpty {
+                HouseholdSetupView()
             } else {
                 TabView {
                     TaskBoardView()
@@ -54,10 +58,10 @@ struct ContentView: View {
         .environmentObject(authStore)
         .environmentObject(tagStore)
         .onAppear {
-            householdStore.updateUserContext(userId: authStore.firebaseUserId)
+            householdStore.updateUserContext(userId: authStore.firebaseUserId, force: true)
         }
         .onChange(of: authStore.firebaseUserId) { newValue in
-            householdStore.updateUserContext(userId: newValue)
+            householdStore.updateUserContext(userId: newValue, force: true)
         }
     }
 }

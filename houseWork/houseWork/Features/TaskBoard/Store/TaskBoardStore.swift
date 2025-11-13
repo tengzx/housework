@@ -30,8 +30,7 @@ final class TaskBoardStore: ObservableObject {
         self.tasks = []
         self.isLoading = true
         self.isPreviewMode = false
-        self.currentHouseholdId = householdStore.householdId
-        attachListener(to: currentHouseholdId)
+        self.currentHouseholdId = ""
         householdCancellable = householdStore.$householdId
             .removeDuplicates()
             .sink { [weak self] newId in
@@ -58,7 +57,18 @@ final class TaskBoardStore: ObservableObject {
     
     private func switchHousehold(to id: String) async {
         guard !isPreviewMode else { return }
-        guard !id.isEmpty, id != currentHouseholdId else { return }
+        
+        if id.isEmpty || id == "demo-household" {
+            listener?.remove()
+            listener = nil
+            currentHouseholdId = ""
+            tasks = []
+            isLoading = false
+            error = nil
+            return
+        }
+        
+        guard id != currentHouseholdId else { return }
         listener?.remove()
         currentHouseholdId = id
         tasks = []

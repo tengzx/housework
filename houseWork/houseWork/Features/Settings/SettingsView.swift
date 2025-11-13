@@ -43,25 +43,50 @@ struct SettingsView: View {
                 }
                 
                 Section("Household") {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Current: \(householdStore.householdName)")
-                        Text("ID: \(householdStore.householdId)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    NavigationLink {
-                        HouseholdManagementView()
-                    } label: {
-                        Label("Manage households", systemImage: "house")
-                    }
-                    NavigationLink {
-                        TagManagementView()
-                    } label: {
-                        Label("Manage tags", systemImage: "tag")
-                    }
+                    HouseholdSection()
                 }
             }
             .navigationTitle("Settings")
+        }
+    }
+}
+
+private struct HouseholdSection: View {
+    @EnvironmentObject private var householdStore: HouseholdStore
+    
+    var body: some View {
+        if householdStore.households.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("No household found")
+                    .font(.headline)
+                Text("Create or join a household to start managing chores.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                NavigationLink {
+                    HouseholdManagementView()
+                } label: {
+                    Label("Create Household", systemImage: "house.badge.plus")
+                        .font(.subheadline.bold())
+                }
+            }
+            .padding(.vertical, 8)
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Current: \(householdStore.householdName)")
+                Text("ID: \(householdStore.householdId)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            NavigationLink {
+                HouseholdManagementView()
+            } label: {
+                Label("Manage households", systemImage: "house")
+            }
+            NavigationLink {
+                TagManagementView()
+            } label: {
+                Label("Manage tags", systemImage: "tag")
+            }
         }
     }
 }

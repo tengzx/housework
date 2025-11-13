@@ -19,14 +19,22 @@ final class AuthStore: ObservableObject {
     @Published var authError: String?
     
     private var authListener: AuthStateDidChangeListenerHandle?
+    private let defaults = UserDefaults.standard
+    private let storedUserIdKey = "authStore.userId"
     
     init() {
         authListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
             guard let self else { return }
             Task { @MainActor in
                 self.isLoading = false
-                self.firebaseUserId = user?.uid
-                self.currentUser = user.map(Self.makeMember(from:))
+                if let user {
+                    self.firebaseUserId = user.uid
+                    self.currentUser = Self.makeMember(from: user)
+                } else {
+                    self.firebaseUserId = nil
+                    self.currentUser = nil
+                    self.defaults.removeObject(forKey: self.storedUserIdKey)
+                }
             }
         }
     }
@@ -59,6 +67,7 @@ final class AuthStore: ObservableObject {
             try Auth.auth().signOut()
             firebaseUserId = nil
             currentUser = nil
+            defaults.removeObject(forKey: storedUserIdKey)
         } catch {
             authError = error.localizedDescription
         }
@@ -71,6 +80,7 @@ final class AuthStore: ObservableObject {
             let result = try await action()
             firebaseUserId = result.user.uid
             currentUser = AuthStore.makeMember(from: result.user)
+            defaults.set(result.user.uid, forKey: storedUserIdKey)
         } catch {
             authError = error.localizedDescription
         }
