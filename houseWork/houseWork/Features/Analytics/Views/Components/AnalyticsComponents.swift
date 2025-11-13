@@ -45,7 +45,7 @@ struct LeaderboardRow: View {
                 .font(.subheadline.bold())
                 .foregroundColor(.white)
                 .frame(width: 40, height: 40)
-                .background(performance.member.accentColor, in: Circle())
+                .background(performance.member.avatarColor, in: Circle())
             VStack(alignment: .leading, spacing: 4) {
                 Text(performance.member.name)
                     .font(.subheadline.bold())

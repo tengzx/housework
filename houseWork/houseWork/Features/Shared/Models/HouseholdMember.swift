@@ -34,6 +34,23 @@ struct HouseholdMember: Identifiable, Hashable {
         guard !normalizedSelf.isEmpty, !normalizedOther.isEmpty else { return false }
         return normalizedSelf == normalizedOther
     }
+    
+    var avatarColor: Color {
+        let palette = Self.avatarPalette
+        let hash = abs(id.uuidString.hashValue)
+        return palette[hash % palette.count]
+    }
+    
+    private static let avatarPalette: [Color] = [
+        Color(red: 0.96, green: 0.55, blue: 0.55),
+        Color(red: 0.52, green: 0.67, blue: 0.99),
+        Color(red: 0.55, green: 0.82, blue: 0.62),
+        Color(red: 0.99, green: 0.76, blue: 0.42),
+        Color(red: 0.71, green: 0.58, blue: 0.96),
+        Color(red: 0.43, green: 0.78, blue: 0.84),
+        Color(red: 0.97, green: 0.65, blue: 0.82),
+        Color(red: 0.83, green: 0.66, blue: 0.46)
+    ]
 }
 
 extension HouseholdMember {

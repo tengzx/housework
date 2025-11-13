@@ -98,7 +98,7 @@ private struct AvatarCircle: View {
             .font(.subheadline.bold())
             .foregroundColor(.white)
             .frame(width: 36, height: 36)
-            .background(member.accentColor, in: Circle())
+            .background(member.avatarColor, in: Circle())
     }
 }
 

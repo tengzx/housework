@@ -155,7 +155,7 @@ struct MemberAvatarStack: View {
                         .font(.caption.bold())
                         .foregroundColor(.white)
                         .frame(width: 32, height: 32)
-                        .background(member.accentColor, in: Circle())
+                        .background(member.avatarColor, in: Circle())
                         .overlay(Circle().stroke(Color.white, lineWidth: 2))
                         .zIndex(Double(members.count - index))
                 }
