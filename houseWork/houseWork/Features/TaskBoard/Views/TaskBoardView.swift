@@ -188,7 +188,6 @@ struct TaskBoardView: View {
                     StatusSummaryCard(
                         title: segment.title,
                         value: "\(taskCount(for: segment.status))",
-                        subtitle: segment.subtitle,
                         icon: segment.icon,
                         background: segment.background,
                         isSelected: segment.status == selectedStatus
@@ -274,15 +273,6 @@ struct TaskBoardView: View {
             .count
     }
 
-    private func subtitle(for status: TaskStatus?) -> String {
-        guard let status else { return "All tasks" }
-        switch status {
-        case .backlog: return "待开始"
-        case .inProgress: return "进行中"
-        case .completed: return "已完成"
-        }
-    }
-    
     private func primaryButton(for task: TaskItem) -> TaskCardButton? {
         guard canMutate(task: task) else { return nil }
         switch task.status {
@@ -339,7 +329,6 @@ struct TaskBoardView: View {
             StatusSegment(
                 id: "all",
                 title: "All",
-                subtitle: "All tasks",
                 icon: "rectangle.grid.2x2",
                 background: hexColor("D6D8FF", fallback: Color(.systemBlue).opacity(0.3)),
                 status: nil
@@ -349,7 +338,6 @@ struct TaskBoardView: View {
             StatusSegment(
                 id: status.rawValue,
                 title: status.label,
-                subtitle: subtitle(for: status),
                 icon: status.iconName,
                 background: segmentBackground(for: status),
                 status: status
@@ -377,7 +365,6 @@ struct TaskBoardView: View {
 private struct StatusSegment: Identifiable {
     let id: String
     let title: String
-    let subtitle: String
     let icon: String
     let background: Color
     let status: TaskStatus?
@@ -386,32 +373,43 @@ private struct StatusSegment: Identifiable {
 private struct StatusSummaryCard: View {
     let title: String
     let value: String
-    let subtitle: String
     let icon: String
     let background: Color?
     let isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: icon)
-                .font(.caption)
-                .foregroundStyle(.black)
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.black.opacity(0.08))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: icon)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.black)
+                }
+                Spacer(minLength: 0)
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.black.opacity(0.85))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             Text(value)
-                .font(.title2.bold())
+                .font(.title.bold())
                 .foregroundStyle(.black)
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(Color.black.opacity(0.7))
+                .frame(alignment: .center)
         }
-        .padding()
+        .padding(16)
         .frame(maxWidth: .infinity)
+        .frame(height: 120)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(background ?? Color(.systemBackground))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isSelected ? Color.black.opacity(0.35) : .clear, lineWidth: 2)
+                .stroke(isSelected ? Color.black.opacity(0.2) : .clear, lineWidth: 2)
         )
     }
 }

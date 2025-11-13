@@ -86,12 +86,13 @@ final class AnalyticsViewModel: ObservableObject {
     // MARK: - Builders
     
     private func buildMemberStats(from tasks: [TaskItem], buckets: [AnalyticsBucket]) -> [MemberPerformance] {
-        var accumulators: [UUID: MemberAccumulator] = [:]
+        var accumulators: [MemberAccumulator] = []
         for task in tasks {
             let completionDate = task.completedAt ?? task.dueDate
             let bucketIndex = bucketIndex(for: completionDate, buckets: buckets)
             for member in task.assignedMembers {
-                var entry = accumulators[member.id] ?? MemberAccumulator(member: member, bucketCount: buckets.count)
+                let matchIndex = accumulators.firstIndex(where: { $0.member.matches(member) })
+                var entry = matchIndex.map { accumulators[$0] } ?? MemberAccumulator(member: member, bucketCount: buckets.count)
                 if let bucketIndex {
                     entry.bucketCounts[bucketIndex] += 1
                     if bucketIndex == buckets.count - 1 {
@@ -101,11 +102,15 @@ final class AnalyticsViewModel: ObservableObject {
                         entry.completionDates.append(completionDate)
                     }
                 }
-                accumulators[member.id] = entry
+                if let matchIndex {
+                    accumulators[matchIndex] = entry
+                } else {
+                    accumulators.append(entry)
+                }
             }
         }
         
-        return accumulators.values
+        return accumulators
             .map { accumulator in
                 let streak = streakDays(for: accumulator.completionDates)
                 let delta: Int
