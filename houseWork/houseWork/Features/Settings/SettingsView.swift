@@ -12,39 +12,55 @@ struct SettingsView: View {
     @EnvironmentObject private var authStore: AuthStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var tagStore: TagStore
+    @EnvironmentObject private var languageStore: LanguageStore
     @State private var householdNameDraft: String = ""
     @State private var householdIdDraft: String = ""
     
     var body: some View {
         navigationContainer {
             List {
-                Section("Account") {
+                Section(LocalizedStringKey("settings.section.account")) {
                     if let user = authStore.currentUser {
                         HStack {
                             AvatarCircle(member: user)
                             VStack(alignment: .leading) {
                                 Text(user.name)
                                     .font(.headline)
-                                Text("Active on this device")
+                                Text(LocalizedStringKey("settings.account.activeDevice"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Button("Log out") { authStore.logout() }
+                            Button(LocalizedStringKey("settings.account.logout")) { authStore.logout() }
                                 .buttonStyle(.bordered)
                         }
                     } else {
-                        Text("Not signed in")
+                        Text(LocalizedStringKey("settings.account.notSignedIn"))
                             .foregroundStyle(.secondary)
                     }
                     
-                    Text("Firebase Email/Password sign-in")
+                    Text(LocalizedStringKey("settings.account.authDescription"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 
-                Section("Household") {
+                Section(LocalizedStringKey("settings.section.household")) {
                     HouseholdSection()
+                }
+                
+                Section(LocalizedStringKey("settings.language.section")) {
+                    Picker(
+                        LocalizedStringKey("settings.language.picker"),
+                        selection: Binding(
+                            get: { languageStore.selectedLanguage },
+                            set: { languageStore.select($0) }
+                        )
+                    ) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(language.displayKey).tag(language)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
             }
         }
@@ -58,36 +74,36 @@ private struct HouseholdSection: View {
     var body: some View {
         if householdStore.households.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Text("No household found")
+                Text(LocalizedStringKey("settings.household.none"))
                     .font(.headline)
-                Text("Create or join a household to start managing chores.")
+                Text(LocalizedStringKey("settings.household.instructions"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 NavigationLink {
                     HouseholdManagementView()
                 } label: {
-                    Label("Create Household", systemImage: "house.badge.plus")
+                    Label(LocalizedStringKey("settings.household.create"), systemImage: "house.badge.plus")
                         .font(.subheadline.bold())
                 }
             }
             .padding(.vertical, 8)
         } else {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Current: \(householdStore.householdName)")
-                Text("ID: \(householdStore.householdId)")
+                Text(String(format: String(localized: "settings.household.currentPrefix"), householdStore.householdName))
+                Text("household.id.format \(householdStore.householdId)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
             NavigationLink {
                 HouseholdManagementView()
             } label: {
-                Label("Manage households", systemImage: "house")
+                Label(LocalizedStringKey("settings.household.manageHouseholds"), systemImage: "house")
             }
             NavigationLink {
                 TagManagementView()
                     .environmentObject(tagStore)
             } label: {
-                Label("Manage tags", systemImage: "tag")
+                Label(LocalizedStringKey("settings.household.manageTags"), systemImage: "tag")
             }
         }
     }
@@ -108,10 +124,12 @@ private struct AvatarCircle: View {
 #Preview {
     let householdStore = HouseholdStore()
     let tagStore = TagStore(householdStore: householdStore)
+    let languageStore = LanguageStore()
     return navigationContainer {
         SettingsView()
             .environmentObject(AuthStore())
             .environmentObject(householdStore)
             .environmentObject(tagStore)
+            .environmentObject(languageStore)
     }
 }

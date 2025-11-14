@@ -31,13 +31,13 @@ struct TaskBoardView: View {
             .background(Color(.systemGroupedBackground))
         }
         .alert(
-            "Task Board Error",
+            LocalizedStringKey("taskBoard.error.title"),
             isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
                 set: { if !$0 { viewModel.alertMessage = nil } }
             ),
             actions: {
-                Button("OK", role: .cancel) { }
+                Button(LocalizedStringKey("common.ok"), role: .cancel) { }
             },
             message: {
                 Text(viewModel.alertMessage ?? "")
@@ -75,7 +75,7 @@ struct TaskBoardView: View {
             Section {
                 HStack {
                     Spacer()
-                    ProgressView("Loading tasks…")
+                    ProgressView(LocalizedStringKey("taskBoard.loading"))
                         .padding(.vertical, 40)
                     Spacer()
                 }
@@ -91,7 +91,7 @@ struct TaskBoardView: View {
             if viewModel.filteredTasks.isEmpty {
                 Section {
                     placeholderView(
-                        title: "No tasks yet",
+                        title: LocalizedStringKey("taskBoard.placeholder.empty"),
                         systemImage: "tray"
                     )
                     .frame(maxWidth: .infinity)
@@ -102,7 +102,7 @@ struct TaskBoardView: View {
                 let visibleSections = viewModel.visibleSections
                 if visibleSections.isEmpty {
                     Section {
-                        placeholderView(title: "No tasks match", systemImage: "tray")
+                        placeholderView(title: LocalizedStringKey("taskBoard.placeholder.nomatch"), systemImage: "tray")
                     }
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -128,7 +128,7 @@ struct TaskBoardView: View {
         }
         .padding(.trailing, 16)
         .padding(.bottom, 16)
-        .accessibilityLabel("Add Task")
+        .accessibilityLabel(Text(LocalizedStringKey("taskBoard.button.add")))
     }
     
     private var householdHeader: some View {
@@ -152,7 +152,7 @@ struct TaskBoardView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(viewModel.householdStore.householdName)
                             .font(.title2.bold())
-                        Text("ID: \(viewModel.householdStore.householdId)")
+                        Text("household.id.format \(viewModel.householdStore.householdId)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -165,9 +165,9 @@ struct TaskBoardView: View {
     }
     
     private var filterPicker: some View {
-        Picker("Filter", selection: $viewModel.selectedFilter) {
+        Picker(LocalizedStringKey("taskBoard.filter.label"), selection: $viewModel.selectedFilter) {
             ForEach(TaskBoardFilter.allCases) { filter in
-                Text(filter.label).tag(filter)
+                Text(filter.labelKey).tag(filter)
             }
         }
         .pickerStyle(.segmented)
@@ -212,7 +212,7 @@ struct TaskBoardView: View {
                     Button {
                         viewModel.editingTask = task
                     } label: {
-                        Label("Edit", systemImage: "pencil")
+                        Label(LocalizedStringKey("taskBoard.action.edit"), systemImage: "pencil")
                     }
                     .tint(.orange)
                     
@@ -221,7 +221,7 @@ struct TaskBoardView: View {
                             await viewModel.deleteTask(task)
                         }
                     } label: {
-                        Label("Delete", systemImage: "trash")
+                        Label(LocalizedStringKey("taskBoard.action.delete"), systemImage: "trash")
                     }
                     .tint(.red)
                 }
@@ -237,7 +237,7 @@ struct TaskBoardView: View {
         switch task.status {
         case .backlog:
             return TaskCardButton(
-                title: "Start",
+                title: LocalizedStringKey("taskBoard.button.start"),
                 systemImage: "play.circle.fill",
                 style: .borderedProminent
             ) {
@@ -247,7 +247,7 @@ struct TaskBoardView: View {
             }
         case .inProgress:
             return TaskCardButton(
-                title: "Complete",
+                title: LocalizedStringKey("taskBoard.button.complete"),
                 systemImage: "checkmark.circle.fill",
                 style: .borderedProminent
             ) {
@@ -265,7 +265,7 @@ struct TaskBoardView: View {
         switch task.status {
         case .backlog:
             return TaskCardButton(
-                title: "Quick Done",
+                title: LocalizedStringKey("taskBoard.button.quickDone"),
                 systemImage: "checkmark.circle",
                 style: .bordered
             ) {
@@ -281,7 +281,7 @@ struct TaskBoardView: View {
 }
 
 private struct StatusSummaryCard: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
     let icon: String
     let background: Color?
@@ -336,10 +336,10 @@ private struct StatusSummaryCard: View {
 }
 
 @ViewBuilder
-private func placeholderView(title: String, systemImage: String, description: Text? = nil) -> some View {
+private func placeholderView(title: LocalizedStringKey, systemImage: String, description: LocalizedStringKey? = nil) -> some View {
     if #available(iOS 17.0, *) {
         if let description {
-            ContentUnavailableView(title, systemImage: systemImage, description: description)
+            ContentUnavailableView(title, systemImage: systemImage, description: Text(description))
         } else {
             ContentUnavailableView(title, systemImage: systemImage)
         }
@@ -352,7 +352,7 @@ private func placeholderView(title: String, systemImage: String, description: Te
                 .font(.headline)
                 .foregroundStyle(.primary)
             if let description {
-                description
+                Text(description)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -371,13 +371,13 @@ private struct TaskDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     statusRow
-                    detailRow(title: "Due Date", value: task.dueDate.formatted(date: .abbreviated, time: .shortened))
-                    detailRow(title: "Room Tag", value: task.roomTag)
-                    detailRow(title: "Score", value: "\(task.score)")
-                    detailRow(title: "Estimated Minutes", value: "\(task.estimatedMinutes)")
+                    detailRow(title: LocalizedStringKey("taskBoard.detail.dueDate"), value: task.dueDate.formatted(date: .abbreviated, time: .shortened))
+                    detailRow(title: LocalizedStringKey("taskBoard.detail.roomTag"), value: task.roomTag)
+                    detailRow(title: LocalizedStringKey("taskBoard.detail.score"), value: "\(task.score)")
+                    detailRow(title: LocalizedStringKey("taskBoard.detail.estimatedMinutes"), value: "\(task.estimatedMinutes)")
                     
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Details")
+                        Text(LocalizedStringKey("taskBoard.detail.section.details"))
                             .font(.headline)
                         Text(task.details)
                             .font(.body)
@@ -388,10 +388,10 @@ private struct TaskDetailView: View {
                     .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Assigned Members")
+                        Text(LocalizedStringKey("taskBoard.detail.section.members"))
                             .font(.headline)
                         if task.assignedMembers.isEmpty {
-                            Text("Unassigned")
+                            Text(LocalizedStringKey("task.unassigned"))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -422,7 +422,7 @@ private struct TaskDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(LocalizedStringKey("taskBoard.detail.close")) { dismiss() }
                 }
             }
         }
@@ -430,19 +430,19 @@ private struct TaskDetailView: View {
     
     private var statusRow: some View {
         HStack {
-            Label(task.status.label, systemImage: task.status.iconName)
+            Label(task.status.labelKey, systemImage: task.status.iconName)
                 .font(.headline)
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
                 .background(task.status.accentColor.opacity(0.2), in: Capsule())
             Spacer()
-            Text(task.status == .completed ? "Finished" : "Active")
+            Text(task.status == .completed ? LocalizedStringKey("taskBoard.detail.status.finished") : LocalizedStringKey("taskBoard.detail.status.active"))
                 .font(.subheadline.bold())
                 .foregroundStyle(.secondary)
         }
     }
     
-    private func detailRow(title: String, value: String) -> some View {
+    private func detailRow(title: LocalizedStringKey, value: String) -> some View {
         HStack {
             Text(title)
                 .font(.subheadline)
@@ -483,16 +483,16 @@ private struct TaskEditorView: View {
     var body: some View {
         navigationContainer {
             Form {
-                Section("Basics") {
-                    TextField("Title", text: $title)
+                Section(LocalizedStringKey("taskBoard.editor.section.basics")) {
+                    TextField(LocalizedStringKey("taskBoard.editor.field.title"), text: $title)
                     detailsField
                 }
                 
-                Section("Scheduling") {
-                    DatePicker("Due Date", selection: $dueDate, displayedComponents: [.date, .hourAndMinute])
+                Section(LocalizedStringKey("taskBoard.editor.section.scheduling")) {
+                    DatePicker(LocalizedStringKey("taskBoard.detail.dueDate"), selection: $dueDate, displayedComponents: [.date, .hourAndMinute])
                     Stepper(value: $estimatedMinutes, in: 5...240, step: 5) {
                         HStack {
-                            Text("Estimated Time")
+                            Text(LocalizedStringKey("taskBoard.editor.field.estimatedTime"))
                             Spacer()
                             Text("\(estimatedMinutes) min")
                                 .foregroundStyle(.secondary)
@@ -500,7 +500,7 @@ private struct TaskEditorView: View {
                     }
                     Stepper(value: $score, in: 5...100, step: 5) {
                         HStack {
-                            Text("Score")
+                            Text(LocalizedStringKey("taskBoard.editor.field.score"))
                             Spacer()
                             Text("\(score)")
                                 .foregroundStyle(.secondary)
@@ -508,9 +508,9 @@ private struct TaskEditorView: View {
                     }
                 }
                 
-                Section("Tags") {
-                    Picker("Room / Tag", selection: $roomTag) {
-                        Text("General").tag("General")
+                Section(LocalizedStringKey("taskBoard.editor.section.tags")) {
+                    Picker(LocalizedStringKey("taskBoard.editor.field.roomTag"), selection: $roomTag) {
+                        Text(LocalizedStringKey("taskBoard.editor.field.general")).tag("General")
                         ForEach(tagStore.tags) { tag in
                             Text(tag.name).tag(tag.name)
                         }
@@ -526,14 +526,14 @@ private struct TaskEditorView: View {
                     }
                 }
             }
-            .navigationTitle("Edit Task")
+            .navigationTitle(LocalizedStringKey("taskBoard.editor.nav.edit"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(LocalizedStringKey("common.cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: saveTask)
+                    Button(LocalizedStringKey("common.save"), action: saveTask)
                         .disabled(!canSave || isSaving)
                 }
             }
@@ -547,7 +547,7 @@ private struct TaskEditorView: View {
     @ViewBuilder
     private var detailsField: some View {
         if #available(iOS 16.0, *) {
-            TextField("Details", text: $details, axis: .vertical)
+            TextField(LocalizedStringKey("taskBoard.editor.field.details"), text: $details, axis: .vertical)
                 .lineLimit(3, reservesSpace: true)
         } else {
             TextEditor(text: $details)
@@ -566,7 +566,7 @@ private struct TaskEditorView: View {
             let success = await taskStore.updateTaskDetails(
                 task,
                 title: trimmedTitle,
-                details: trimmedDetails.isEmpty ? "No details yet." : trimmedDetails,
+                details: trimmedDetails.isEmpty ? String(localized: "task.details.empty") : trimmedDetails,
                 dueDate: dueDate,
                 score: score,
                 roomTag: trimmedTag.isEmpty ? "General" : trimmedTag,
@@ -577,7 +577,7 @@ private struct TaskEditorView: View {
                 if success {
                     dismiss()
                 } else {
-                    errorMessage = taskStore.mutationError ?? "Failed to save task."
+                    errorMessage = taskStore.mutationError ?? String(localized: "taskBoard.editor.error.saveFailed")
                 }
             }
         }

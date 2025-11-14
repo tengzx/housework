@@ -17,18 +17,18 @@ struct TagManagementView: View {
     var body: some View {
         List {
             if tagStore.isLoading {
-                ProgressView("Loading tags…")
+                ProgressView(LocalizedStringKey("tagManagement.loading"))
             }
-            Section("Existing tags") {
+            Section(LocalizedStringKey("tagManagement.section.existing")) {
                 if tagStore.tags.isEmpty && !tagStore.isLoading {
-                    Text("No tags yet. Add your first tag below.")
+                    Text(LocalizedStringKey("tagManagement.placeholder.none"))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(tagStore.tags) { tag in
                         HStack {
                             Text(tag.name)
                             Spacer()
-                            Button("Edit") {
+                            Button(LocalizedStringKey("common.edit")) {
                                 editingTag = tag
                                 editedName = tag.name
                             }
@@ -39,9 +39,9 @@ struct TagManagementView: View {
                 }
             }
             
-            Section("Add tag") {
+            Section(LocalizedStringKey("tagManagement.section.add")) {
                 HStack {
-                    TextField("Tag name", text: $newTagName)
+                    TextField(LocalizedStringKey("tagManagement.field.name"), text: $newTagName)
                     Button {
                         let name = newTagName
                         Task {
@@ -55,7 +55,7 @@ struct TagManagementView: View {
                 }
             }
         }
-        .navigationTitle("Tags")
+        .navigationTitle(LocalizedStringKey("tagManagement.nav.title"))
         .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -76,15 +76,15 @@ struct TagManagementView: View {
         .sheet(item: $editingTag) { tag in
             navigationContainer {
                 Form {
-                    TextField("Tag name", text: $editedName)
+                    TextField(LocalizedStringKey("tagManagement.field.name"), text: $editedName)
                 }
-                .navigationTitle("Rename Tag")
+                .navigationTitle(LocalizedStringKey("tagManagement.form.renameTitle"))
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { editingTag = nil }
+                        Button(LocalizedStringKey("common.cancel")) { editingTag = nil }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
+                        Button(LocalizedStringKey("common.save")) {
                             let name = editedName
                             Task {
                                 await tagStore.rename(tag: tag, to: name)

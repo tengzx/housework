@@ -24,8 +24,8 @@ struct ChoreTemplateRow: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             HStack(spacing: 12) {
-                Label("\(template.estimatedMinutes) min", systemImage: "timer")
-                Label(template.frequency.label, systemImage: template.frequency.iconName)
+                Label(minutesText, systemImage: "timer")
+                Label(template.frequency.localizedLabel, systemImage: template.frequency.iconName)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -44,7 +44,7 @@ struct ChoreTemplateRow: View {
             
             HStack(spacing: 8) {
                 Button(action: onAddToBoard) {
-                    Label("Add to Board", systemImage: "plus.circle")
+                    Label(LocalizedStringKey("catalog.action.addToBoard"), systemImage: "plus.circle")
                         .font(.caption.bold())
                         .padding(.vertical, 6)
                         .padding(.horizontal, 10)
@@ -55,7 +55,7 @@ struct ChoreTemplateRow: View {
                 .buttonStyle(.plain)
                 
                 Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
+                    Label(LocalizedStringKey("catalog.action.edit"), systemImage: "pencil")
                         .font(.caption.bold())
                         .padding(.vertical, 6)
                         .padding(.horizontal, 10)
@@ -76,7 +76,7 @@ struct ScoreBadge: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "star.fill")
-            Text("\(score) pts")
+            Text(pointsText)
                 .font(.caption.bold())
         }
         .padding(.vertical, 6)
@@ -84,5 +84,19 @@ struct ScoreBadge: View {
         .background(Color.accentColor.opacity(0.1))
         .foregroundStyle(Color.accentColor)
         .clipShape(Capsule())
+    }
+}
+
+private extension ChoreTemplateRow {
+    var minutesText: String {
+        let format = String(localized: "catalog.row.minutes")
+        return String(format: format, template.estimatedMinutes)
+    }
+}
+
+private extension ScoreBadge {
+    var pointsText: String {
+        let format = String(localized: "catalog.row.points")
+        return String(format: format, score)
     }
 }

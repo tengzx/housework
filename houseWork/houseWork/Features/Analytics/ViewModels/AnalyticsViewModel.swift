@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import SwiftUI
 
 enum AnalyticsRange: String, CaseIterable, Identifiable {
     case daily
@@ -17,23 +18,23 @@ enum AnalyticsRange: String, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    var label: String {
+    var labelKey: String {
         switch self {
-        case .daily: "Daily"
-        case .weekly: "Weekly"
-        case .monthly: "Monthly"
-        case .quarterly: "Quarterly"
-        case .yearly: "Yearly"
+        case .daily: "analytics.range.daily"
+        case .weekly: "analytics.range.weekly"
+        case .monthly: "analytics.range.monthly"
+        case .quarterly: "analytics.range.quarterly"
+        case .yearly: "analytics.range.yearly"
         }
     }
     
-    var metricSubtitle: String {
+    var metricSubtitleKey: String {
         switch self {
-        case .daily: "Today"
-        case .weekly: "This week"
-        case .monthly: "This month"
-        case .quarterly: "This quarter"
-        case .yearly: "This year"
+        case .daily: "analytics.range.current.daily"
+        case .weekly: "analytics.range.current.weekly"
+        case .monthly: "analytics.range.current.monthly"
+        case .quarterly: "analytics.range.current.quarterly"
+        case .yearly: "analytics.range.current.yearly"
         }
     }
 }
@@ -178,7 +179,8 @@ private struct AnalyticsBucket {
     
     static func customBucket(for interval: DateInterval) -> [AnalyticsBucket] {
         guard interval.end > interval.start else { return [] }
-        return [AnalyticsBucket(label: "Custom", interval: interval)]
+        let label = String(localized: "analytics.bucket.custom")
+        return [AnalyticsBucket(label: label, interval: interval)]
     }
     
     static func makeBuckets(for range: AnalyticsRange, reference date: Date = Date()) -> [AnalyticsBucket] {
@@ -198,7 +200,8 @@ private struct AnalyticsBucket {
                 let start = calendar.date(byAdding: .weekOfYear, value: -offset, to: currentWeek.start)!
                 let end = calendar.date(byAdding: .weekOfYear, value: 1, to: start)!
                 let weekNumber = calendar.component(.weekOfYear, from: start)
-                let label = "Week \(weekNumber)"
+                let template = String(localized: "analytics.bucket.week")
+                let label = String(format: template, weekNumber)
                 return AnalyticsBucket(label: label, interval: DateInterval(start: start, end: end))
             }
         case .monthly:
@@ -216,7 +219,8 @@ private struct AnalyticsBucket {
                 let end = calendar.date(byAdding: .month, value: 3, to: start)!
                 let quarterNumber = calendar.quarterNumber(for: start)
                 let year = calendar.component(.year, from: start)
-                let label = "Q\(quarterNumber) \(year)"
+                let template = String(localized: "analytics.bucket.quarter")
+                let label = String(format: template, quarterNumber, year)
                 return AnalyticsBucket(label: label, interval: DateInterval(start: start, end: end))
             }
         case .yearly:

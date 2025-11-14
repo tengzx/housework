@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 struct ChoreTemplate: Identifiable, Hashable {
     let id: UUID
@@ -82,15 +83,17 @@ enum ChoreFrequency: String, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    var label: String {
+    var labelKey: LocalizedStringKey {
         switch self {
-        case .daily: "Daily"
-        case .weekly: "Weekly"
-        case .biweekly: "Bi-weekly"
-        case .monthly: "Monthly"
-        case .custom: "Custom"
+        case .daily: return LocalizedStringKey("catalog.form.frequency.daily")
+        case .weekly: return LocalizedStringKey("catalog.form.frequency.weekly")
+        case .biweekly: return LocalizedStringKey("catalog.form.frequency.biweekly")
+        case .monthly: return LocalizedStringKey("catalog.form.frequency.monthly")
+        case .custom: return LocalizedStringKey("catalog.form.frequency.custom")
         }
     }
+    
+    var localizedLabel: LocalizedStringKey { labelKey }
     
     var iconName: String {
         switch self {

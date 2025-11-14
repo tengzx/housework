@@ -149,7 +149,7 @@ final class TaskBoardViewModel: ObservableObject {
 
 struct StatusSegment: Identifiable {
     let id: String
-    let title: String
+    let title: LocalizedStringKey
     let icon: String
     let background: Color
     let status: TaskStatus?
@@ -160,7 +160,7 @@ private extension StatusSegment {
         var items: [StatusSegment] = [
             StatusSegment(
                 id: "all",
-                title: "All",
+                title: LocalizedStringKey("taskBoard.filter.all"),
                 icon: "rectangle.grid.2x2",
                 background: Color(hex: "D6D8FF") ?? Color(.systemBlue).opacity(0.3),
                 status: nil
@@ -169,7 +169,7 @@ private extension StatusSegment {
         items += TaskStatus.allCases.map { status in
             StatusSegment(
                 id: status.rawValue,
-                title: status.label,
+                title: status.labelKey,
                 icon: status.iconName,
                 background: segmentBackground(for: status),
                 status: status

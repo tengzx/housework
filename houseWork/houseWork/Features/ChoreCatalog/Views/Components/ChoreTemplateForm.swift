@@ -16,37 +16,37 @@ struct ChoreTemplateForm: View {
     
     var body: some View {
         Form {
-            Section("Basics") {
-                TextField("Title", text: $draft.title)
+            Section(LocalizedStringKey("catalog.form.section.basics")) {
+                TextField(LocalizedStringKey("catalog.form.field.title"), text: $draft.title)
                 descriptionField
             }
             
-            Section("Scoring & Effort") {
+            Section(LocalizedStringKey("catalog.form.section.scoring")) {
                 Stepper(value: $draft.baseScore, in: 5...100, step: 5) {
                     HStack {
-                        Text("Base Score")
+                        Text(LocalizedStringKey("catalog.form.field.baseScore"))
                         Spacer()
-                        Text("\(draft.baseScore) pts")
+                        Text(pointsText)
                             .foregroundStyle(.secondary)
                     }
                 }
                 Stepper(value: $draft.estimatedMinutes, in: 5...180, step: 5) {
                     HStack {
-                        Text("Est. Minutes")
+                        Text(LocalizedStringKey("catalog.form.field.estimatedMinutes"))
                         Spacer()
-                        Text("\(draft.estimatedMinutes) min")
+                        Text(minutesText)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
             
-            Section("Classification") {
-                Picker("Frequency", selection: $draft.frequency) {
+            Section(LocalizedStringKey("catalog.form.section.classification")) {
+                Picker(LocalizedStringKey("catalog.form.field.frequency"), selection: $draft.frequency) {
                     ForEach(ChoreFrequency.allCases) { frequency in
-                        Text(frequency.label).tag(frequency)
+                        Text(frequency.localizedLabel).tag(frequency)
                     }
                 }
-                TextField("Tags (comma separated)", text: $draft.tagsText)
+                TextField(LocalizedStringKey("catalog.form.field.tags"), text: $draft.tagsText)
                 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack {
@@ -69,13 +69,13 @@ struct ChoreTemplateForm: View {
                 }
             }
         }
-        .navigationTitle(isEditing ? "Edit Chore Template" : "New Chore Template")
+        .navigationTitle(isEditing ? LocalizedStringKey("catalog.form.nav.edit") : LocalizedStringKey("catalog.form.nav.new"))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
+                Button(LocalizedStringKey("common.cancel")) { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { saveTemplate() }
+                Button(LocalizedStringKey("common.save")) { saveTemplate() }
                     .disabled(draft.title.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
@@ -107,13 +107,23 @@ struct ChoreTemplateForm: View {
     private var descriptionField: some View {
         Group {
             if #available(iOS 16.0, *) {
-                TextField("Description", text: $draft.details, axis: .vertical)
+                TextField(LocalizedStringKey("catalog.form.field.description"), text: $draft.details, axis: .vertical)
                     .lineLimit(3, reservesSpace: true)
             } else {
                 TextEditor(text: $draft.details)
                     .frame(minHeight: 80)
             }
         }
+    }
+    
+    private var pointsText: String {
+        let template = String(localized: "catalog.row.points")
+        return String(format: template, draft.baseScore)
+    }
+    
+    private var minutesText: String {
+        let template = String(localized: "catalog.row.minutes")
+        return String(format: template, draft.estimatedMinutes)
     }
 }
 

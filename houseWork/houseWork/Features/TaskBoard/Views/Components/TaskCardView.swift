@@ -91,7 +91,7 @@ struct TaskCardButton {
         case bordered
     }
     
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let style: Style
     let action: () -> Void
@@ -145,7 +145,7 @@ struct MemberAvatarStack: View {
     var body: some View {
         HStack(spacing: -8) {
             if members.isEmpty {
-                Text("Unassigned")
+                Text(LocalizedStringKey("task.unassigned"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {

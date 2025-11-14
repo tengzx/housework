@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 import FirebaseFirestore
 
 extension ChoreTemplate {
@@ -24,7 +25,7 @@ extension ChoreTemplate {
         self.init(
             id: identifier,
             title: title,
-            details: details.isEmpty ? "No description yet." : details,
+            details: details.isEmpty ? String(localized: "catalog.description.placeholder") : details,
             tags: tags,
             frequency: frequency,
             baseScore: baseScore,

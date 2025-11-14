@@ -26,17 +26,17 @@ struct TaskComposerView: View {
     var body: some View {
         navigationContainer {
             Form {
-                Section("Basics") {
-                    TextField("Title", text: $title)
+                Section(LocalizedStringKey("taskBoard.editor.section.basics")) {
+                    TextField(LocalizedStringKey("taskBoard.editor.field.title"), text: $title)
                     descriptionField
                 }
                 
-                Section("Scheduling") {
-                    DatePicker("Due Date", selection: $dueDate, displayedComponents: [.date, .hourAndMinute])
+                Section(LocalizedStringKey("taskBoard.editor.section.scheduling")) {
+                    DatePicker(LocalizedStringKey("taskBoard.detail.dueDate"), selection: $dueDate, displayedComponents: [.date, .hourAndMinute])
                     HStack {
-                        Text("Score")
+                        Text(LocalizedStringKey("taskBoard.editor.field.score"))
                         Spacer()
-                        TextField("Score", value: $score, format: .number)
+                        TextField(LocalizedStringKey("taskBoard.editor.field.score"), value: $score, format: .number)
                             .multilineTextAlignment(.trailing)
 #if os(iOS)
                             .keyboardType(.numberPad)
@@ -47,7 +47,7 @@ struct TaskComposerView: View {
                     }
                     Stepper(value: $estimatedMinutes, in: 5...240, step: 5) {
                         HStack {
-                            Text("Estimated Time")
+                            Text(LocalizedStringKey("taskBoard.editor.field.estimatedTime"))
                             Spacer()
                             Text("\(estimatedMinutes) min")
                                 .foregroundStyle(.secondary)
@@ -55,9 +55,9 @@ struct TaskComposerView: View {
                     }
                 }
                 
-                Section("Tags") {
-                    Picker("Room / Tag", selection: $roomTag) {
-                        Text("General").tag("General")
+                Section(LocalizedStringKey("taskBoard.editor.section.tags")) {
+                    Picker(LocalizedStringKey("taskBoard.editor.field.roomTag"), selection: $roomTag) {
+                        Text(LocalizedStringKey("taskBoard.editor.field.general")).tag("General")
                         ForEach(tagStore.tags) { tag in
                             Text(tag.name).tag(tag.name)
                         }
@@ -73,14 +73,14 @@ struct TaskComposerView: View {
                     }
                 }
             }
-            .navigationTitle("New Task")
+            .navigationTitle(LocalizedStringKey("taskBoard.sheet.taskComposer"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(LocalizedStringKey("common.cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { saveTask() }
+                    Button(LocalizedStringKey("common.save")) { saveTask() }
                         .disabled(!canSave || isSaving)
                 }
             }
@@ -99,7 +99,7 @@ struct TaskComposerView: View {
             let trimmedDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
             let success = await taskStore.createTask(
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                details: trimmedDetails.isEmpty ? "No details yet." : trimmedDetails,
+                details: trimmedDetails.isEmpty ? String(localized: "task.details.empty") : trimmedDetails,
                 dueDate: dueDate,
                 score: score,
                 roomTag: roomTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "General" : roomTag,
@@ -111,7 +111,7 @@ struct TaskComposerView: View {
                 if success {
                     dismiss()
                 } else {
-                    localError = taskStore.mutationError ?? "Failed to create task."
+                    localError = taskStore.mutationError ?? String(localized: "taskComposer.error.createFailed")
                 }
             }
         }
@@ -122,7 +122,7 @@ private extension TaskComposerView {
     var descriptionField: some View {
         Group {
             if #available(iOS 16.0, *) {
-                TextField("Details", text: $details, axis: .vertical)
+                TextField(LocalizedStringKey("taskBoard.editor.field.details"), text: $details, axis: .vertical)
                     .lineLimit(3, reservesSpace: true)
             } else {
                 TextEditor(text: $details)

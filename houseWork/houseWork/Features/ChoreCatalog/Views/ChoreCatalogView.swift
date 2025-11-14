@@ -76,13 +76,13 @@ struct ChoreCatalogView: View {
             alertMessage = message
         }
         .alert(
-            "Catalog Error",
+            LocalizedStringKey("catalog.alert.title"),
             isPresented: Binding(
                 get: { alertMessage != nil },
                 set: { if !$0 { alertMessage = nil } }
             ),
             actions: {
-                Button("OK", role: .cancel) { }
+                Button(LocalizedStringKey("common.ok"), role: .cancel) { }
             },
             message: {
                 Text(alertMessage ?? "")
@@ -121,14 +121,14 @@ struct ChoreCatalogView: View {
         }
         .padding(.trailing, 16)
         .padding(.bottom, 16)
-        .accessibilityLabel("New Template")
+        .accessibilityLabel(Text(LocalizedStringKey("catalog.button.newTemplate")))
     }
     
     private var searchField: some View {
         HStack {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search chores or details", text: $viewModel.searchText)
+            TextField(LocalizedStringKey("catalog.search.placeholder"), text: $viewModel.searchText)
                 .focused($isSearchFieldFocused)
             if !viewModel.searchText.isEmpty {
                 Button {
@@ -148,7 +148,7 @@ struct ChoreCatalogView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 FilterChip(
-                    label: "All",
+                    label: String(localized: "catalog.filter.all"),
                     isSelected: viewModel.selectedTag == nil
                 ) {
                     dismissSearchFieldFocus()
@@ -174,15 +174,15 @@ struct ChoreCatalogView: View {
             if viewModel.isLoading && viewModel.templates.isEmpty {
                 HStack {
                     Spacer()
-                    ProgressView("Loading catalog…")
+                    ProgressView(LocalizedStringKey("catalog.loading"))
                     Spacer()
                 }
                 .listRowInsets(EdgeInsets(top: 32, leading: 0, bottom: 32, trailing: 0))
             } else if viewModel.filteredTemplates.isEmpty {
                 placeholderView(
-                    title: "No chores found",
+                    title: LocalizedStringKey("catalog.placeholder.title"),
                     systemImage: "square.dashed.inset.filled",
-                    description: Text("Try clearing the filters or creating a new template.")
+                    description: LocalizedStringKey("catalog.placeholder.description")
                 )
             } else {
                 ForEach(viewModel.filteredTemplates) { template in
@@ -198,7 +198,7 @@ struct ChoreCatalogView: View {
                                 await viewModel.deleteTemplate(template)
                             }
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            Label(LocalizedStringKey("taskBoard.action.delete"), systemImage: "trash")
                         }
                     }
                 }
@@ -219,9 +219,16 @@ struct ChoreCatalogView: View {
             guard succeeded else { return }
             await MainActor.run {
                 if let user = authStore.currentUser {
-                    successMessage = "\"\(template.title)\" assigned to \(user.name)"
+            successMessage = String(
+                format: String(localized: "catalog.success.assigned"),
+                template.title,
+                user.name
+            )
                 } else {
-                    successMessage = "\"\(template.title)\" added to backlog"
+            successMessage = String(
+                format: String(localized: "catalog.success.added"),
+                template.title
+            )
                 }
                 withAnimation(.spring()) {
                     showSuccessBanner = true
@@ -264,10 +271,10 @@ private struct SuccessBanner: View {
 }
 
 @ViewBuilder
-private func placeholderView(title: String, systemImage: String, description: Text? = nil) -> some View {
+private func placeholderView(title: LocalizedStringKey, systemImage: String, description: LocalizedStringKey? = nil) -> some View {
     if #available(iOS 17.0, *) {
         if let description {
-            ContentUnavailableView(title, systemImage: systemImage, description: description)
+            ContentUnavailableView(title, systemImage: systemImage, description: Text(description))
         } else {
             ContentUnavailableView(title, systemImage: systemImage)
         }
@@ -279,7 +286,7 @@ private func placeholderView(title: String, systemImage: String, description: Te
             Text(title)
                 .font(.headline)
             if let description {
-                description
+                Text(description)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

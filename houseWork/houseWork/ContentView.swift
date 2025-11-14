@@ -10,6 +10,7 @@ import SwiftUI
 @MainActor
 struct ContentView: View {
     @StateObject private var viewModel: ContentViewModel
+    @StateObject private var languageStore = LanguageStore()
     
     init(
         authStore: AuthStore,
@@ -31,30 +32,30 @@ struct ContentView: View {
         Group {
             switch viewModel.presentationState {
             case .loadingAccount:
-                ProgressView("Loading account…")
+                ProgressView(LocalizedStringKey("loading.account"))
             case .authentication:
                 LoginView(viewModel: viewModel.loginViewModel)
             case .loadingHousehold:
-                ProgressView("Loading household…")
+                ProgressView(LocalizedStringKey("loading.household"))
             case .needsHousehold:
                 HouseholdSetupView()
             case .dashboard:
                 TabView {
                     TaskBoardView(viewModel: viewModel.taskBoardViewModel)
                         .tabItem {
-                            Label("Board", systemImage: "rectangle.grid.2x2")
+                            Label(LocalizedStringKey("tabs.board"), systemImage: "rectangle.grid.2x2")
                         }
                     AnalyticsView()
                         .tabItem {
-                            Label("Analytics", systemImage: "chart.line.uptrend.xyaxis")
+                            Label(LocalizedStringKey("tabs.analytics"), systemImage: "chart.line.uptrend.xyaxis")
                         }
                     ChoreCatalogView()
                         .tabItem {
-                            Label("Catalog", systemImage: "list.bullet.rectangle")
+                            Label(LocalizedStringKey("tabs.catalog"), systemImage: "list.bullet.rectangle")
                         }
                     SettingsView()
                         .tabItem {
-                            Label("Settings", systemImage: "gear")
+                            Label(LocalizedStringKey("tabs.settings"), systemImage: "gear")
                         }
                 }
             }
@@ -63,6 +64,8 @@ struct ContentView: View {
         .environmentObject(viewModel.taskBoardStore)
         .environmentObject(viewModel.authStore)
         .environmentObject(viewModel.tagStore)
+        .environmentObject(languageStore)
+        .environment(\.locale, languageStore.locale)
         .onAppear {
             viewModel.onAppear()
         }

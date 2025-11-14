@@ -33,7 +33,7 @@ struct HouseholdManagementView: View {
                 ProgressView()
             }
             
-            Section("Households") {
+            Section(LocalizedStringKey("householdManagement.section.list")) {
                 ForEach(householdStore.households) { summary in
                     HStack {
                         VStack(alignment: .leading) {
@@ -42,30 +42,30 @@ struct HouseholdManagementView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                             if let code = summary.inviteCode {
-                                Text("Invite code: \(code)")
+                                Text("householdManagement.inviteCode.format \(code)")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
                         }
                         Spacer()
                         if summary.id == householdStore.householdId {
-                            Label("Active", systemImage: "checkmark.circle.fill")
+                            Label(LocalizedStringKey("householdManagement.status.active"), systemImage: "checkmark.circle.fill")
                                 .labelStyle(.iconOnly)
                                 .foregroundStyle(.green)
                         } else {
-                            Button("Use") {
+                            Button(LocalizedStringKey("settings.household.use")) {
                                 householdStore.select(summary)
                             }
                         }
                         Menu {
-                            Button("Invite") {
+                            Button(LocalizedStringKey("householdManagement.menu.invite")) {
                                 Task { await generateInvite(for: summary) }
                             }
-                            Button("Rename") {
+                            Button(LocalizedStringKey("householdManagement.menu.rename")) {
                                 editingHousehold = summary
                                 draftName = summary.name
                             }
-                            Button("Delete", role: .destructive) {
+                            Button(LocalizedStringKey("taskBoard.action.delete"), role: .destructive) {
                                 Task { await delete(summary: summary) }
                             }
                         } label: {
@@ -77,8 +77,8 @@ struct HouseholdManagementView: View {
                 .onDelete(perform: delete)
             }
             
-            Section("Join via Code") {
-                TextField("Invite code", text: $joinCode)
+            Section(LocalizedStringKey("householdManagement.section.join")) {
+                TextField(LocalizedStringKey("householdManagement.field.inviteCode"), text: $joinCode)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                 if let joinStatus {
@@ -93,14 +93,14 @@ struct HouseholdManagementView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity, alignment: .center)
                     } else {
-                        Text("Join Household")
+                        Text(LocalizedStringKey("householdManagement.join.button"))
                             .frame(maxWidth: .infinity)
                     }
                 }
                 .disabled(joinCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isJoining)
             }
         }
-        .navigationTitle("Households")
+        .navigationTitle(LocalizedStringKey("householdManagement.nav.title"))
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -111,11 +111,11 @@ struct HouseholdManagementView: View {
                 }
             }
         }
-        .alert(inviteAlertTitle, isPresented: Binding(
+        .alert(LocalizedStringKey("householdManagement.alert.title"), isPresented: Binding(
             get: { inviteCodeToShare != nil },
             set: { if !$0 { inviteCodeToShare = nil } }
         )) {
-            Button("Copy") {
+            Button(LocalizedStringKey("householdManagement.button.copy")) {
                 if let code = inviteCodeToShare {
 #if canImport(UIKit)
                     UIPasteboard.general.string = code
@@ -123,26 +123,26 @@ struct HouseholdManagementView: View {
                 }
                 inviteCodeToShare = nil
             }
-            Button("Close", role: .cancel) {
+            Button(LocalizedStringKey("householdManagement.button.close"), role: .cancel) {
                 inviteCodeToShare = nil
             }
         } message: {
             if let code = inviteCodeToShare {
-                Text("Share this code with others to let them join \"\(inviteHouseholdName)\".\n\nCode: \(code)")
+                Text("householdManagement.alert.message \(inviteHouseholdName) \(code)")
             }
         }
         .sheet(isPresented: $showAddSheet) {
             navigationContainer {
                 Form {
-                    TextField("Household name", text: $draftName)
+                    TextField(LocalizedStringKey("householdManagement.field.name"), text: $draftName)
                 }
-                .navigationTitle("New Household")
+                .navigationTitle(LocalizedStringKey("householdManagement.form.newTitle"))
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { showAddSheet = false }
+                        Button(LocalizedStringKey("common.cancel")) { showAddSheet = false }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Create") {
+                        Button(LocalizedStringKey("householdManagement.button.create")) {
                             let name = draftName
                             Task {
                                 let success = await householdStore.createHousehold(named: name)
@@ -159,15 +159,15 @@ struct HouseholdManagementView: View {
         .sheet(item: $editingHousehold) { summary in
             navigationContainer {
                 Form {
-                    TextField("Household name", text: $draftName)
+                    TextField(LocalizedStringKey("householdManagement.field.name"), text: $draftName)
                 }
-                .navigationTitle("Rename Household")
+                .navigationTitle(LocalizedStringKey("householdManagement.form.renameTitle"))
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { editingHousehold = nil }
+                        Button(LocalizedStringKey("common.cancel")) { editingHousehold = nil }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
+                        Button(LocalizedStringKey("common.save")) {
                             let name = draftName
                             Task {
                                 await householdStore.rename(household: summary, to: name)
@@ -179,10 +179,6 @@ struct HouseholdManagementView: View {
                 }
             }
         }
-    }
-    
-    private var inviteAlertTitle: String {
-        "Invite Code"
     }
     
     private func delete(at offsets: IndexSet) {
@@ -216,10 +212,11 @@ struct HouseholdManagementView: View {
         await MainActor.run {
             isJoining = false
             if success {
-                joinStatus = JoinStatus(message: "Joined household successfully.", isError: false)
+                joinStatus = JoinStatus(message: String(localized: "householdManagement.join.success"), isError: false)
                 joinCode = ""
             } else {
-                joinStatus = JoinStatus(message: householdStore.error ?? "Unable to join household.", isError: true)
+                let fallback = String(localized: "householdManagement.join.failure")
+                joinStatus = JoinStatus(message: householdStore.error ?? fallback, isError: true)
             }
         }
     }

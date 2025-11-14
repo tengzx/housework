@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct MetricCardView: View {
-    let title: String
+    let titleKey: LocalizedStringKey
     let value: String
     let subtitle: String
     let icon: String
@@ -16,7 +16,7 @@ struct MetricCardView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: icon)
+            Label(titleKey, systemImage: icon)
                 .font(.caption)
                 .foregroundStyle(tint)
             Text(value)
@@ -49,20 +49,35 @@ struct LeaderboardRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(performance.member.name)
                     .font(.subheadline.bold())
-                Text("\(performance.tasksCompleted) tasks · \(performance.pointsEarned) pts")
+                Text(tasksAndPointsText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("\(performance.minutesLogged) min logged")
+                Text(minutesLoggedText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
-                Text("\(performance.weekOverWeekDelta >= 0 ? "+" : "")\(performance.weekOverWeekDelta) WoW")
+                Text(deltaText)
                     .font(.caption2)
                     .foregroundStyle(performance.weekOverWeekDelta >= 0 ? .green : .red)
             }
         }
         .padding(.vertical, 8)
+    }
+    
+    private var tasksAndPointsText: String {
+        let template = String(localized: "analytics.leaderboard.tasksAndPoints")
+        return String(format: template, performance.tasksCompleted, performance.pointsEarned)
+    }
+    
+    private var minutesLoggedText: String {
+        let template = String(localized: "analytics.leaderboard.minutesLogged")
+        return String(format: template, performance.minutesLogged)
+    }
+    
+    private var deltaText: String {
+        let template = String(localized: "analytics.leaderboard.delta")
+        return String(format: template, performance.weekOverWeekDelta)
     }
 }

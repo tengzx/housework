@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 struct ChoreTemplateDraft {
     var templateID: UUID?
@@ -43,10 +44,11 @@ struct ChoreTemplateDraft {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         
+        let descriptionText = trimmedDetails.isEmpty ? String(localized: "catalog.description.placeholder") : trimmedDetails
         return ChoreTemplate(
             id: templateID ?? UUID(),
             title: trimmedTitle,
-            details: trimmedDetails.isEmpty ? "No description yet." : trimmedDetails,
+            details: descriptionText,
             tags: tags.isEmpty ? ["General"] : tags,
             frequency: frequency,
             baseScore: baseScore,

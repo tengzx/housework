@@ -15,11 +15,14 @@ enum TaskStatus: String, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    var label: String {
+    var labelKey: LocalizedStringKey {
         switch self {
-        case .backlog: "Backlog"
-        case .inProgress: "In Progress"
-        case .completed: "Done"
+        case .backlog:
+            return LocalizedStringKey("task.status.backlog")
+        case .inProgress:
+            return LocalizedStringKey("task.status.inProgress")
+        case .completed:
+            return LocalizedStringKey("task.status.completed")
         }
     }
     
@@ -47,11 +50,14 @@ enum TaskBoardFilter: String, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    var label: String {
+    var labelKey: LocalizedStringKey {
         switch self {
-        case .all: "All"
-        case .mine: "My Tasks"
-        case .unassigned: "Unassigned"
+        case .all:
+            return LocalizedStringKey("taskBoard.filter.all")
+        case .mine:
+            return LocalizedStringKey("taskBoard.filter.mine")
+        case .unassigned:
+            return LocalizedStringKey("taskBoard.filter.unassigned")
         }
     }
 }

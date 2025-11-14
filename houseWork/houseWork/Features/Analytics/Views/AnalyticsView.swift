@@ -57,7 +57,7 @@ struct AnalyticsView: View {
             HStack(spacing: 8) {
                 ForEach(AnalyticsRange.allCases) { range in
                     RangeChip(
-                        label: range.label,
+                        label: LocalizedStringKey(range.labelKey),
                         isSelected: viewModel.selectedRange == range && !useCustomRange
                     ) {
                         useCustomRange = false
@@ -72,15 +72,15 @@ struct AnalyticsView: View {
     private var customRangeSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle(isOn: $useCustomRange) {
-                Text("Custom Date Range")
+                Text(LocalizedStringKey("analytics.customRange.title"))
                     .font(.headline)
             }
             .toggleStyle(SwitchToggleStyle())
             
             if useCustomRange {
                 VStack(alignment: .leading, spacing: 12) {
-                    DatePicker("Start", selection: $customStart, displayedComponents: .date)
-                    DatePicker("End", selection: $customEnd, displayedComponents: .date)
+                    DatePicker(LocalizedStringKey("analytics.date.start"), selection: $customStart, displayedComponents: .date)
+                    DatePicker(LocalizedStringKey("analytics.date.end"), selection: $customEnd, displayedComponents: .date)
                 }
                 .font(.subheadline)
             }
@@ -95,23 +95,23 @@ struct AnalyticsView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 MetricCardView(
-                    title: "Total Points",
+                    titleKey: "analytics.metric.totalPoints",
                     value: "\(viewModel.totalPoints)",
                     subtitle: metricsSubtitle,
                     icon: "star.fill",
                     tint: .yellow
                 )
                 MetricCardView(
-                    title: "Avg Tasks",
+                    titleKey: "analytics.metric.avgTasks",
                     value: "\(viewModel.averageTasksPerMember)",
-                    subtitle: "Per member",
+                    subtitle: String(localized: "analytics.metric.avgTasks.subtitle"),
                     icon: "chart.bar.fill",
                     tint: .blue
                 )
                 MetricCardView(
-                    title: "Top Streak",
+                    titleKey: "analytics.metric.topStreak",
                     value: "\(viewModel.householdStreak)d",
-                    subtitle: "Active days",
+                    subtitle: String(localized: "analytics.metric.topStreak.subtitle"),
                     icon: "flame.fill",
                     tint: .orange
                 )
@@ -121,7 +121,7 @@ struct AnalyticsView: View {
     }
     
     private var leaderboardSection: some View {
-        SectionCard(title: "Leaderboard", icon: "trophy.fill") {
+        SectionCard(title: LocalizedStringKey("analytics.section.leaderboard"), icon: "trophy.fill") {
             ForEach(Array(viewModel.memberStats.enumerated()), id: \.element.id) { index, stat in
                 LeaderboardRow(performance: stat, rank: index + 1)
                 if index != viewModel.memberStats.count - 1 {
@@ -151,12 +151,12 @@ struct AnalyticsView: View {
             formatter.dateStyle = .medium
             return "\(formatter.string(from: interval.start)) – \(formatter.string(from: interval.end.addingTimeInterval(-1)))"
         }
-        return viewModel.selectedRange.metricSubtitle
+        return String(localized: .init(viewModel.selectedRange.metricSubtitleKey))
     }
 }
 
 private struct SectionCard<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let icon: String
     @ViewBuilder var content: Content
     
@@ -174,7 +174,7 @@ private struct SectionCard<Content: View>: View {
 }
 
 private struct RangeChip: View {
-    let label: String
+    let label: LocalizedStringKey
     let isSelected: Bool
     let action: () -> Void
     

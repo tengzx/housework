@@ -18,11 +18,11 @@ struct HouseholdSetupView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.accentColor)
             VStack(spacing: 8) {
-                Text(mode == .create ? "Create Your Household" : "Join an Existing Household")
+                Text(mode == .create ? LocalizedStringKey("householdSetup.title.create") : LocalizedStringKey("householdSetup.title.join"))
                     .font(.title.bold())
                 Text(mode == .create ?
-                     "Looks like you don't belong to a household yet. Create one to get started." :
-                        "Have a code from a friend or family member? Enter it below to join their household.")
+                     LocalizedStringKey("householdSetup.subtitle.create") :
+                        LocalizedStringKey("householdSetup.subtitle.join"))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             }
@@ -33,11 +33,12 @@ struct HouseholdSetupView: View {
                 JoinHouseholdForm()
             }
             
-            Picker("Mode", selection: $mode) {
-                Text("Create").tag(Mode.create)
-                Text("Join").tag(Mode.join)
+            Picker("", selection: $mode) {
+                Text(LocalizedStringKey("householdSetup.picker.create")).tag(Mode.create)
+                Text(LocalizedStringKey("householdSetup.picker.join")).tag(Mode.join)
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
             .padding(.horizontal)
             Spacer()
         }
@@ -55,7 +56,7 @@ private struct CreateHouseholdForm: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            TextField("Household name", text: $name)
+            TextField(LocalizedStringKey("householdSetup.field.name"), text: $name)
                 .textFieldStyle(.roundedBorder)
             if let errorMessage {
                 Text(errorMessage)
@@ -69,7 +70,7 @@ private struct CreateHouseholdForm: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                 } else {
-                    Text("Create Household")
+                    Text(LocalizedStringKey("householdSetup.button.create"))
                         .frame(maxWidth: .infinity)
                         .padding()
                 }
@@ -90,7 +91,7 @@ private struct CreateHouseholdForm: View {
             await MainActor.run {
                 isSaving = false
                 if !success {
-                    errorMessage = householdStore.error ?? "Unable to create household."
+                    errorMessage = householdStore.error ?? String(localized: "householdSetup.error.create")
                 }
             }
         }
@@ -106,7 +107,7 @@ private struct JoinHouseholdForm: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            TextField("Invite code", text: $code)
+            TextField(LocalizedStringKey("householdSetup.field.code"), text: $code)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .textFieldStyle(.roundedBorder)
@@ -122,7 +123,7 @@ private struct JoinHouseholdForm: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                 } else {
-                    Text("Join Household")
+                    Text(LocalizedStringKey("householdSetup.button.join"))
                         .frame(maxWidth: .infinity)
                         .padding()
                 }
@@ -144,11 +145,11 @@ private struct JoinHouseholdForm: View {
             await MainActor.run {
                 isJoining = false
                 if success {
-                    message = "Joined household successfully."
+                    message = String(localized: "householdSetup.success.join")
                     isError = false
                     code = ""
                 } else {
-                    message = householdStore.error ?? "Unable to join household."
+                    message = householdStore.error ?? String(localized: "householdSetup.error.join")
                     isError = true
                 }
             }

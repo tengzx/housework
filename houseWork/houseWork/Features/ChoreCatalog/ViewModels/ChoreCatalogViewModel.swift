@@ -152,7 +152,7 @@ extension ChoreCatalogViewModel {
         var errorDescription: String? {
             switch self {
             case .missingHousehold:
-                return "Missing household context. Select a household and try again."
+                return String(localized: "catalog.error.missingHousehold")
             }
         }
     }
