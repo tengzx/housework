@@ -8,7 +8,6 @@
 import Foundation
 import SwiftUI
 import Combine
-import FirebaseFirestore
 
 @MainActor
 final class TaskBoardStore: ObservableObject {
@@ -18,15 +17,19 @@ final class TaskBoardStore: ObservableObject {
     @Published var mutationError: String?
     @Published private(set) var isMutating = false
     
-    private let db = Firestore.firestore()
-    private var listener: ListenerRegistration?
+    private let service: TaskBoardService
+    private var listener: ListenerToken?
     private var householdCancellable: AnyCancellable?
     private weak var householdStore: HouseholdStore?
     private var currentHouseholdId: String = ""
     private let isPreviewMode: Bool
     
-    init(householdStore: HouseholdStore) {
+    init(
+        householdStore: HouseholdStore,
+        service: TaskBoardService = FirestoreTaskBoardService()
+    ) {
         self.householdStore = householdStore
+        self.service = service
         self.tasks = []
         self.isLoading = true
         self.isPreviewMode = false
@@ -45,11 +48,12 @@ final class TaskBoardStore: ObservableObject {
         self.tasks = previewTasks
         self.isLoading = false
         self.isPreviewMode = true
+        self.service = InMemoryTaskBoardService()
         self.householdStore = nil
     }
     
     deinit {
-        listener?.remove()
+        listener?.cancel()
         householdCancellable?.cancel()
     }
     
@@ -59,7 +63,7 @@ final class TaskBoardStore: ObservableObject {
         guard !isPreviewMode else { return }
         
         if id.isEmpty || id == "demo-household" {
-            listener?.remove()
+            listener?.cancel()
             listener = nil
             currentHouseholdId = ""
             tasks = []
@@ -69,7 +73,7 @@ final class TaskBoardStore: ObservableObject {
         }
         
         guard id != currentHouseholdId else { return }
-        listener?.remove()
+        listener?.cancel()
         currentHouseholdId = id
         tasks = []
         isLoading = true
@@ -78,21 +82,20 @@ final class TaskBoardStore: ObservableObject {
     
     private func attachListener(to householdId: String) {
         guard !isPreviewMode, !householdId.isEmpty else { return }
-        listener = taskCollection(for: householdId)
-            .order(by: "dueDate", descending: false)
-            .addSnapshotListener { [weak self] snapshot, error in
-                guard let self else { return }
-                Task { @MainActor in
-                    if let error {
-                        self.error = error.localizedDescription
-                        self.isLoading = false
-                        return
-                    }
-                    guard let documents = snapshot?.documents else { return }
-                    self.tasks = documents.compactMap(TaskItem.init(document:))
+        listener = service.observeTasks(householdId: householdId) { [weak self] result in
+            guard let self else { return }
+            Task { @MainActor in
+                switch result {
+                case .success(let tasks):
+                    self.tasks = tasks
+                    self.isLoading = false
+                    self.error = nil
+                case .failure(let error):
+                    self.error = error.localizedDescription
                     self.isLoading = false
                 }
             }
+        }
     }
     
     // MARK: - Mutations
@@ -170,7 +173,7 @@ final class TaskBoardStore: ObservableObject {
     func refresh() async {
         guard !isPreviewMode else { return }
         guard !currentHouseholdId.isEmpty else { return }
-        listener?.remove()
+        listener?.cancel()
         listener = nil
         isLoading = true
         tasks = []
@@ -186,9 +189,7 @@ final class TaskBoardStore: ObservableObject {
         
         return await performMutation {
             let householdId = try requireHouseholdId()
-            try await taskCollection(for: householdId)
-                .document(task.documentID)
-                .delete()
+            try await service.deleteTask(task, householdId: householdId)
         }
     }
     
@@ -225,9 +226,7 @@ final class TaskBoardStore: ObservableObject {
         
         return await performMutation {
             let householdId = try requireHouseholdId()
-            try await taskCollection(for: householdId)
-                .document(task.documentID)
-                .setData(task.firestoreCreatePayload)
+            try await service.createTask(task, householdId: householdId)
         }
     }
     
@@ -238,14 +237,9 @@ final class TaskBoardStore: ObservableObject {
             return true
         }
         
-        let payload = updatedTask.firestoreDiffPayload(comparedTo: task)
-        guard !payload.isEmpty else { return true }
-        
         let success = await performMutation {
             let householdId = try requireHouseholdId()
-            try await taskCollection(for: householdId)
-                .document(task.documentID)
-                .updateData(payload)
+            try await service.updateTask(updatedTask, householdId: householdId)
         }
         if success {
             await MainActor.run {
@@ -287,12 +281,6 @@ final class TaskBoardStore: ObservableObject {
             throw TaskBoardError.missingHousehold
         }
         return currentHouseholdId
-    }
-    
-    private func taskCollection(for householdId: String) -> CollectionReference {
-        db.collection("households")
-            .document(householdId)
-            .collection("chores")
     }
     
     private func canMutate(task: TaskItem, actingUser: HouseholdMember?) -> Bool {

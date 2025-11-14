@@ -8,7 +8,6 @@
 import Foundation
 import SwiftUI
 import Combine
-import FirebaseFirestore
 
 struct TagItem: Identifiable, Hashable {
     let id: String
@@ -23,13 +22,17 @@ final class TagStore: ObservableObject {
     @Published var error: String?
     
     private let householdStore: HouseholdStore
+    private let service: TagService
     private var householdCancellable: AnyCancellable?
-    private let db = Firestore.firestore()
-    private var listener: ListenerRegistration?
+    private var listener: ListenerToken?
     private var currentHouseholdId: String
     
-    init(householdStore: HouseholdStore) {
+    init(
+        householdStore: HouseholdStore,
+        service: TagService = FirestoreTagService()
+    ) {
         self.householdStore = householdStore
+        self.service = service
         self.currentHouseholdId = householdStore.householdId
         attachListener(to: currentHouseholdId)
         householdCancellable = householdStore.$householdId
@@ -43,13 +46,13 @@ final class TagStore: ObservableObject {
     }
     
     deinit {
-        listener?.remove()
+        listener?.cancel()
         householdCancellable?.cancel()
     }
     
     private func switchHousehold(to id: String) async {
         guard !id.isEmpty, id != currentHouseholdId else { return }
-        listener?.remove()
+        listener?.cancel()
         currentHouseholdId = id
         tags = []
         isLoading = true
@@ -57,38 +60,27 @@ final class TagStore: ObservableObject {
     }
     
     private func attachListener(to householdId: String) {
-        listener = db.collection("households")
-            .document(householdId)
-            .collection("tags")
-            .order(by: "name", descending: false)
-            .addSnapshotListener { [weak self] snapshot, error in
-                guard let self else { return }
-                Task { @MainActor in
-                    if let error {
-                        self.error = error.localizedDescription
-                        self.isLoading = false
-                        return
-                    }
-                    guard let documents = snapshot?.documents else { return }
-                    self.tags = documents.compactMap { doc in
-                        guard let name = doc.get("name") as? String else { return nil }
-                        let color = doc.get("color") as? String
-                        return TagItem(id: doc.documentID, name: name, colorHex: color)
-                    }
+        listener = service.observeTags(householdId: householdId) { [weak self] result in
+            guard let self else { return }
+            Task { @MainActor in
+                switch result {
+                case .success(let tags):
+                    self.tags = tags
+                    self.isLoading = false
+                    self.error = nil
+                case .failure(let error):
+                    self.error = error.localizedDescription
                     self.isLoading = false
                 }
             }
+        }
     }
     
     func addTag(named name: String) async {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            try await tagCollection.document().setData([
-                "name": trimmed,
-                "createdAt": FieldValue.serverTimestamp(),
-                "updatedAt": FieldValue.serverTimestamp()
-            ], merge: true)
+            try await service.addTag(named: trimmed, householdId: currentHouseholdId)
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -99,10 +91,7 @@ final class TagStore: ObservableObject {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            try await tagCollection.document(tag.id).updateData([
-                "name": trimmed,
-                "updatedAt": FieldValue.serverTimestamp()
-            ])
+            try await service.renameTag(id: tag.id, householdId: currentHouseholdId, newName: trimmed)
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -120,14 +109,10 @@ final class TagStore: ObservableObject {
     
     func delete(tag: TagItem) async {
         do {
-            try await tagCollection.document(tag.id).delete()
+            try await service.deleteTag(id: tag.id, householdId: currentHouseholdId)
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
-    }
-    
-    private var tagCollection: CollectionReference {
-        db.collection("households").document(currentHouseholdId).collection("tags")
     }
 }

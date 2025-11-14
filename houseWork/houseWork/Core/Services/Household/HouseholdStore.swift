@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-import FirebaseFirestore
 
 @MainActor
 final class HouseholdStore: ObservableObject {
@@ -17,14 +16,19 @@ final class HouseholdStore: ObservableObject {
     @Published var error: String?
     @Published var isLoading = true
     
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private let idKey = "householdId"
     private let nameKey = "householdName"
-    private let db = Firestore.firestore()
-    private var listener: ListenerRegistration?
+    private let service: HouseholdService
+    private var listener: ListenerToken?
     private var currentUserId: String?
     
-    init() {
+    init(
+        service: HouseholdService = FirestoreHouseholdService(),
+        defaults: UserDefaults = .standard
+    ) {
+        self.service = service
+        self.defaults = defaults
         let savedId = defaults.string(forKey: idKey)
         let savedName = defaults.string(forKey: nameKey)
         self.householdId = savedId?.isEmpty == false ? savedId! : "demo-household"
@@ -32,7 +36,7 @@ final class HouseholdStore: ObservableObject {
     }
     
     deinit {
-        listener?.remove()
+        listener?.cancel()
     }
     
     func update(name: String, id: String) {
@@ -57,18 +61,8 @@ final class HouseholdStore: ObservableObject {
         }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return false }
-        let docRef = db.collection("households").document()
         do {
-            let inviteCode = generateInviteCode()
-            try await docRef.setData([
-                "name": trimmedName,
-                "ownerId": userId,
-                "memberIds": [userId],
-                "inviteCode": inviteCode,
-                "createdAt": FieldValue.serverTimestamp(),
-                "updatedAt": FieldValue.serverTimestamp()
-            ], merge: true)
-            let summary = HouseholdSummary(id: docRef.documentID, name: trimmedName, inviteCode: inviteCode)
+            let summary = try await service.createHousehold(named: trimmedName, ownerId: userId)
             households = [summary] + households.filter { $0.id != summary.id }
             select(summary)
             error = nil
@@ -83,10 +77,7 @@ final class HouseholdStore: ObservableObject {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            try await db.collection("households").document(household.id).updateData([
-                "name": trimmed,
-                "updatedAt": FieldValue.serverTimestamp()
-            ])
+            try await service.renameHousehold(id: household.id, to: trimmed)
             if household.id == householdId {
                 update(name: trimmed, id: householdId)
             }
@@ -97,12 +88,20 @@ final class HouseholdStore: ObservableObject {
     }
     
     func delete(household: HouseholdSummary) async {
-        guard household.id != householdId else {
-            error = "Cannot delete the active household. Please switch first."
-            return
+        let deletingActive = household.id == householdId
+        if deletingActive {
+            if let alternative = households.first(where: { $0.id != household.id }) {
+                select(alternative)
+            } else {
+                clearSelection()
+            }
         }
         do {
-            try await db.collection("households").document(household.id).delete()
+            try await service.deleteHousehold(id: household.id)
+            households.removeAll { $0.id == household.id }
+            if deletingActive, households.isEmpty {
+                clearSelection()
+            }
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -111,7 +110,7 @@ final class HouseholdStore: ObservableObject {
     
     func updateUserContext(userId: String?, force: Bool = false) {
         if !force, userId == currentUserId { return }
-        listener?.remove()
+        listener?.cancel()
         currentUserId = userId
         households = []
         clearSelection()
@@ -132,14 +131,10 @@ final class HouseholdStore: ObservableObject {
             error = "Household not found."
             return nil
         }
-        let newCode = generateInviteCode()
         do {
-            try await db.collection("households").document(household.id).updateData([
-                "inviteCode": newCode,
-                "updatedAt": FieldValue.serverTimestamp()
-            ])
+            let code = try await service.refreshInviteCode(for: household.id)
             error = nil
-            return newCode
+            return code
         } catch {
             self.error = error.localizedDescription
             return nil
@@ -155,21 +150,7 @@ final class HouseholdStore: ObservableObject {
         let trimmed = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !trimmed.isEmpty else { return false }
         do {
-            let snapshot = try await db.collection("households")
-                .whereField("inviteCode", isEqualTo: trimmed)
-                .limit(to: 1)
-                .getDocuments()
-            guard let document = snapshot.documents.first else {
-                error = "Invite code not found."
-                return false
-            }
-            try await document.reference.updateData([
-                "memberIds": FieldValue.arrayUnion([userId]),
-                "updatedAt": FieldValue.serverTimestamp()
-            ])
-            let name = document.get("name") as? String ?? "Household"
-            let inviteCode = document.get("inviteCode") as? String
-            let summary = HouseholdSummary(id: document.documentID, name: name, inviteCode: inviteCode)
+            let summary = try await service.joinHousehold(inviteCode: trimmed, userId: userId)
             households = [summary] + households.filter { $0.id != summary.id }
             select(summary)
             error = nil
@@ -181,38 +162,27 @@ final class HouseholdStore: ObservableObject {
     }
     
     private func attachListener(for userId: String) {
-        listener = db.collection("households")
-            .whereField("memberIds", arrayContains: userId)
-            .order(by: "name", descending: false)
-            .addSnapshotListener { [weak self] snapshot, error in
-                guard let self else { return }
-                Task { @MainActor in
-                    if let error {
-                        self.error = error.localizedDescription
-                        self.isLoading = false
-                        return
-                    }
-                    guard let documents = snapshot?.documents else {
-                        self.households = []
-                        self.isLoading = false
-                        self.clearSelection()
-                        return
-                    }
-                    self.households = documents.compactMap { doc in
-                        let name = doc.get("name") as? String ?? "Unnamed"
-                        let code = doc.get("inviteCode") as? String
-                        return HouseholdSummary(id: doc.documentID, name: name, inviteCode: code)
-                    }
-                    if let active = self.households.first(where: { $0.id == self.householdId }) {
+        listener = service.observeHouseholds(for: userId) { [weak self] result in
+            guard let self else { return }
+            Task { @MainActor in
+                switch result {
+                case .success(let summaries):
+                    self.households = summaries
+                    if let active = summaries.first(where: { $0.id == self.householdId }) {
                         self.select(active)
-                    } else if let first = self.households.first {
+                    } else if let first = summaries.first {
                         self.select(first)
                     } else {
                         self.clearSelection()
                     }
                     self.isLoading = false
+                    self.error = nil
+                case .failure(let error):
+                    self.error = error.localizedDescription
+                    self.isLoading = false
                 }
             }
+        }
     }
     
     private func clearSelection() {
@@ -220,17 +190,6 @@ final class HouseholdStore: ObservableObject {
         householdName = "No Household"
         defaults.removeObject(forKey: idKey)
         defaults.removeObject(forKey: nameKey)
-    }
-    
-    private func generateInviteCode(length: Int = 6) -> String {
-        let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
-        var result = ""
-        for _ in 0..<length {
-            if let char = alphabet.randomElement() {
-                result.append(char)
-            }
-        }
-        return result
     }
 }
 
