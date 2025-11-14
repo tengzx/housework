@@ -18,6 +18,7 @@ final class AuthStore: ObservableObject {
     @Published var isLoading: Bool = true
     @Published var isProcessing: Bool = false
     @Published var authError: String?
+    @Published private(set) var didProcessInitialSession: Bool = false
     
     private let authService: AuthenticationService
     private let profileService: UserProfileService
@@ -69,6 +70,7 @@ final class AuthStore: ObservableObject {
             currentUser = nil
             userProfile = nil
             defaults.removeObject(forKey: storedUserIdKey)
+            didProcessInitialSession = true
         } catch {
             authError = error.localizedDescription
         }
@@ -83,6 +85,7 @@ final class AuthStore: ObservableObject {
             currentEmail = session.email
             defaults.set(session.userId, forKey: storedUserIdKey)
             await loadProfile(for: session)
+            didProcessInitialSession = true
         } catch {
             authError = error.localizedDescription
         }
@@ -97,11 +100,13 @@ final class AuthStore: ObservableObject {
             currentUser = nil
             userProfile = nil
             defaults.removeObject(forKey: storedUserIdKey)
+            didProcessInitialSession = true
             return
         }
         firebaseUserId = session.userId
         currentEmail = session.email
         await loadProfile(for: session)
+        didProcessInitialSession = true
     }
     
     @discardableResult

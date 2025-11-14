@@ -68,6 +68,7 @@ final class ContentViewModel: ObservableObject {
         
         let signals: [AnyPublisher<Void, Never>] = [
             authStore.$isLoading.eraseToVoid(),
+            authStore.$didProcessInitialSession.eraseToVoid(),
             authStore.$currentUser.eraseToVoid(),
             householdStore.$isLoading.eraseToVoid(),
             householdStore.$households.eraseToVoid()
@@ -82,7 +83,7 @@ final class ContentViewModel: ObservableObject {
     }
     
     private func refreshPresentationState() {
-        if authStore.isLoading {
+        if authStore.isLoading || !authStore.didProcessInitialSession {
             presentationState = .loadingAccount
         } else if authStore.currentUser == nil {
             presentationState = .authentication
