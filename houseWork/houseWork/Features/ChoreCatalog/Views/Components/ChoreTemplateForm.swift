@@ -124,13 +124,3 @@ struct ChoreTemplateForm: View {
             .environmentObject(TagStore(householdStore: householdStore))
     }
 }
-
-@ViewBuilder
-private func navigationPreviewContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-    if #available(iOS 16.0, *) {
-        NavigationStack { content() }
-    } else {
-        NavigationView { content() }
-            .navigationViewStyle(StackNavigationViewStyle())
-    }
-}

@@ -702,16 +702,6 @@ private struct TaskEditorView: View {
         .environmentObject(TagStore(householdStore: HouseholdStore()))
 }
 
-@ViewBuilder
-private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-    if #available(iOS 16.0, *) {
-        NavigationStack { content() }
-    } else {
-        NavigationView { content() }
-            .navigationViewStyle(StackNavigationViewStyle())
-    }
-}
-
 private extension View {
     @ViewBuilder
     func applyScrollContentBackgroundHidden() -> some View {

@@ -264,16 +264,6 @@ private struct SuccessBanner: View {
 }
 
 @ViewBuilder
-private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-    if #available(iOS 16.0, *) {
-        NavigationStack { content() }
-    } else {
-        NavigationView { content() }
-            .navigationViewStyle(StackNavigationViewStyle())
-    }
-}
-
-@ViewBuilder
 private func placeholderView(title: String, systemImage: String, description: Text? = nil) -> some View {
     if #available(iOS 17.0, *) {
         if let description {
