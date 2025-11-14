@@ -22,21 +22,29 @@ struct ChoreTemplateForm: View {
             }
             
             Section(LocalizedStringKey("catalog.form.section.scoring")) {
-                Stepper(value: $draft.baseScore, in: 5...100, step: 5) {
-                    HStack {
-                        Text(LocalizedStringKey("catalog.form.field.baseScore"))
-                        Spacer()
-                        Text(pointsText)
-                            .foregroundStyle(.secondary)
-                    }
+                HStack {
+                    Text(LocalizedStringKey("catalog.form.field.baseScore"))
+                    Spacer()
+                    TextField(LocalizedStringKey("catalog.form.field.baseScore"), value: $draft.baseScore, format: .number)
+                        .multilineTextAlignment(.trailing)
+#if os(iOS)
+                        .keyboardType(.numberPad)
+#endif
+                        .frame(width: 80)
+                    Stepper("", value: $draft.baseScore, in: 5...100, step: 5)
+                        .labelsHidden()
                 }
-                Stepper(value: $draft.estimatedMinutes, in: 5...180, step: 5) {
-                    HStack {
-                        Text(LocalizedStringKey("catalog.form.field.estimatedMinutes"))
-                        Spacer()
-                        Text(minutesText)
-                            .foregroundStyle(.secondary)
-                    }
+                HStack {
+                    Text(LocalizedStringKey("catalog.form.field.estimatedMinutes"))
+                    Spacer()
+                    TextField(LocalizedStringKey("catalog.form.field.estimatedMinutes"), value: $draft.estimatedMinutes, format: .number)
+                        .multilineTextAlignment(.trailing)
+#if os(iOS)
+                        .keyboardType(.numberPad)
+#endif
+                        .frame(width: 80)
+                    Stepper("", value: $draft.estimatedMinutes, in: 5...180, step: 5)
+                        .labelsHidden()
                 }
             }
             
@@ -114,16 +122,6 @@ struct ChoreTemplateForm: View {
                     .frame(minHeight: 80)
             }
         }
-    }
-    
-    private var pointsText: String {
-        let template = String(localized: "catalog.row.points")
-        return String(format: template, draft.baseScore)
-    }
-    
-    private var minutesText: String {
-        let template = String(localized: "catalog.row.minutes")
-        return String(format: template, draft.estimatedMinutes)
     }
 }
 

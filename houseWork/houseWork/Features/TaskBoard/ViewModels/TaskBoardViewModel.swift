@@ -121,16 +121,10 @@ final class TaskBoardViewModel: ObservableObject {
     }
     
     private func orderedTasks(for status: TaskStatus, within tasks: [TaskItem]) -> [TaskItem] {
-        let currentUser = authStore.currentUser
         return tasks
             .filter { $0.status == status }
             .sorted { lhs, rhs in
-                let lhsMine = currentUser.map { user in lhs.assignedMembers.contains { $0.matches(user) } } ?? false
-                let rhsMine = currentUser.map { user in rhs.assignedMembers.contains { $0.matches(user) } } ?? false
-                if lhsMine != rhsMine {
-                    return lhsMine && !rhsMine
-                }
-                return lhs.dueDate < rhs.dueDate
+                lhs.dueDate > rhs.dueDate
             }
     }
     

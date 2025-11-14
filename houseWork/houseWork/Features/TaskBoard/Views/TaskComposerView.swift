@@ -45,13 +45,17 @@ struct TaskComposerView: View {
                         Stepper("", value: $score, in: 5...100, step: 5)
                             .labelsHidden()
                     }
-                    Stepper(value: $estimatedMinutes, in: 5...240, step: 5) {
-                        HStack {
-                            Text(LocalizedStringKey("taskBoard.editor.field.estimatedTime"))
-                            Spacer()
-                            Text("\(estimatedMinutes) min")
-                                .foregroundStyle(.secondary)
-                        }
+                    HStack {
+                        Text(LocalizedStringKey("taskBoard.editor.field.estimatedTime"))
+                        Spacer()
+                        TextField(LocalizedStringKey("taskBoard.editor.field.estimatedTime"), value: $estimatedMinutes, format: .number)
+                            .multilineTextAlignment(.trailing)
+#if os(iOS)
+                            .keyboardType(.numberPad)
+#endif
+                            .frame(width: 80)
+                        Stepper("", value: $estimatedMinutes, in: 5...240, step: 5)
+                            .labelsHidden()
                     }
                 }
                 
