@@ -12,6 +12,7 @@ import UIKit
 
 struct TaskBoardView: View {
     @ObservedObject var viewModel: TaskBoardViewModel
+    @Environment(\.locale) private var locale
     
     var body: some View {
         navigationContainer {
@@ -61,7 +62,7 @@ struct TaskBoardView: View {
     
     private var headerSection: some View {
         Section {
-            householdHeader
+            weekCalendar
             filterPicker
             summaryRow
         }
@@ -160,6 +161,59 @@ struct TaskBoardView: View {
                     Image(systemName: "chevron.down")
                         .foregroundStyle(.secondary)
                 }
+            }
+        }
+    }
+    
+    private var weekCalendar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(headerDateLabel(for: viewModel.selectedDate, locale: locale))
+                .font(.title2.bold())
+            HStack(spacing: 12) {
+                Button(action: viewModel.showPreviousWeek) {
+                    Image(systemName: "chevron.left")
+                        .foregroundStyle(.primary)
+                        .frame(width: 32, height: 48)
+                }
+                .buttonStyle(.plain)
+                
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(viewModel.calendarDates, id: \.self) { date in
+                            Button {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                viewModel.selectDate(date)
+                            }
+                        } label: {
+                            VStack(spacing: 4) {
+                                Text(weekdayText(for: date, locale: locale))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(dayFormatter.string(from: date))
+                                    .font(.body.bold())
+                            }
+                            .frame(width: 48, height: 64)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(viewModel.isSelected(date: date) ? Color.accentColor.opacity(0.2) : Color(.secondarySystemGroupedBackground))
+                            )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(viewModel.isSelected(date: date) ? Color.accentColor : Color.clear, lineWidth: 2)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                
+                Button(action: viewModel.showNextWeek) {
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.primary)
+                        .frame(width: 32, height: 48)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -618,4 +672,37 @@ private extension View {
             self
         }
     }
+}
+
+private func weekdayText(for date: Date, locale: Locale) -> String {
+    if locale.languageCode?.hasPrefix("zh") == true {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.dateFormat = "E"
+        return formatter.string(from: date)
+    } else {
+        var calendar = Calendar.current
+        calendar.locale = locale
+        let weekday = calendar.component(.weekday, from: date)
+        let symbols = ["S", "M", "T", "W", "T", "F", "S"]
+        return symbols[(weekday - 1) % symbols.count]
+    }
+}
+
+private let dayFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale.current
+    formatter.dateFormat = "d"
+    return formatter
+}()
+
+private func headerDateLabel(for date: Date, locale: Locale) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = locale
+    if locale.languageCode?.hasPrefix("zh") == true {
+        formatter.dateFormat = "M月d日"
+    } else {
+        formatter.dateFormat = "MMM d"
+    }
+    return formatter.string(from: date)
 }

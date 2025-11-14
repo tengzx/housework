@@ -24,6 +24,10 @@ final class TaskBoardViewModel: ObservableObject {
     @Published private(set) var sections: [TaskSection] = []
     @Published private(set) var filteredTasks: [TaskItem] = []
     @Published private(set) var isLoading: Bool = true
+    @Published private(set) var calendarStartDate: Date
+    @Published var selectedDate: Date {
+        didSet { recalculateSections() }
+    }
     
     let taskStore: TaskBoardStore
     let authStore: AuthStore
@@ -41,11 +45,14 @@ final class TaskBoardViewModel: ObservableObject {
         tagStore: TagStore,
         memberDirectory: MemberDirectory
     ) {
+        let today = Date()
         self.taskStore = taskStore
         self.authStore = authStore
         self.householdStore = householdStore
         self.tagStore = tagStore
         self.memberDirectory = memberDirectory
+        self.selectedDate = today
+        self.calendarStartDate = Calendar.current.startOfWeek(for: today) ?? today
         bind()
         recalculateSections()
     }
@@ -89,6 +96,29 @@ final class TaskBoardViewModel: ObservableObject {
         showingTaskComposer = true
     }
     
+    func selectDate(_ date: Date) {
+        selectedDate = date
+        if !calendarDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: date) }) {
+            calendarStartDate = Calendar.current.startOfWeek(for: date) ?? calendarStartDate
+        }
+    }
+    
+    func isSelected(date: Date) -> Bool {
+        Calendar.current.isDate(date, inSameDayAs: selectedDate)
+    }
+    
+    func showPreviousWeek() {
+        guard let newStart = Calendar.current.date(byAdding: .day, value: -7, to: calendarStartDate) else { return }
+        calendarStartDate = newStart
+        selectedDate = newStart
+    }
+    
+    func showNextWeek() {
+        guard let newStart = Calendar.current.date(byAdding: .day, value: 7, to: calendarStartDate) else { return }
+        calendarStartDate = newStart
+        selectedDate = newStart
+    }
+    
     private func bind() {
         taskStore.$tasks
             .receive(on: DispatchQueue.main)
@@ -127,7 +157,7 @@ final class TaskBoardViewModel: ObservableObject {
     
     private func recalculateSections() {
         let normalized = normalizedTasks(taskStore.tasks)
-        let filtered = normalized.filter { filterPredicate($0) }
+        let filtered = normalized.filter { filterPredicate($0) && isTask($0, on: selectedDate) }
         filteredTasks = filtered
         if let status = selectedStatus {
             sections = [TaskSection(status: status, tasks: orderedTasks(for: status, within: filtered))]
@@ -162,6 +192,18 @@ final class TaskBoardViewModel: ObservableObject {
         case .unassigned:
             return task.assignedMembers.isEmpty
         }
+    }
+    
+    private func isTask(_ task: TaskItem, on date: Date) -> Bool {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return false }
+        return task.dueDate >= startOfDay && task.dueDate < endOfDay
+    }
+    
+    var calendarDates: [Date] {
+        let calendar = Calendar.current
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: calendarStartDate) }
     }
 }
 
@@ -205,5 +247,13 @@ private extension StatusSegment {
         case .completed:
             return Color(hex: "D8F4F0") ?? Color.green.opacity(0.3)
         }
+    }
+}
+
+private extension Calendar {
+    func startOfWeek(for date: Date) -> Date? {
+        var components = dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        components.weekday = firstWeekday
+        return self.date(from: components)
     }
 }
