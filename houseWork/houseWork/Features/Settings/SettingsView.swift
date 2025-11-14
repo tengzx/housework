@@ -11,6 +11,7 @@ import Combine
 struct SettingsView: View {
     @EnvironmentObject private var authStore: AuthStore
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var tagStore: TagStore
     @State private var householdNameDraft: String = ""
     @State private var householdIdDraft: String = ""
     
@@ -52,6 +53,7 @@ struct SettingsView: View {
 
 private struct HouseholdSection: View {
     @EnvironmentObject private var householdStore: HouseholdStore
+    @EnvironmentObject private var tagStore: TagStore
     
     var body: some View {
         if householdStore.households.isEmpty {
@@ -83,6 +85,7 @@ private struct HouseholdSection: View {
             }
             NavigationLink {
                 TagManagementView()
+                    .environmentObject(tagStore)
             } label: {
                 Label("Manage tags", systemImage: "tag")
             }
@@ -103,9 +106,12 @@ private struct AvatarCircle: View {
 }
 
 #Preview {
-    navigationContainer {
+    let householdStore = HouseholdStore()
+    let tagStore = TagStore(householdStore: householdStore)
+    return navigationContainer {
         SettingsView()
             .environmentObject(AuthStore())
-            .environmentObject(HouseholdStore())
+            .environmentObject(householdStore)
+            .environmentObject(tagStore)
     }
 }

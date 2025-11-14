@@ -6,23 +6,12 @@
 //
 
 import SwiftUI
-import Combine
 #if canImport(UIKit)
 import UIKit
 #endif
 
 struct TaskBoardView: View {
-    @EnvironmentObject private var taskStore: TaskBoardStore
-    @EnvironmentObject private var authStore: AuthStore
-    @EnvironmentObject private var householdStore: HouseholdStore
-    @EnvironmentObject private var tagStore: TagStore
-    @State private var selectedFilter: TaskBoardFilter = .all
-    @State private var selectedStatus: TaskStatus?
-    @State private var showingHouseholdSheet = false
-    @State private var alertMessage: String?
-    @State private var showingTaskComposer = false
-    @State private var inspectingTask: TaskItem?
-    @State private var editingTask: TaskItem?
+    @ObservedObject var viewModel: TaskBoardViewModel
     
     var body: some View {
         navigationContainer {
@@ -35,39 +24,38 @@ struct TaskBoardView: View {
                 .applyScrollContentBackgroundHidden()
                 .background(Color(.systemGroupedBackground))
                 .refreshable {
-                    await taskStore.refresh()
+                    await viewModel.refreshTasks()
                 }
                 floatingAddButton
             }
             .background(Color(.systemGroupedBackground))
         }
-        .onReceive(taskStore.$error.compactMap { $0 }) { alertMessage = $0 }
-        .onReceive(taskStore.$mutationError.compactMap { $0 }) { alertMessage = $0 }
         .alert(
             "Task Board Error",
             isPresented: Binding(
-                get: { alertMessage != nil },
-                set: { if !$0 { alertMessage = nil } }
+                get: { viewModel.alertMessage != nil },
+                set: { if !$0 { viewModel.alertMessage = nil } }
             ),
             actions: {
                 Button("OK", role: .cancel) { }
             },
             message: {
-                Text(alertMessage ?? "")
+                Text(viewModel.alertMessage ?? "")
             }
         )
-        .sheet(isPresented: $showingTaskComposer) {
+        .sheet(isPresented: $viewModel.showingTaskComposer) {
             TaskComposerView()
-                .environmentObject(taskStore)
-                .environmentObject(authStore)
+                .environmentObject(viewModel.taskStore)
+                .environmentObject(viewModel.authStore)
+                .environmentObject(viewModel.tagStore)
         }
-        .sheet(item: $inspectingTask) { task in
+        .sheet(item: $viewModel.inspectingTask) { task in
             TaskDetailView(task: task)
         }
-        .sheet(item: $editingTask) { task in
+        .sheet(item: $viewModel.editingTask) { task in
             TaskEditorView(task: task)
-                .environmentObject(taskStore)
-                .environmentObject(tagStore)
+                .environmentObject(viewModel.taskStore)
+                .environmentObject(viewModel.tagStore)
         }
     }
     
@@ -83,7 +71,7 @@ struct TaskBoardView: View {
     
     @ViewBuilder
     private var boardContent: some View {
-        if taskStore.isLoading && taskStore.tasks.isEmpty {
+        if viewModel.isLoading && viewModel.filteredTasks.isEmpty {
             Section {
                 HStack {
                     Spacer()
@@ -100,8 +88,7 @@ struct TaskBoardView: View {
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
         } else {
-            let allTasks = taskStore.tasks.filter(filterPredicate)
-            if allTasks.isEmpty {
+            if viewModel.filteredTasks.isEmpty {
                 Section {
                     placeholderView(
                         title: "No tasks yet",
@@ -112,10 +99,7 @@ struct TaskBoardView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
             } else {
-                let visibleSections = (selectedStatus == nil)
-                ? sections.filter { !$0.tasks.isEmpty }
-                : sections
-                
+                let visibleSections = viewModel.visibleSections
                 if visibleSections.isEmpty {
                     Section {
                         placeholderView(title: "No tasks match", systemImage: "tray")
@@ -124,7 +108,7 @@ struct TaskBoardView: View {
                     .listRowBackground(Color.clear)
                 }
                 
-                ForEach(visibleSections) { section in
+                ForEach(viewModel.visibleSections) { section in
                     taskSectionView(for: section)
                 }
             }
@@ -133,7 +117,7 @@ struct TaskBoardView: View {
     
     private var floatingAddButton: some View {
         Button {
-            showingTaskComposer = true
+            viewModel.presentComposer()
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 24, weight: .bold))
@@ -150,13 +134,13 @@ struct TaskBoardView: View {
     private var householdHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
             Menu {
-                ForEach(householdStore.households) { summary in
+                ForEach(viewModel.householdStore.households) { summary in
                     Button {
-                        householdStore.select(summary)
+                        viewModel.householdStore.select(summary)
                     } label: {
                         HStack {
                             Text(summary.name)
-                            if summary.id == householdStore.householdId {
+                            if summary.id == viewModel.householdStore.householdId {
                                 Spacer()
                                 Image(systemName: "checkmark")
                             }
@@ -166,9 +150,9 @@ struct TaskBoardView: View {
             } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(householdStore.householdName)
+                        Text(viewModel.householdStore.householdName)
                             .font(.title2.bold())
-                        Text("ID: \(householdStore.householdId)")
+                        Text("ID: \(viewModel.householdStore.householdId)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -181,7 +165,7 @@ struct TaskBoardView: View {
     }
     
     private var filterPicker: some View {
-        Picker("Filter", selection: $selectedFilter) {
+        Picker("Filter", selection: $viewModel.selectedFilter) {
             ForEach(TaskBoardFilter.allCases) { filter in
                 Text(filter.label).tag(filter)
             }
@@ -192,16 +176,16 @@ struct TaskBoardView: View {
     private var summaryRow: some View {
         let columns = Array(repeating: GridItem(.flexible(minimum: 160), spacing: 12), count: 2)
         return LazyVGrid(columns: columns, spacing: 12) {
-            ForEach(statusSegments) { segment in
+            ForEach(viewModel.statusSegments) { segment in
                 Button {
-                    selectedStatus = segment.status
+                    viewModel.selectedStatus = segment.status
                 } label: {
                     StatusSummaryCard(
                         title: segment.title,
-                        value: "\(taskCount(for: segment.status))",
+                        value: "\(viewModel.taskCount(for: segment.status))",
                         icon: segment.icon,
                         background: segment.background,
-                        isSelected: segment.status == selectedStatus
+                        isSelected: segment.status == viewModel.selectedStatus
                     )
                 }
                 .buttonStyle(.plain)
@@ -217,16 +201,16 @@ struct TaskBoardView: View {
                     task: task,
                     primaryButton: primaryButton(for: task),
                     secondaryButton: secondaryButton(for: task),
-                    isActionEnabled: canMutate(task: task),
+                    isActionEnabled: viewModel.canMutate(task: task),
                     showsDetails: false
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .onTapGesture {
-                    inspectingTask = task
+                    viewModel.inspectingTask = task
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button {
-                        editingTask = task
+                        viewModel.editingTask = task
                     } label: {
                         Label("Edit", systemImage: "pencil")
                     }
@@ -234,7 +218,7 @@ struct TaskBoardView: View {
                     
                     Button(role: .destructive) {
                         Task {
-                            await taskStore.deleteTask(task)
+                            await viewModel.deleteTask(task)
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -248,53 +232,8 @@ struct TaskBoardView: View {
         }
     }
 
-    private var sections: [TaskSection] {
-        if let status = selectedStatus {
-            return [TaskSection(status: status, tasks: tasks(for: status))]
-        } else {
-            return TaskStatus.allCases.map { status in
-                TaskSection(status: status, tasks: tasks(for: status))
-            }
-        }
-    }
-
-    private func filterPredicate(_ task: TaskItem) -> Bool {
-        switch selectedFilter {
-        case .all:
-            return true
-        case .mine:
-            guard let user = authStore.currentUser else { return false }
-            return task.assignedMembers.contains(where: { $0.matches(user) })
-        case .unassigned:
-            return task.assignedMembers.isEmpty
-        }
-    }
-
-    private func tasks(for status: TaskStatus) -> [TaskItem] {
-        let currentUser = authStore.currentUser
-        return taskStore.tasks
-            .filter { $0.status == status && filterPredicate($0) }
-            .sorted { lhs, rhs in
-                let lhsMine = currentUser.map { user in lhs.assignedMembers.contains { $0.matches(user) } } ?? false
-                let rhsMine = currentUser.map { user in rhs.assignedMembers.contains { $0.matches(user) } } ?? false
-                if lhsMine != rhsMine {
-                    return lhsMine && !rhsMine
-                }
-                return lhs.dueDate < rhs.dueDate
-            }
-    }
-
-    private func taskCount(for status: TaskStatus?) -> Int {
-        if let status {
-            return tasks(for: status).count
-        }
-        return taskStore.tasks
-            .filter(filterPredicate)
-            .count
-    }
-
     private func primaryButton(for task: TaskItem) -> TaskCardButton? {
-        guard canMutate(task: task) else { return nil }
+        guard viewModel.canMutate(task: task) else { return nil }
         switch task.status {
         case .backlog:
             return TaskCardButton(
@@ -303,7 +242,7 @@ struct TaskBoardView: View {
                 style: .borderedProminent
             ) {
                 Task {
-                    await taskStore.startTask(task, assignedTo: authStore.currentUser)
+                    await viewModel.startTask(task)
                 }
             }
         case .inProgress:
@@ -313,7 +252,7 @@ struct TaskBoardView: View {
                 style: .borderedProminent
             ) {
                 Task {
-                    await taskStore.completeTask(task, actingUser: authStore.currentUser)
+                    await viewModel.completeTask(task)
                 }
             }
         case .completed:
@@ -322,7 +261,7 @@ struct TaskBoardView: View {
     }
     
     private func secondaryButton(for task: TaskItem) -> TaskCardButton? {
-        guard canMutate(task: task) else { return nil }
+        guard viewModel.canMutate(task: task) else { return nil }
         switch task.status {
         case .backlog:
             return TaskCardButton(
@@ -331,7 +270,7 @@ struct TaskBoardView: View {
                 style: .bordered
             ) {
                 Task {
-                    await taskStore.completeTask(task, actingUser: authStore.currentUser)
+                    await viewModel.quickComplete(task)
                 }
             }
         case .inProgress, .completed:
@@ -339,55 +278,6 @@ struct TaskBoardView: View {
         }
     }
     
-    private func canMutate(task: TaskItem) -> Bool {
-        guard let currentUser = authStore.currentUser else { return false }
-        return task.assignedMembers.contains(where: { $0.matches(currentUser) })
-    }
-    
-    private var statusSegments: [StatusSegment] {
-        var items: [StatusSegment] = [
-            StatusSegment(
-                id: "all",
-                title: "All",
-                icon: "rectangle.grid.2x2",
-                background: hexColor("D6D8FF", fallback: Color(.systemBlue).opacity(0.3)),
-                status: nil
-            )
-        ]
-        items += TaskStatus.allCases.map { status in
-            StatusSegment(
-                id: status.rawValue,
-                title: status.label,
-                icon: status.iconName,
-                background: segmentBackground(for: status),
-                status: status
-            )
-        }
-        return items
-    }
-    
-    private func segmentBackground(for status: TaskStatus) -> Color {
-        switch status {
-        case .backlog:
-            return hexColor("FFF4A9", fallback: Color.yellow.opacity(0.3))
-        case .inProgress:
-            return hexColor("FAD2E7", fallback: Color.pink.opacity(0.3))
-        case .completed:
-            return hexColor("D8F4F0", fallback: Color.green.opacity(0.3))
-        }
-    }
-    
-    private func hexColor(_ hex: String, fallback: Color) -> Color {
-        Color(hex: hex) ?? fallback
-    }
-}
-
-private struct StatusSegment: Identifiable {
-    let id: String
-    let title: String
-    let icon: String
-    let background: Color
-    let status: TaskStatus?
 }
 
 private struct StatusSummaryCard: View {
@@ -695,11 +585,18 @@ private struct TaskEditorView: View {
 }
 
 #Preview {
-    TaskBoardView()
-        .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
-        .environmentObject(AuthStore())
-        .environmentObject(HouseholdStore())
-        .environmentObject(TagStore(householdStore: HouseholdStore()))
+    let householdStore = HouseholdStore()
+    let tagStore = TagStore(householdStore: householdStore)
+    let authStore = AuthStore()
+    let taskStore = TaskBoardStore(previewTasks: TaskItem.fixtures())
+    return TaskBoardView(
+        viewModel: TaskBoardViewModel(
+            taskStore: taskStore,
+            authStore: authStore,
+            householdStore: householdStore,
+            tagStore: tagStore
+        )
+    )
 }
 
 private extension View {

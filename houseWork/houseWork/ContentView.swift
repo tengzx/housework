@@ -6,35 +6,41 @@
 //
 
 import SwiftUI
-import Combine
 
+@MainActor
 struct ContentView: View {
-    @StateObject private var householdStore: HouseholdStore
-    @StateObject private var taskBoardStore: TaskBoardStore
-    @StateObject private var authStore = AuthStore()
-    @StateObject private var tagStore: TagStore
+    @StateObject private var viewModel: ContentViewModel
+    
+    init(
+        authStore: AuthStore,
+        householdStore: HouseholdStore
+    ) {
+        _viewModel = StateObject(
+            wrappedValue: ContentViewModel(
+                authStore: authStore,
+                householdStore: householdStore
+            )
+        )
+    }
     
     init() {
-        let householdStore = HouseholdStore()
-        let taskBoardStore = TaskBoardStore(householdStore: householdStore)
-        _householdStore = StateObject(wrappedValue: householdStore)
-        _taskBoardStore = StateObject(wrappedValue: taskBoardStore)
-        _tagStore = StateObject(wrappedValue: TagStore(householdStore: householdStore))
+        self.init(authStore: AuthStore(), householdStore: HouseholdStore())
     }
     
     var body: some View {
         Group {
-            if authStore.isLoading {
+            switch viewModel.presentationState {
+            case .loadingAccount:
                 ProgressView("Loading account…")
-            } else if authStore.currentUser == nil {
-                LoginView()
-            } else if householdStore.isLoading {
+            case .authentication:
+                LoginView(viewModel: viewModel.loginViewModel)
+            case .loadingHousehold:
                 ProgressView("Loading household…")
-            } else if householdStore.households.isEmpty {
+            case .needsHousehold:
                 HouseholdSetupView()
-            } else {
+            case .dashboard:
                 TabView {
-                    TaskBoardView()
+                    TaskBoardView(viewModel: viewModel.taskBoardViewModel)
                         .tabItem {
                             Label("Board", systemImage: "rectangle.grid.2x2")
                         }
@@ -53,15 +59,12 @@ struct ContentView: View {
                 }
             }
         }
-        .environmentObject(householdStore)
-        .environmentObject(taskBoardStore)
-        .environmentObject(authStore)
-        .environmentObject(tagStore)
+        .environmentObject(viewModel.householdStore)
+        .environmentObject(viewModel.taskBoardStore)
+        .environmentObject(viewModel.authStore)
+        .environmentObject(viewModel.tagStore)
         .onAppear {
-            householdStore.updateUserContext(userId: authStore.firebaseUserId, force: true)
-        }
-        .onChange(of: authStore.firebaseUserId) { newValue in
-            householdStore.updateUserContext(userId: newValue, force: true)
+            viewModel.onAppear()
         }
     }
 }

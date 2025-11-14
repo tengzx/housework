@@ -51,7 +51,7 @@ struct TagManagementView: View {
                     } label: {
                         Image(systemName: "plus.circle.fill")
                     }
-                    .disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty || tagStore.isLoading)
+                    .disabled(newTagName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
