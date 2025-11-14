@@ -9,6 +9,8 @@ import SwiftUI
 
 struct AnalyticsView: View {
     @EnvironmentObject private var taskStore: TaskBoardStore
+    @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var memberDirectory: MemberDirectory
     @StateObject private var viewModel = AnalyticsViewModel()
     @State private var useCustomRange = false
     @State private var customStart = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
@@ -34,11 +36,13 @@ struct AnalyticsView: View {
             .background(Color(.systemGroupedBackground))
             .onAppear { refreshAnalytics() }
             .onChange(of: taskStore.tasks) { _ in refreshAnalytics() }
+            .onChange(of: authStore.currentUser) { _ in refreshAnalytics() }
             .onChange(of: viewModel.selectedRange) { _ in
                 guard !useCustomRange else { return }
                 refreshAnalytics()
             }
             .onChange(of: useCustomRange) { _ in refreshAnalytics() }
+            .onChange(of: memberDirectory.membersById) { _ in refreshAnalytics() }
             .onChange(of: customStart) { newValue in
                 if newValue > customEnd { customEnd = newValue }
                 if useCustomRange { refreshAnalytics() }
@@ -122,7 +126,7 @@ struct AnalyticsView: View {
     
     private var leaderboardSection: some View {
         SectionCard(title: LocalizedStringKey("analytics.section.leaderboard"), icon: "trophy.fill") {
-            ForEach(Array(viewModel.memberStats.enumerated()), id: \.element.id) { index, stat in
+            ForEach(Array(hydratedStats.enumerated()), id: \.element.id) { index, stat in
                 LeaderboardRow(performance: stat, rank: index + 1)
                 if index != viewModel.memberStats.count - 1 {
                     Divider()
@@ -134,7 +138,13 @@ struct AnalyticsView: View {
     // MARK: - Helpers
     
     private func refreshAnalytics() {
-        viewModel.refresh(using: taskStore.tasks, customRange: activeCustomRange)
+        viewModel.refresh(using: normalizedTasks, customRange: activeCustomRange)
+    }
+    
+    private var normalizedTasks: [TaskItem] {
+        let enriched = memberDirectory.replaceMembers(in: taskStore.tasks)
+        guard let currentUser = authStore.currentUser else { return enriched }
+        return enriched.map { $0.replacingMember(with: currentUser) }
     }
     
     private var activeCustomRange: DateInterval? {
@@ -152,6 +162,18 @@ struct AnalyticsView: View {
             return "\(formatter.string(from: interval.start)) – \(formatter.string(from: interval.end.addingTimeInterval(-1)))"
         }
         return String(localized: .init(viewModel.selectedRange.metricSubtitleKey))
+    }
+    
+    private var hydratedStats: [MemberPerformance] {
+        viewModel.memberStats.map { performance in
+            var updated = performance
+            if let member = memberDirectory.member(for: performance.member.id) {
+                updated.member = member
+            } else if let current = authStore.currentUser, performance.member.matches(current) {
+                updated.member = current
+            }
+            return updated
+        }
     }
 }
 
@@ -198,7 +220,20 @@ private struct RangeChip: View {
 
 #Preview {
     navigationContainer {
+        let session = AuthSession(userId: "preview-user", displayName: "Taylor Jordan", email: "taylor@example.com")
+        let profileService = InMemoryUserProfileService(
+            seedProfiles: [
+                session.userId: UserProfile(id: session.userId, name: "Taylor Jordan", email: "taylor@example.com", accentColor: .purple, memberId: UUID().uuidString)
+            ]
+        )
+        let authStore = AuthStore(
+            authService: InMemoryAuthenticationService(initialSession: session),
+            profileService: profileService
+        )
+        let memberDirectory = MemberDirectory(profileService: profileService)
         AnalyticsView()
             .environmentObject(TaskBoardStore(previewTasks: TaskItem.fixtures()))
+            .environmentObject(authStore)
+            .environmentObject(memberDirectory)
     }
 }

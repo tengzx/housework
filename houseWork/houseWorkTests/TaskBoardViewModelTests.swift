@@ -7,7 +7,9 @@ final class TaskBoardViewModelTests: XCTestCase {
     func testMineFilterShowsOnlyAssignedTasks() async throws {
         let session = AuthSession(userId: "user-1", displayName: "Test User", email: "test@example.com")
         let authService = InMemoryAuthenticationService(initialSession: session)
-        let authStore = AuthStore(authService: authService)
+        let profile = UserProfile(id: session.userId, name: "Test User", email: session.email ?? "", accentColor: .blue, memberId: UUID().uuidString)
+        let profileService = InMemoryUserProfileService(seedProfiles: [session.userId: profile])
+        let authStore = AuthStore(authService: authService, profileService: profileService)
         let householdSummary = HouseholdSummary(id: "house-1", name: "Test Home", inviteCode: "ABC123")
         let householdService = InMemoryHouseholdService(
             seedHouseholds: [householdSummary],
@@ -17,6 +19,7 @@ final class TaskBoardViewModelTests: XCTestCase {
         householdStore.updateUserContext(userId: "user-1", force: true)
         let tagStore = TagStore(householdStore: householdStore, service: InMemoryTagService())
         
+        await Task.yield()
         guard let currentUser = authStore.currentUser else {
             XCTFail("Expected current user to be set")
             return
@@ -41,11 +44,13 @@ final class TaskBoardViewModelTests: XCTestCase {
             assignedMembers: []
         )
         let taskStore = TaskBoardStore(previewTasks: [ownTask, otherTask])
+        let memberDirectory = MemberDirectory(profileService: InMemoryUserProfileService(seedProfiles: [session.userId: profile]))
         let viewModel = TaskBoardViewModel(
             taskStore: taskStore,
             authStore: authStore,
             householdStore: householdStore,
-            tagStore: tagStore
+            tagStore: tagStore,
+            memberDirectory: memberDirectory
         )
         
         XCTAssertEqual(viewModel.filteredTasks.count, 2)

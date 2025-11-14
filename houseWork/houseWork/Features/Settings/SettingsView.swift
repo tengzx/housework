@@ -21,19 +21,25 @@ struct SettingsView: View {
             List {
                 Section(LocalizedStringKey("settings.section.account")) {
                     if let user = authStore.currentUser {
-                        HStack {
-                            AvatarCircle(member: user)
-                            VStack(alignment: .leading) {
-                                Text(user.name)
-                                    .font(.headline)
-                                Text(LocalizedStringKey("settings.account.activeDevice"))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        NavigationLink {
+                            UserProfileView(viewModel: UserProfileViewModel(authStore: authStore))
+                        } label: {
+                            HStack(spacing: 12) {
+                                AvatarCircle(member: user)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(user.name)
+                                        .font(.headline)
+                                    Text(accountEmailText)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    Text(LocalizedStringKey("settings.account.tapToEdit"))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
-                            Spacer()
-                            Button(LocalizedStringKey("settings.account.logout")) { authStore.logout() }
-                                .buttonStyle(.bordered)
                         }
+                        Button(LocalizedStringKey("settings.account.logout")) { authStore.logout() }
+                            .buttonStyle(.bordered)
                     } else {
                         Text(LocalizedStringKey("settings.account.notSignedIn"))
                             .foregroundStyle(.secondary)
@@ -64,6 +70,10 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+    
+    private var accountEmailText: String {
+        authStore.userProfile?.email ?? authStore.currentEmail ?? String(localized: "settings.account.email.placeholder")
     }
 }
 
@@ -125,9 +135,18 @@ private struct AvatarCircle: View {
     let householdStore = HouseholdStore()
     let tagStore = TagStore(householdStore: householdStore)
     let languageStore = LanguageStore()
+    let session = AuthSession(userId: "preview-user", displayName: "Casey Lee", email: "casey@example.com")
+    let authStore = AuthStore(
+        authService: InMemoryAuthenticationService(initialSession: session),
+        profileService: InMemoryUserProfileService(
+            seedProfiles: [
+                session.userId: UserProfile(id: session.userId, name: "Casey Lee", email: "casey@example.com", accentColor: .purple, memberId: UUID().uuidString)
+            ]
+        )
+    )
     return navigationContainer {
         SettingsView()
-            .environmentObject(AuthStore())
+            .environmentObject(authStore)
             .environmentObject(householdStore)
             .environmentObject(tagStore)
             .environmentObject(languageStore)

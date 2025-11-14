@@ -12,27 +12,33 @@ import Combine
 @MainActor
 final class AuthStore: ObservableObject {
     @Published var currentUser: HouseholdMember?
+    @Published private(set) var userProfile: UserProfile?
     @Published private(set) var firebaseUserId: String?
+    @Published private(set) var currentEmail: String?
     @Published var isLoading: Bool = true
     @Published var isProcessing: Bool = false
     @Published var authError: String?
     
     private let authService: AuthenticationService
+    private let profileService: UserProfileService
     private var authListener: ListenerToken?
     private let defaults: UserDefaults
     private let storedUserIdKey = "authStore.userId"
     private let memberUUIDKeyPrefix = "authStore.memberUUID."
+    private var profileLoadIdentifier = UUID()
     
     init(
         authService: AuthenticationService = FirebaseAuthenticationService(),
+        profileService: UserProfileService = FirestoreUserProfileService(),
         defaults: UserDefaults = .standard
     ) {
         self.authService = authService
+        self.profileService = profileService
         self.defaults = defaults
         authListener = authService.addStateListener { [weak self] session in
             guard let self else { return }
             Task { @MainActor in
-                self.handleSessionChange(session)
+                await self.handleSessionChange(session)
             }
         }
     }
@@ -59,7 +65,9 @@ final class AuthStore: ObservableObject {
         do {
             try authService.signOut()
             firebaseUserId = nil
+            currentEmail = nil
             currentUser = nil
+            userProfile = nil
             defaults.removeObject(forKey: storedUserIdKey)
         } catch {
             authError = error.localizedDescription
@@ -72,42 +80,133 @@ final class AuthStore: ObservableObject {
         do {
             let session = try await action()
             firebaseUserId = session.userId
-            currentUser = makeMember(from: session)
+            currentEmail = session.email
             defaults.set(session.userId, forKey: storedUserIdKey)
+            await loadProfile(for: session)
         } catch {
             authError = error.localizedDescription
         }
         isProcessing = false
     }
     
-    private func handleSessionChange(_ session: AuthSession?) {
+    private func handleSessionChange(_ session: AuthSession?) async {
         isLoading = false
         guard let session else {
             firebaseUserId = nil
+            currentEmail = nil
             currentUser = nil
+            userProfile = nil
             defaults.removeObject(forKey: storedUserIdKey)
             return
         }
         firebaseUserId = session.userId
-        currentUser = makeMember(from: session)
+        currentEmail = session.email
+        await loadProfile(for: session)
     }
     
-    private func makeMember(from session: AuthSession) -> HouseholdMember {
-        let displayName = session.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let initialsSource = displayName?.isEmpty == false ? displayName! : (session.email ?? "User")
-        let memberId = memberIdentifier(for: session.userId)
-        return HouseholdMember(
-            id: memberId,
-            name: displayName?.isEmpty == false ? displayName! : (session.email ?? "Unnamed"),
-            initials: initialsSource.split(separator: " ").compactMap { $0.first }.prefix(2).map(String.init).joined(),
-            accentColor: .blue
+    @discardableResult
+    func updateProfile(name: String, accentColor: Color) async -> Bool {
+        guard let userId = firebaseUserId else { return false }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return false }
+        let identifier = memberIdentifier(for: userId, prefer: userProfile?.memberUUID)
+        var profile = userProfile ?? UserProfile(
+            id: userId,
+            name: trimmedName,
+            email: currentEmail ?? "",
+            accentColor: accentColor,
+            memberId: identifier.uuidString
         )
+        profile.name = trimmedName
+        profile.accentColor = accentColor
+        profile.memberId = identifier.uuidString
+        do {
+            try await profileService.saveProfile(profile)
+            try? await authService.updateDisplayName(trimmedName)
+            apply(profile: profile, userId: userId)
+            profileLoadIdentifier = UUID()
+            authError = nil
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
     }
     
-    private func memberIdentifier(for userId: String) -> UUID {
+    private func loadProfile(for session: AuthSession) async {
+        let loadID = UUID()
+        profileLoadIdentifier = loadID
+        let fallback = defaultProfile(for: session)
+        do {
+            if var existing = try await profileService.loadProfile(userId: session.userId) {
+                var requiresSave = false
+                if existing.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let displayName = session.displayName, !displayName.isEmpty {
+                    existing.name = displayName
+                    requiresSave = true
+                }
+                if existing.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let email = session.email {
+                    existing.email = email
+                    requiresSave = true
+                }
+                let identifier = memberIdentifier(for: session.userId, prefer: existing.memberUUID)
+                if existing.memberUUID == nil {
+                    existing.memberId = identifier.uuidString
+                    requiresSave = true
+                }
+                if requiresSave {
+                    try await profileService.saveProfile(existing)
+                }
+                guard loadID == profileLoadIdentifier else { return }
+                apply(profile: existing, userId: session.userId)
+            } else {
+                try await profileService.saveProfile(fallback)
+                guard loadID == profileLoadIdentifier else { return }
+                apply(profile: fallback, userId: session.userId)
+            }
+        } catch {
+            authError = error.localizedDescription
+            guard loadID == profileLoadIdentifier else { return }
+            if userProfile == nil {
+                apply(profile: fallback, userId: session.userId)
+            }
+            return
+        }
+        if loadID == profileLoadIdentifier {
+            authError = nil
+        }
+    }
+    
+    private func defaultProfile(for session: AuthSession) -> UserProfile {
+        let displayName = session.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = displayName?.isEmpty == false ? displayName! : (session.email ?? "Unnamed")
+        let email = session.email ?? ""
+        let colors = HouseholdMember.defaultAvatarColors
+        let colorIndex = abs(session.userId.hashValue) % max(colors.count, 1)
+        let selectedColor = colors[colorIndex]
+        let identifier = memberIdentifier(for: session.userId)
+        return UserProfile(id: session.userId, name: name, email: email, accentColor: selectedColor, memberId: identifier.uuidString)
+    }
+    
+    private func apply(profile: UserProfile, userId: String) {
+        var resolvedProfile = profile
+        let identifier = memberIdentifier(for: userId, prefer: profile.memberUUID)
+        if resolvedProfile.memberUUID == nil {
+            resolvedProfile.memberId = identifier.uuidString
+        }
+        userProfile = resolvedProfile
+        currentUser = resolvedProfile.asHouseholdMember(fallbackId: identifier)
+    }
+    
+    private func memberIdentifier(for userId: String, prefer preferred: UUID? = nil) -> UUID {
         let key = memberUUIDKeyPrefix + userId
         if let cached = defaults.string(forKey: key), let uuid = UUID(uuidString: cached) {
             return uuid
+        }
+        if let preferred {
+            defaults.set(preferred.uuidString, forKey: key)
+            return preferred
         }
         let newValue = UUID()
         defaults.set(newValue.uuidString, forKey: key)

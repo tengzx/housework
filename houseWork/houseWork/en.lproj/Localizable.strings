@@ -138,6 +138,17 @@
 "settings.account.activeDevice" = "Active on this device";
 "settings.account.authDescription" = "Firebase Email/Password sign-in";
 "settings.account.logout" = "Log out";
+"settings.account.tapToEdit" = "Tap to edit your profile";
+"settings.account.email.placeholder" = "Email unavailable";
+"userProfile.title" = "Profile";
+"userProfile.section.info" = "Account";
+"userProfile.section.avatar" = "Avatar Color";
+"userProfile.field.name" = "Name";
+"userProfile.field.email" = "Email";
+"userProfile.button.save" = "Save";
+"userProfile.error.emptyName" = "Name cannot be empty.";
+"userProfile.error.saveFailed" = "Unable to save profile.";
+"userProfile.avatarColorOption" = "Avatar color";
 "settings.household.none" = "No household found";
 "settings.household.instructions" = "Create or join a household to start managing chores.";
 "settings.household.create" = "Create Household";

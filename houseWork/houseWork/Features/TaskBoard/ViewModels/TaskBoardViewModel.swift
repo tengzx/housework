@@ -29,6 +29,7 @@ final class TaskBoardViewModel: ObservableObject {
     let authStore: AuthStore
     let householdStore: HouseholdStore
     let tagStore: TagStore
+    let memberDirectory: MemberDirectory
     let statusSegments: [StatusSegment] = StatusSegment.makeDefault()
     
     private var cancellables: Set<AnyCancellable> = []
@@ -37,12 +38,14 @@ final class TaskBoardViewModel: ObservableObject {
         taskStore: TaskBoardStore,
         authStore: AuthStore,
         householdStore: HouseholdStore,
-        tagStore: TagStore
+        tagStore: TagStore,
+        memberDirectory: MemberDirectory
     ) {
         self.taskStore = taskStore
         self.authStore = authStore
         self.householdStore = householdStore
         self.tagStore = tagStore
+        self.memberDirectory = memberDirectory
         bind()
         recalculateSections()
     }
@@ -94,9 +97,23 @@ final class TaskBoardViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
+        authStore.$currentUser
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.recalculateSections()
+            }
+            .store(in: &cancellables)
+        
         taskStore.$isLoading
             .receive(on: DispatchQueue.main)
             .assign(to: &$isLoading)
+        
+        memberDirectory.$membersById
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.recalculateSections()
+            }
+            .store(in: &cancellables)
         
         Publishers.Merge(taskStore.$error, taskStore.$mutationError)
             .compactMap { $0 }
@@ -109,7 +126,8 @@ final class TaskBoardViewModel: ObservableObject {
     }
     
     private func recalculateSections() {
-        let filtered = taskStore.tasks.filter { filterPredicate($0) }
+        let normalized = normalizedTasks(taskStore.tasks)
+        let filtered = normalized.filter { filterPredicate($0) }
         filteredTasks = filtered
         if let status = selectedStatus {
             sections = [TaskSection(status: status, tasks: orderedTasks(for: status, within: filtered))]
@@ -118,6 +136,12 @@ final class TaskBoardViewModel: ObservableObject {
                 TaskSection(status: status, tasks: orderedTasks(for: status, within: filtered))
             }
         }
+    }
+    
+    private func normalizedTasks(_ tasks: [TaskItem]) -> [TaskItem] {
+        let enriched = memberDirectory.replaceMembers(in: tasks)
+        guard let currentUser = authStore.currentUser else { return enriched }
+        return enriched.map { $0.replacingMember(with: currentUser) }
     }
     
     private func orderedTasks(for status: TaskStatus, within tasks: [TaskItem]) -> [TaskItem] {

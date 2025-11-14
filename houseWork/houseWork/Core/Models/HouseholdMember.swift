@@ -36,12 +36,10 @@ struct HouseholdMember: Identifiable, Hashable {
     }
     
     var avatarColor: Color {
-        let palette = Self.avatarPalette
-        let hash = abs(id.uuidString.hashValue)
-        return palette[hash % palette.count]
+        accentColor
     }
     
-    private static let avatarPalette: [Color] = [
+    static let defaultAvatarColors: [Color] = [
         Color(red: 0.96, green: 0.55, blue: 0.55),
         Color(red: 0.52, green: 0.67, blue: 0.99),
         Color(red: 0.55, green: 0.82, blue: 0.62),

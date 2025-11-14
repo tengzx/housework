@@ -139,6 +139,17 @@
 "settings.account.activeDevice" = "此设备已激活";
 "settings.account.authDescription" = "Firebase 邮箱/密码登录";
 "settings.account.logout" = "退出登录";
+"settings.account.tapToEdit" = "点击编辑个人信息";
+"settings.account.email.placeholder" = "暂无邮箱";
+"userProfile.title" = "个人信息";
+"userProfile.section.info" = "账户信息";
+"userProfile.section.avatar" = "头像颜色";
+"userProfile.field.name" = "用户名";
+"userProfile.field.email" = "邮箱";
+"userProfile.button.save" = "保存";
+"userProfile.error.emptyName" = "用户名不能为空。";
+"userProfile.error.saveFailed" = "保存个人信息失败。";
+"userProfile.avatarColorOption" = "头像颜色";
 "settings.household.none" = "未找到家庭";
 "settings.household.instructions" = "创建或加入一个家庭来开始管理家务。";
 "settings.household.create" = "创建家庭";

@@ -19,6 +19,7 @@ protocol AuthenticationService {
     func signIn(email: String, password: String) async throws -> AuthSession
     func signUp(name: String, email: String, password: String) async throws -> AuthSession
     func signOut() throws
+    func updateDisplayName(_ name: String) async throws
 }
 
 final class FirebaseAuthenticationService: AuthenticationService {
@@ -51,6 +52,13 @@ final class FirebaseAuthenticationService: AuthenticationService {
     
     func signOut() throws {
         try auth.signOut()
+    }
+    
+    func updateDisplayName(_ name: String) async throws {
+        guard let user = auth.currentUser else { return }
+        let changeRequest = user.createProfileChangeRequest()
+        changeRequest.displayName = name
+        try await changeRequest.commitChanges()
     }
 }
 
@@ -124,6 +132,11 @@ final class InMemoryAuthenticationService: AuthenticationService {
     
     func signOut() throws {
         currentSession = nil
+    }
+    
+    func updateDisplayName(_ name: String) async throws {
+        guard let session = currentSession else { return }
+        currentSession = AuthSession(userId: session.userId, displayName: name, email: session.email)
     }
     
     private func notifyListeners() {

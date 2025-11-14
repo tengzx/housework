@@ -24,6 +24,7 @@ final class ContentViewModel: ObservableObject {
     let householdStore: HouseholdStore
     let taskBoardStore: TaskBoardStore
     let tagStore: TagStore
+    let memberDirectory: MemberDirectory
     let taskBoardViewModel: TaskBoardViewModel
     let loginViewModel: LoginViewModel
     
@@ -37,11 +38,13 @@ final class ContentViewModel: ObservableObject {
         self.householdStore = householdStore
         self.taskBoardStore = TaskBoardStore(householdStore: householdStore)
         self.tagStore = TagStore(householdStore: householdStore)
+        self.memberDirectory = MemberDirectory()
         self.taskBoardViewModel = TaskBoardViewModel(
             taskStore: taskBoardStore,
             authStore: authStore,
             householdStore: householdStore,
-            tagStore: tagStore
+            tagStore: tagStore,
+            memberDirectory: memberDirectory
         )
         self.loginViewModel = LoginViewModel(authStore: authStore)
         bindStores()

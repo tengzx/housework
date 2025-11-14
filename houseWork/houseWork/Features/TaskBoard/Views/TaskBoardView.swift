@@ -597,12 +597,14 @@ private struct TaskEditorView: View {
     let tagStore = TagStore(householdStore: householdStore)
     let authStore = AuthStore()
     let taskStore = TaskBoardStore(previewTasks: TaskItem.fixtures())
+    let memberDirectory = MemberDirectory(profileService: InMemoryUserProfileService())
     return TaskBoardView(
         viewModel: TaskBoardViewModel(
             taskStore: taskStore,
             authStore: authStore,
             householdStore: householdStore,
-            tagStore: tagStore
+            tagStore: tagStore,
+            memberDirectory: memberDirectory
         )
     )
 }

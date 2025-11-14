@@ -112,6 +112,19 @@ struct TaskSection: Identifiable {
 }
 
 extension TaskItem {
+    func replacingMember(with updatedMember: HouseholdMember) -> TaskItem {
+        guard assignedMembers.contains(where: { $0.matches(updatedMember) }) else {
+            return self
+        }
+        var copy = self
+        copy.assignedMembers = assignedMembers.map { member in
+            member.matches(updatedMember) ? updatedMember : member
+        }
+        return copy
+    }
+}
+
+extension TaskItem {
     static func fixtures(members: [HouseholdMember] = HouseholdMember.samples) -> [TaskItem] {
         [
             TaskItem(
