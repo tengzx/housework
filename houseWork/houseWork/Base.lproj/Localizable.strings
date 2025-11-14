@@ -107,7 +107,7 @@
 "catalog.loading" = "Loading catalog…";
 "catalog.placeholder.title" = "No chores found";
 "catalog.placeholder.description" = "Try clearing the filters or creating a new template.";
-"catalog.action.addToBoard" = "Add to Board";
+"catalog.action.addToBoard" = "Claim Task";
 "catalog.action.edit" = "Edit";
 "catalog.success.assigned" = "\"%@\" assigned to %@";
 "catalog.success.added" = "\"%@\" added to backlog";

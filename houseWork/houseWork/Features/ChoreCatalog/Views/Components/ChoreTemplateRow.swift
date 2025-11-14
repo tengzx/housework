@@ -10,63 +10,53 @@ import SwiftUI
 struct ChoreTemplateRow: View {
     let template: ChoreTemplate
     var onAddToBoard: () -> Void
-    var onEdit: () -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(template.title)
                     .font(.headline)
-                Spacer()
-                ScoreBadge(score: template.baseScore)
-            }
-            Text(template.details)
-                .font(.subheadline)
+                Text(template.details)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    Label(minutesText, systemImage: "timer")
+                    Label(template.frequency.localizedLabel, systemImage: template.frequency.iconName)
+                }
+                .font(.caption)
                 .foregroundStyle(.secondary)
-            HStack(spacing: 12) {
-                Label(minutesText, systemImage: "timer")
-                Label(template.frequency.localizedLabel, systemImage: template.frequency.iconName)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            if !template.tags.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(template.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.caption2)
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 8)
-                            .background(Color.secondary.opacity(0.1))
-                            .clipShape(Capsule())
+                if !template.tags.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(template.tags, id: \.self) { tag in
+                            Text(tag)
+                                .font(.caption2)
+                                .padding(.vertical, 4)
+                                .padding(.horizontal, 8)
+                                .background(Color.secondary.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
                     }
                 }
             }
             
-            HStack(spacing: 8) {
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 10) {
+                ScoreBadge(score: template.baseScore)
                 Button(action: onAddToBoard) {
-                    Label(LocalizedStringKey("catalog.action.addToBoard"), systemImage: "plus.circle")
-                        .font(.caption.bold())
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 10)
-                        .background(Color.secondary.opacity(0.15))
-                        .foregroundColor(.primary)
+                    Label(LocalizedStringKey("catalog.action.addToBoard"), systemImage: "plus.circle.fill")
+                        .font(.footnote.bold())
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .frame(minWidth: 120)
+                        .background(Color.accentColor.opacity(0.15))
+                        .foregroundColor(.accentColor)
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                
-                Button(action: onEdit) {
-                    Label(LocalizedStringKey("catalog.action.edit"), systemImage: "pencil")
-                        .font(.caption.bold())
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 10)
-                        .background(Color.secondary.opacity(0.1))
-                        .foregroundColor(.primary)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                Spacer()
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

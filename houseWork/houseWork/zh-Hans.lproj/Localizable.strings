@@ -108,7 +108,7 @@
 "catalog.loading" = "正在加载清单…";
 "catalog.placeholder.title" = "没有找到家务";
 "catalog.placeholder.description" = "尝试清空筛选或新建一个模板。";
-"catalog.action.addToBoard" = "加入看板";
+"catalog.action.addToBoard" = "领取任务";
 "catalog.action.edit" = "编辑";
 "catalog.success.assigned" = "\"%@\" 已指派给 %@";
 "catalog.success.added" = "\"%@\" 已加入待办";

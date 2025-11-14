@@ -188,11 +188,15 @@ struct ChoreCatalogView: View {
                 ForEach(viewModel.filteredTemplates) { template in
                     ChoreTemplateRow(
                         template: template,
-                        onAddToBoard: { handleAddToBoard(template) },
-                        onEdit: { presentEditForm(for: template) }
+                        onAddToBoard: { handleAddToBoard(template) }
                     )
                     .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button {
+                            presentEditForm(for: template)
+                        } label: {
+                            Label(LocalizedStringKey("catalog.action.edit"), systemImage: "pencil")
+                        }
                         Button(role: .destructive) {
                             Task {
                                 await viewModel.deleteTemplate(template)
