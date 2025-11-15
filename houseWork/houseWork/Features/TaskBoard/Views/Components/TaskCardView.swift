@@ -14,6 +14,7 @@ struct TaskCardView: View {
     var secondaryButton: TaskCardButton?
     var isActionEnabled: Bool = true
     var showsDetails: Bool = true
+    var memberResolver: ([HouseholdMember]) -> [HouseholdMember] = { $0 }
     
     private var isOverdue: Bool {
         task.dueDate < Date() && task.status != .completed
@@ -54,11 +55,11 @@ struct TaskCardView: View {
                         .font(.caption)
                         .foregroundStyle(isOverdue ? Color.red : .secondary)
                 }
-                MemberAvatarStack(members: task.assignedMembers)
+                MemberAvatarStack(members: memberResolver(task.assignedMembers))
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 HStack(alignment: .center) {
-                    MemberAvatarStack(members: task.assignedMembers)
+                    MemberAvatarStack(members: memberResolver(task.assignedMembers))
                     Spacer()
                     Text(condensedDueDateText)
                         .font(.caption)

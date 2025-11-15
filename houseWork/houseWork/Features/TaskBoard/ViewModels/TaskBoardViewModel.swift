@@ -112,6 +112,17 @@ final class TaskBoardViewModel: ObservableObject {
         Calendar.current.isDate(date, inSameDayAs: selectedDate)
     }
     
+    func resolvedMember(_ member: HouseholdMember) -> HouseholdMember {
+        guard let currentUser = authStore.currentUser, member.matches(currentUser) else {
+            return member
+        }
+        return currentUser
+    }
+    
+    func resolvedMembers(_ members: [HouseholdMember]) -> [HouseholdMember] {
+        members.map(resolvedMember)
+    }
+    
     private func bind() {
         taskStore.$tasks
             .receive(on: DispatchQueue.main)

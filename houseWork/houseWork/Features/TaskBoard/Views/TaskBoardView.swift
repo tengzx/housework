@@ -240,7 +240,8 @@ struct TaskBoardView: View {
                     primaryButton: primaryButton(for: task),
                     secondaryButton: secondaryButton(for: task),
                     isActionEnabled: viewModel.canMutate(task: task),
-                    showsDetails: false
+                    showsDetails: false,
+                    memberResolver: viewModel.resolvedMembers
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .onTapGesture {

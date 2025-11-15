@@ -7,9 +7,24 @@
 
 import SwiftUI
 
+@MainActor
+final class AvatarImageCache {
+    static let shared = AvatarImageCache()
+    private var storage: [UUID: Image] = [:]
+    
+    func image(for id: UUID) -> Image? {
+        storage[id]
+    }
+    
+    func set(_ image: Image, for id: UUID) {
+        storage[id] = image
+    }
+}
+
 struct MemberAvatarView: View {
     let member: HouseholdMember
     var size: CGFloat = 36
+    @State private var cachedImage: Image?
     
     var body: some View {
         ZStack {
@@ -23,24 +38,44 @@ struct MemberAvatarView: View {
     @ViewBuilder
     private var avatarContent: some View {
         if #available(iOS 15.0, *), let url = member.avatarURL {
-            AsyncImage(url: url) { phase in
+            AsyncImage(url: url, transaction: Transaction(animation: .none)) { phase in
                 switch phase {
                 case .success(let image):
                     image
                         .resizable()
                         .scaledToFill()
+                        .onAppear {
+                            cachedImage = image
+                            AvatarImageCache.shared.set(image, for: member.id)
+                        }
                 case .failure:
-                    initialsView
+                    cachedImageView
                 case .empty:
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.white)
+                    cachedImageView
                 @unknown default:
-                    initialsView
+                    cachedImageView
                 }
             }
             .frame(width: size, height: size)
             .clipShape(Circle())
+        } else {
+            initialsView
+        }
+    }
+    
+    @ViewBuilder
+    private var cachedImageView: some View {
+        if let cachedImage {
+            cachedImage
+                .resizable()
+                .scaledToFill()
+        } else if let image = AvatarImageCache.shared.image(for: member.id) {
+            image
+                .resizable()
+                .scaledToFill()
+                .onAppear {
+                    cachedImage = image
+                }
         } else {
             initialsView
         }
