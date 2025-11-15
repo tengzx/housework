@@ -138,6 +138,9 @@
 "settings.account.activeDevice" = "Active on this device";
 "settings.account.authDescription" = "Firebase Email/Password sign-in";
 "settings.account.logout" = "Log out";
+"taskBoard.header.today" = "Today";
+"taskBoard.header.yesterday" = "Yesterday";
+"taskBoard.header.tomorrow" = "Tomorrow";
 "settings.account.tapToEdit" = "Tap to edit your profile";
 "settings.account.email.placeholder" = "Email unavailable";
 "userProfile.title" = "Profile";

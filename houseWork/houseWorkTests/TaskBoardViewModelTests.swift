@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import houseWork
 
 final class TaskBoardViewModelTests: XCTestCase {
@@ -59,5 +60,63 @@ final class TaskBoardViewModelTests: XCTestCase {
         
         XCTAssertEqual(viewModel.filteredTasks.count, 1)
         XCTAssertEqual(viewModel.filteredTasks.first?.title, "My Task")
+    }
+    
+    @MainActor
+    func testShowNextWeekKeepsSelectionUntouched() {
+        let viewModel = makeViewModel()
+        let reference = referenceDate(year: 2024, month: 3, day: 4)
+        viewModel.selectDate(reference)
+        let initialWeekStart = viewModel.calendarStartOfWeek
+        
+        viewModel.showNextWeek()
+        
+        XCTAssertTrue(Calendar.current.isDate(viewModel.selectedDate, inSameDayAs: reference))
+        let expectedWeekStart = Calendar.current.date(byAdding: .day, value: 7, to: initialWeekStart)!
+        XCTAssertTrue(Calendar.current.isDate(viewModel.calendarStartOfWeek, inSameDayAs: expectedWeekStart))
+    }
+    
+    @MainActor
+    func testShowPreviousWeekKeepsSelectionUntouched() {
+        let viewModel = makeViewModel()
+        let reference = referenceDate(year: 2024, month: 3, day: 6)
+        viewModel.selectDate(reference)
+        let initialWeekStart = viewModel.calendarStartOfWeek
+        
+        viewModel.showPreviousWeek()
+        
+        XCTAssertTrue(Calendar.current.isDate(viewModel.selectedDate, inSameDayAs: reference))
+        let expectedWeekStart = Calendar.current.date(byAdding: .day, value: -7, to: initialWeekStart)!
+        XCTAssertTrue(Calendar.current.isDate(viewModel.calendarStartOfWeek, inSameDayAs: expectedWeekStart))
+    }
+    
+    @MainActor
+    private func makeViewModel(tasks: [TaskItem] = []) -> TaskBoardViewModel {
+        let authStore = AuthStore(
+            authService: InMemoryAuthenticationService(),
+            profileService: InMemoryUserProfileService()
+        )
+        let householdStore = HouseholdStore(service: InMemoryHouseholdService())
+        let tagStore = TagStore(householdStore: householdStore, service: InMemoryTagService())
+        let memberDirectory = MemberDirectory(profileService: InMemoryUserProfileService())
+        let taskStore = TaskBoardStore(previewTasks: tasks)
+        return TaskBoardViewModel(
+            taskStore: taskStore,
+            authStore: authStore,
+            householdStore: householdStore,
+            tagStore: tagStore,
+            memberDirectory: memberDirectory
+        )
+    }
+    
+    private func referenceDate(year: Int, month: Int, day: Int) -> Date {
+        var components = DateComponents()
+        components.calendar = Calendar(identifier: .gregorian)
+        components.timeZone = TimeZone(secondsFromGMT: 0)
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = 12
+        return components.date!
     }
 }

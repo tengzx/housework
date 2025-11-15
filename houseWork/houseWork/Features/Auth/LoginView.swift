@@ -13,25 +13,25 @@ struct LoginView: View {
     var body: some View {
         VStack(spacing: 24) {
             VStack(spacing: 8) {
-                Text("houseWork")
+                Text(LocalizedStringKey("login.title"))
                     .font(.largeTitle.bold())
-                Text(viewModel.mode == .signIn ? "Sign in to sync chores" : "Create your account")
+                Text(viewModel.mode == .signIn ? LocalizedStringKey("login.subtitle.signIn") : LocalizedStringKey("login.subtitle.signUp"))
                     .foregroundStyle(.secondary)
             }
             
             VStack(spacing: 16) {
                 if viewModel.mode == .signUp {
-                    TextField("Full Name", text: $viewModel.fullName)
+                    TextField(LocalizedStringKey("login.field.fullName"), text: $viewModel.fullName)
                         .textFieldStyle(.roundedBorder)
                 }
-                TextField("Email", text: $viewModel.email)
+                TextField(LocalizedStringKey("login.field.email"), text: $viewModel.email)
 #if os(iOS)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
 #endif
                     .disableAutocorrection(true)
                     .textFieldStyle(.roundedBorder)
-                SecureField("Password", text: $viewModel.password)
+                SecureField(LocalizedStringKey("login.field.password"), text: $viewModel.password)
                     .textFieldStyle(.roundedBorder)
             }
             .padding(.horizontal)
@@ -46,7 +46,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity)
                             .padding()
                     } else {
-                        Text(viewModel.mode == .signIn ? "Sign In" : "Sign Up")
+                        Text(viewModel.mode == .signIn ? LocalizedStringKey("login.button.primary.signIn") : LocalizedStringKey("login.button.primary.signUp"))
                             .frame(maxWidth: .infinity)
                             .padding()
                     }
@@ -57,7 +57,7 @@ struct LoginView: View {
                 Button {
                     viewModel.toggleMode()
                 } label: {
-                    Text(viewModel.mode == .signIn ? "Need an account? Sign up" : "Already have an account? Sign in")
+                    Text(viewModel.mode == .signIn ? LocalizedStringKey("login.button.toggle.toSignUp") : LocalizedStringKey("login.button.toggle.toSignIn"))
                         .font(.footnote)
                 }
             }

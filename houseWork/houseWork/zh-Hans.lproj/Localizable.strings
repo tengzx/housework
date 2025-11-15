@@ -139,6 +139,9 @@
 "settings.account.activeDevice" = "此设备已激活";
 "settings.account.authDescription" = "Firebase 邮箱/密码登录";
 "settings.account.logout" = "退出登录";
+"taskBoard.header.today" = "今天";
+"taskBoard.header.yesterday" = "昨天";
+"taskBoard.header.tomorrow" = "明天";
 "settings.account.tapToEdit" = "点击编辑个人信息";
 "settings.account.email.placeholder" = "暂无邮箱";
 "userProfile.title" = "个人信息";

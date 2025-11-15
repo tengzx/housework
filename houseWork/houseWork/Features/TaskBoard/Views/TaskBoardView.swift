@@ -13,6 +13,7 @@ import UIKit
 struct TaskBoardView: View {
     @ObservedObject var viewModel: TaskBoardViewModel
     @Environment(\.locale) private var locale
+    @State private var dragOffsetX: CGFloat = 0
     
     var body: some View {
         navigationContainer {
@@ -167,54 +168,35 @@ struct TaskBoardView: View {
     
     private var weekCalendar: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(headerDateLabel(for: viewModel.selectedDate, locale: locale))
-                .font(.title2.bold())
-            HStack(spacing: 12) {
-                Button(action: viewModel.showPreviousWeek) {
-                    Image(systemName: "chevron.left")
-                        .foregroundStyle(.primary)
-                        .frame(width: 32, height: 48)
-                }
-                .buttonStyle(.plain)
-                
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(viewModel.calendarDates, id: \.self) { date in
-                            Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                viewModel.selectDate(date)
-                            }
-                        } label: {
-                            VStack(spacing: 4) {
-                                Text(weekdayText(for: date, locale: locale))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text(dayFormatter.string(from: date))
-                                    .font(.body.bold())
-                            }
-                            .frame(width: 48, height: 64)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(viewModel.isSelected(date: date) ? Color.accentColor.opacity(0.2) : Color(.secondarySystemGroupedBackground))
-                            )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(viewModel.isSelected(date: date) ? Color.accentColor : Color.clear, lineWidth: 2)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                
-                Button(action: viewModel.showNextWeek) {
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.primary)
-                        .frame(width: 32, height: 48)
-                }
-                .buttonStyle(.plain)
+            if let relativeKey = headerDateRelativeKey(for: viewModel.selectedDate) {
+                Text(relativeKey)
+                    .font(.title2.bold())
+            } else {
+                Text(formattedHeaderDate(for: viewModel.selectedDate, locale: locale))
+                    .font(.title2.bold())
             }
+            CalendarStripView(
+                dates: viewModel.calendarDates,
+                selectedDate: viewModel.selectedDate,
+                locale: locale,
+                onSelect: { date in
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        viewModel.selectDate(date)
+                    }
+                },
+                onPreviousWeek: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        viewModel.showPreviousWeek()
+                    }
+                    Haptics.impact()
+                },
+                onNextWeek: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        viewModel.showNextWeek()
+                    }
+                    Haptics.impact()
+                }
+            )
         }
     }
     
@@ -696,7 +678,21 @@ private let dayFormatter: DateFormatter = {
     return formatter
 }()
 
-private func headerDateLabel(for date: Date, locale: Locale) -> String {
+private func headerDateRelativeKey(for date: Date) -> LocalizedStringKey? {
+    let calendar = Calendar.current
+    if calendar.isDateInToday(date) {
+        return LocalizedStringKey("taskBoard.header.today")
+    }
+    if calendar.isDateInYesterday(date) {
+        return LocalizedStringKey("taskBoard.header.yesterday")
+    }
+    if calendar.isDateInTomorrow(date) {
+        return LocalizedStringKey("taskBoard.header.tomorrow")
+    }
+    return nil
+}
+
+private func formattedHeaderDate(for date: Date, locale: Locale) -> String {
     let formatter = DateFormatter()
     formatter.locale = locale
     if locale.languageCode?.hasPrefix("zh") == true {
@@ -705,4 +701,100 @@ private func headerDateLabel(for date: Date, locale: Locale) -> String {
         formatter.dateFormat = "MMM d"
     }
     return formatter.string(from: date)
+}
+
+private enum Haptics {
+#if os(iOS)
+    static func impact() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+#else
+    static func impact() {}
+#endif
+}
+
+private struct CalendarStripView: View {
+    let dates: [Date]
+    let selectedDate: Date
+    let locale: Locale
+    let onSelect: (Date) -> Void
+    let onPreviousWeek: () -> Void
+    let onNextWeek: () -> Void
+    @State private var pageSelection: Int = 1
+    
+    var body: some View {
+        if dates.isEmpty {
+            EmptyView()
+                .frame(height: 80)
+        } else {
+            TabView(selection: $pageSelection) {
+                weekView(for: weekDates(offset: -7))
+                    .tag(0)
+                weekView(for: dates)
+                    .tag(1)
+                weekView(for: weekDates(offset: 7))
+                    .tag(2)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 80)
+            .onAppear {
+                pageSelection = 1
+            }
+            .onChange(of: dates.first) { _ in
+                pageSelection = 1
+            }
+            .onChange(of: pageSelection) { newValue in
+                switch newValue {
+                case 0:
+                    onPreviousWeek()
+                    pageSelection = 1
+                case 2:
+                    onNextWeek()
+                    pageSelection = 1
+                default:
+                    break
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func weekView(for week: [Date]) -> some View {
+        HStack(spacing: 12) {
+            ForEach(week, id: \.self) { date in
+                Button {
+                    onSelect(date)
+                } label: {
+                    VStack(spacing: 4) {
+                        Text(weekdayText(for: date, locale: locale))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(dayFormatter.string(from: date))
+                            .font(.body.bold())
+                    }
+                    .frame(width: 48, height: 64)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Calendar.current.isDate(date, inSameDayAs: selectedDate) ? Color.accentColor.opacity(0.2) : Color(.secondarySystemGroupedBackground))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Calendar.current.isDate(date, inSameDayAs: selectedDate) ? Color.accentColor : Color.clear, lineWidth: 2)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+    }
+    
+    private func weekDates(offset: Int) -> [Date] {
+        guard let anchor = dates.first,
+              let start = Calendar.current.date(byAdding: .day, value: offset, to: anchor) else {
+            return []
+        }
+        return (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: start) }
+    }
 }

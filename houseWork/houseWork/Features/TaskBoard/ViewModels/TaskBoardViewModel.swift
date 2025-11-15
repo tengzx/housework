@@ -24,7 +24,7 @@ final class TaskBoardViewModel: ObservableObject {
     @Published private(set) var sections: [TaskSection] = []
     @Published private(set) var filteredTasks: [TaskItem] = []
     @Published private(set) var isLoading: Bool = true
-    @Published private(set) var calendarStartDate: Date
+    @Published private(set) var calendarStartOfWeek: Date
     @Published var selectedDate: Date {
         didSet { recalculateSections() }
     }
@@ -52,7 +52,7 @@ final class TaskBoardViewModel: ObservableObject {
         self.tagStore = tagStore
         self.memberDirectory = memberDirectory
         self.selectedDate = today
-        self.calendarStartDate = Calendar.current.startOfWeek(for: today) ?? today
+        self.calendarStartOfWeek = Calendar.current.startOfWeek(for: today) ?? today
         bind()
         recalculateSections()
     }
@@ -98,25 +98,11 @@ final class TaskBoardViewModel: ObservableObject {
     
     func selectDate(_ date: Date) {
         selectedDate = date
-        if !calendarDates.contains(where: { Calendar.current.isDate($0, inSameDayAs: date) }) {
-            calendarStartDate = Calendar.current.startOfWeek(for: date) ?? calendarStartDate
-        }
+        calendarStartOfWeek = Calendar.current.startOfWeek(for: date) ?? calendarStartOfWeek
     }
     
     func isSelected(date: Date) -> Bool {
         Calendar.current.isDate(date, inSameDayAs: selectedDate)
-    }
-    
-    func showPreviousWeek() {
-        guard let newStart = Calendar.current.date(byAdding: .day, value: -7, to: calendarStartDate) else { return }
-        calendarStartDate = newStart
-        selectedDate = newStart
-    }
-    
-    func showNextWeek() {
-        guard let newStart = Calendar.current.date(byAdding: .day, value: 7, to: calendarStartDate) else { return }
-        calendarStartDate = newStart
-        selectedDate = newStart
     }
     
     private func bind() {
@@ -203,7 +189,17 @@ final class TaskBoardViewModel: ObservableObject {
     
     var calendarDates: [Date] {
         let calendar = Calendar.current
-        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: calendarStartDate) }
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: calendarStartOfWeek) }
+    }
+    
+    func showPreviousWeek() {
+        guard let newStart = Calendar.current.date(byAdding: .day, value: -7, to: calendarStartOfWeek) else { return }
+        calendarStartOfWeek = newStart
+    }
+    
+    func showNextWeek() {
+        guard let newStart = Calendar.current.date(byAdding: .day, value: 7, to: calendarStartOfWeek) else { return }
+        calendarStartOfWeek = newStart
     }
 }
 
