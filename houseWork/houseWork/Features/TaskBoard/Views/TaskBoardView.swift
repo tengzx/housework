@@ -761,33 +761,55 @@ private struct CalendarStripView: View {
     
     @ViewBuilder
     private func weekView(for week: [Date]) -> some View {
-        HStack(spacing: 12) {
-            ForEach(week, id: \.self) { date in
-                Button {
-                    onSelect(date)
-                } label: {
-                    VStack(spacing: 4) {
-                        Text(weekdayText(for: date, locale: locale))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(dayFormatter.string(from: date))
-                            .font(.body.bold())
+        GeometryReader { proxy in
+            let spacing: CGFloat = 12
+            let horizontalInset: CGFloat = 16
+            let columns = CGFloat(max(week.count, 1))
+            let availableWidth = max(proxy.size.width - (horizontalInset * 2), 0)
+            let baseWidth = max(
+                (availableWidth - spacing * CGFloat(max(0, week.count - 1))) / columns,
+                0
+            )
+            let cellWidth = min(56, baseWidth)
+            
+            HStack(spacing: spacing) {
+                ForEach(week, id: \.self) { date in
+                    Button {
+                        onSelect(date)
+                    } label: {
+                        let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDate)
+                        let isToday = Calendar.current.isDateInToday(date)
+                        
+                        VStack(spacing: 4) {
+                            Text(weekdayText(for: date, locale: locale))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(dayFormatter.string(from: date))
+                                .font(.body)
+                                .fontWeight(isToday ? .bold : .regular)
+                                .foregroundStyle(isToday ? Color.primary : Color.secondary)
+                        }
+                        .frame(width: cellWidth, height: 64)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(isSelected ? Color(.systemGray5) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(
+                                    borderColor(isSelected: isSelected, isToday: isToday),
+                                    lineWidth: borderWidth(isSelected: isSelected, isToday: isToday)
+                                )
+                        )
                     }
-                    .frame(width: 48, height: 64)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Calendar.current.isDate(date, inSameDayAs: selectedDate) ? Color.accentColor.opacity(0.2) : Color(.secondarySystemGroupedBackground))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Calendar.current.isDate(date, inSameDayAs: selectedDate) ? Color.accentColor : Color.clear, lineWidth: 2)
-                    )
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .padding(.horizontal, horizontalInset)
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .frame(height: 80)
     }
     
     private func weekDates(offset: Int) -> [Date] {
@@ -796,5 +818,25 @@ private struct CalendarStripView: View {
             return []
         }
         return (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: start) }
+    }
+    
+    private func borderColor(isSelected: Bool, isToday: Bool) -> Color {
+        if isSelected {
+            return Color.clear
+        }
+        if isToday {
+            return Color.accentColor.opacity(0.3)
+        }
+        return Color.clear
+    }
+    
+    private func borderWidth(isSelected: Bool, isToday: Bool) -> CGFloat {
+        if isSelected {
+            return 0
+        }
+        if isToday {
+            return 1
+        }
+        return 0
     }
 }
