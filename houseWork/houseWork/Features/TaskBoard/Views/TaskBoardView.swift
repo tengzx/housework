@@ -119,6 +119,7 @@ struct TaskBoardView: View {
     
     private var floatingAddButton: some View {
         Button {
+            Haptics.impact()
             viewModel.presentComposer()
         } label: {
             Image(systemName: "plus")
@@ -703,17 +704,6 @@ private func formattedHeaderDate(for date: Date, locale: Locale) -> String {
     return formatter.string(from: date)
 }
 
-private enum Haptics {
-#if os(iOS)
-    static func impact() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
-    }
-#else
-    static func impact() {}
-#endif
-}
-
 private struct CalendarStripView: View {
     let dates: [Date]
     let selectedDate: Date
@@ -775,6 +765,7 @@ private struct CalendarStripView: View {
             HStack(spacing: spacing) {
                 ForEach(week, id: \.self) { date in
                     Button {
+                        Haptics.impact()
                         onSelect(date)
                     } label: {
                         let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDate)

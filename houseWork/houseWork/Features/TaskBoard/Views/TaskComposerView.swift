@@ -18,7 +18,7 @@ struct TaskComposerView: View {
     @State private var roomTag: String = "General"
     @State private var selectingTag = false
     @State private var score: Int = 10
-    @State private var dueDate: Date = Date().addingTimeInterval(60 * 60 * 24)
+    @State private var dueDate: Date = Date()
     @State private var estimatedMinutes: Int = 30
     @State private var isSaving = false
     @State private var localError: String?

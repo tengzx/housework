@@ -13,7 +13,10 @@ struct FilterChip: View {
     let action: () -> Void
     
     var body: some View {
-        Button(action: action) {
+        Button {
+            Haptics.impact()
+            action()
+        } label: {
             Text(label)
                 .font(.caption)
                 .padding(.horizontal, 12)

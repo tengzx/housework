@@ -11,7 +11,7 @@ import SwiftUI
 
 @MainActor
 final class TaskBoardViewModel: ObservableObject {
-    @Published var selectedFilter: TaskBoardFilter = .all {
+    @Published var selectedFilter: TaskBoardFilter = .mine {
         didSet { recalculateSections() }
     }
     @Published var selectedStatus: TaskStatus? {
@@ -248,8 +248,9 @@ private extension StatusSegment {
 
 private extension Calendar {
     func startOfWeek(for date: Date) -> Date? {
-        var components = dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
-        components.weekday = firstWeekday
-        return self.date(from: components)
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = self.timeZone
+        calendar.locale = self.locale
+        return calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date))
     }
 }

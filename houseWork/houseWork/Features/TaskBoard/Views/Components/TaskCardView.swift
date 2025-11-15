@@ -101,7 +101,10 @@ private struct TaskCardButtonView: View {
     let configuration: TaskCardButton
     
     var body: some View {
-        Button(action: configuration.action) {
+        Button {
+            Haptics.impact()
+            configuration.action()
+        } label: {
             Label(configuration.title, systemImage: configuration.systemImage)
                 .font(.subheadline.bold())
                 .padding(.vertical, 8)

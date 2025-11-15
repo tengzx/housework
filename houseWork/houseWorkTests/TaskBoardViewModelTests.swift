@@ -54,12 +54,12 @@ final class TaskBoardViewModelTests: XCTestCase {
             memberDirectory: memberDirectory
         )
         
-        XCTAssertEqual(viewModel.filteredTasks.count, 2)
-        
-        viewModel.selectedFilter = .mine
-        
+        XCTAssertEqual(viewModel.selectedFilter, .mine)
         XCTAssertEqual(viewModel.filteredTasks.count, 1)
         XCTAssertEqual(viewModel.filteredTasks.first?.title, "My Task")
+        
+        viewModel.selectedFilter = .all
+        XCTAssertEqual(viewModel.filteredTasks.count, 2)
     }
     
     @MainActor
@@ -88,6 +88,27 @@ final class TaskBoardViewModelTests: XCTestCase {
         XCTAssertTrue(Calendar.current.isDate(viewModel.selectedDate, inSameDayAs: reference))
         let expectedWeekStart = Calendar.current.date(byAdding: .day, value: -7, to: initialWeekStart)!
         XCTAssertTrue(Calendar.current.isDate(viewModel.calendarStartOfWeek, inSameDayAs: expectedWeekStart))
+    }
+    
+    @MainActor
+    func testCalendarWeekStartsOnMonday() {
+        let viewModel = makeViewModel()
+        let reference = referenceDate(year: 2024, month: 3, day: 8)
+        viewModel.selectDate(reference)
+        
+        guard let first = viewModel.calendarDates.first,
+              let last = viewModel.calendarDates.last else {
+            XCTFail("Expected full week of dates")
+            return
+        }
+        
+        let calendar = Calendar(identifier: .gregorian)
+        XCTAssertEqual(calendar.component(.weekday, from: first), 2)
+        XCTAssertEqual(calendar.component(.weekday, from: last), 1)
+    }
+    
+    func testFilterOrderPlacesMineFirst() {
+        XCTAssertEqual(TaskBoardFilter.allCases, [.mine, .all, .unassigned])
     }
     
     @MainActor

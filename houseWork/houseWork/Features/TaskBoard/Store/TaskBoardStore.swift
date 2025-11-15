@@ -106,7 +106,7 @@ final class TaskBoardStore: ObservableObject {
             title: template.title,
             details: template.details,
             status: .backlog,
-            dueDate: Date().addingTimeInterval(60 * 60 * 24),
+            dueDate: Date(),
             score: template.baseScore,
             roomTag: template.tags.first ?? "General",
             assignedMembers: member.map { [$0] } ?? [],

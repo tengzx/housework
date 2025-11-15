@@ -16,7 +16,7 @@ struct ChoreCatalogView: View {
     @State private var showFormSheet = false
     @State private var draft = ChoreTemplateDraft()
     @State private var editingTemplate: ChoreTemplate?
-    @State private var successMessage: String?
+    @State private var successMessage: LocalizedStringKey?
     @State private var showSuccessBanner = false
     @State private var alertMessage: String?
     @FocusState private var isSearchFieldFocused: Bool
@@ -40,9 +40,9 @@ struct ChoreCatalogView: View {
                 .padding(.top, 16)
                 .overlay(alignment: .top) {
                     if showSuccessBanner, let message = successMessage {
-                        SuccessBanner(message: message)
-                            .padding(.top, 8)
-                    }
+                    SuccessBanner(message: message)
+                        .padding(.top, 8)
+                }
                 }
                 floatingAddButton
             }
@@ -110,6 +110,7 @@ struct ChoreCatalogView: View {
 
     private var floatingAddButton: some View {
         Button {
+            Haptics.impact()
             presentCreateForm()
         } label: {
             Image(systemName: "plus")
@@ -223,16 +224,9 @@ struct ChoreCatalogView: View {
             guard succeeded else { return }
             await MainActor.run {
                 if let user = authStore.currentUser {
-            successMessage = String(
-                format: String(localized: "catalog.success.assigned"),
-                template.title,
-                user.name
-            )
+                    successMessage = LocalizedStringKey("catalog.success.assigned \(template.title) \(user.name)")
                 } else {
-            successMessage = String(
-                format: String(localized: "catalog.success.added"),
-                template.title
-            )
+                    successMessage = LocalizedStringKey("catalog.success.added \(template.title)")
                 }
                 withAnimation(.spring()) {
                     showSuccessBanner = true
@@ -261,7 +255,7 @@ struct ChoreCatalogView_Previews: PreviewProvider {
 }
 
 private struct SuccessBanner: View {
-    let message: String
+    let message: LocalizedStringKey
     
     var body: some View {
         Text(message)

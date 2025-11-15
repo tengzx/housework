@@ -44,9 +44,13 @@ enum TaskStatus: String, CaseIterable, Identifiable {
 }
 
 enum TaskBoardFilter: String, CaseIterable, Identifiable {
-    case all
     case mine
+    case all
     case unassigned
+    
+    static var allCases: [TaskBoardFilter] {
+        [.mine, .all, .unassigned]
+    }
     
     var id: String { rawValue }
     

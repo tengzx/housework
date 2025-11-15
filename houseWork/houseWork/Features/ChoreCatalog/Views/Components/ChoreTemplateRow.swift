@@ -43,7 +43,10 @@ struct ChoreTemplateRow: View {
             
             VStack(alignment: .trailing, spacing: 10) {
                 ScoreBadge(score: template.baseScore)
-                Button(action: onAddToBoard) {
+                Button {
+                    Haptics.impact()
+                    onAddToBoard()
+                } label: {
                     Label(LocalizedStringKey("catalog.action.addToBoard"), systemImage: "plus.circle.fill")
                         .font(.footnote.bold())
                         .padding(.vertical, 8)

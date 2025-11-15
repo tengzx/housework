@@ -33,6 +33,10 @@ The SwiftUI app lives in `houseWork/`, with `houseWorkApp.swift` bootstrapping t
 Use Xcode for day-to-day iteration: `xed houseWork.xcodeproj`. Continuous builds should rely on `xcodebuild -scheme houseWork -destination 'platform=iOS Simulator,name=iPhone 15' build` to surface compiler warnings reproducibly. Run the whole test suite with `xcodebuild -scheme houseWork -destination 'platform=iOS Simulator,name=iPhone 15' test`. When you need a clean slate before debugging provisioning or asset issues, run `xcodebuild clean -scheme houseWork`.
 The app must stay compatible with iOS 15, so avoid APIs or deployment-target changes that drop support for that OS unless explicitly approved.
 
+## Must-Follow Interaction Rules
+- Every tappable control must call the shared `Haptics.impact()` helper (light style) before executing its action so button taps always produce a subtle vibration.
+- All user-facing strings must be sourced from `Localizable.strings` and rendered via `LocalizedStringKey` (or `String(localized:)` when formatting is unavoidable). Reusable components should receive `LocalizedStringKey` inputs so localization never regresses.
+
 ## Coding Style & Naming Conventions
 Follow standard Swift style: 4-space indentation, braces on the same line, and 120-character line guidance. Types, views, and protocols use UpperCamelCase (e.g., `TasksDashboardView`); functions, properties, and local variables use lowerCamelCase. Derive view file names from the main type (`TaskRow.swift` defines `TaskRow`). Prefer `struct` + `View` for SwiftUI components, keep modifiers readable by grouping related ones, and extract reusable styling into extensions under an adjacent `Modifiers` or `Components` subfolder when it improves clarity.
 
