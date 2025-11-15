@@ -38,6 +38,7 @@ struct LoginView: View {
             
             VStack(spacing: 12) {
                 Button {
+                    Haptics.impact()
                     Task { await viewModel.performPrimaryAction() }
                 } label: {
                     if viewModel.isProcessing {
@@ -55,11 +56,25 @@ struct LoginView: View {
                 .disabled(!viewModel.isFormValid || viewModel.isProcessing)
                 
                 Button {
+                    Haptics.impact()
                     viewModel.toggleMode()
                 } label: {
                     Text(viewModel.mode == .signIn ? LocalizedStringKey("login.button.toggle.toSignUp") : LocalizedStringKey("login.button.toggle.toSignIn"))
                         .font(.footnote)
                 }
+
+#if canImport(UIKit)
+                Button {
+                    Haptics.impact()
+                    Task { await viewModel.signInWithGoogle() }
+                } label: {
+                    Label(LocalizedStringKey("login.button.google"), systemImage: "g.circle.fill")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isProcessing)
+#endif
             }
             .padding(.horizontal)
             

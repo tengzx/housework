@@ -123,11 +123,7 @@ private struct AvatarCircle: View {
     let member: HouseholdMember
     
     var body: some View {
-        Text(member.initials)
-            .font(.subheadline.bold())
-            .foregroundColor(.white)
-            .frame(width: 36, height: 36)
-            .background(member.avatarColor, in: Circle())
+        MemberAvatarView(member: member, size: 36)
     }
 }
 

@@ -154,11 +154,7 @@ struct MemberAvatarStack: View {
             } else {
                 ForEach(Array(members.prefix(3)).indices, id: \.self) { index in
                     let member = members[index]
-                    Text(member.initials)
-                        .font(.caption.bold())
-                        .foregroundColor(.white)
-                        .frame(width: 32, height: 32)
-                        .background(member.avatarColor, in: Circle())
+                    MemberAvatarView(member: member, size: 32)
                         .overlay(Circle().stroke(Color.white, lineWidth: 2))
                         .zIndex(Double(members.count - index))
                 }

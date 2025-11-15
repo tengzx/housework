@@ -15,6 +15,8 @@
 "login.button.primary.signUp" = "注册";
 "login.button.toggle.toSignUp" = "需要账号？立即注册";
 "login.button.toggle.toSignIn" = "已有账号？立即登录";
+"login.button.google" = "使用 Google 登录";
+"login.error.noPresenter" = "无法启动 Google 登录。";
 
 "taskBoard.error.title" = "任务面板错误";
 "taskBoard.loading" = "正在加载任务…";

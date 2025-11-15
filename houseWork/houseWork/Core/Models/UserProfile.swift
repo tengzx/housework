@@ -13,13 +13,15 @@ struct UserProfile: Equatable {
     var email: String
     var accentColor: Color
     var memberId: String
+    var avatarURL: URL?
     
-    init(id: String, name: String, email: String, accentColor: Color, memberId: String) {
+    init(id: String, name: String, email: String, accentColor: Color, memberId: String, avatarURL: URL? = nil) {
         self.id = id
         self.name = name
         self.email = email
         self.accentColor = accentColor
         self.memberId = memberId
+        self.avatarURL = avatarURL
     }
 }
 
@@ -30,7 +32,9 @@ extension UserProfile {
         let colorHex = data["avatarColor"] as? String ?? data["accentColor"] as? String ?? data["color"] as? String
         let color = colorHex.flatMap(Color.init(hex:)) ?? .blue
         let memberId = data["memberId"] as? String ?? UUID().uuidString
-        self.init(id: id, name: name, email: email, accentColor: color, memberId: memberId)
+        let avatarURLString = data["avatarURL"] as? String
+        let avatarURL = avatarURLString.flatMap { URL(string: $0) }
+        self.init(id: id, name: name, email: email, accentColor: color, memberId: memberId, avatarURL: avatarURL)
     }
     
     var firestoreData: [String: Any] {
@@ -44,6 +48,9 @@ extension UserProfile {
             payload["avatarColor"] = hex
             payload["accentColor"] = hex
         }
+        if let avatarURL {
+            payload["avatarURL"] = avatarURL.absoluteString
+        }
         return payload
     }
     
@@ -53,6 +60,6 @@ extension UserProfile {
     
     func asHouseholdMember(fallbackId: UUID) -> HouseholdMember {
         let identifier = memberUUID ?? fallbackId
-        return HouseholdMember(id: identifier, name: name, initials: HouseholdMember.initials(from: name), accentColor: accentColor)
+        return HouseholdMember(id: identifier, name: name, initials: HouseholdMember.initials(from: name), accentColor: accentColor, avatarURL: avatarURL)
     }
 }

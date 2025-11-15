@@ -41,11 +41,7 @@ struct LeaderboardRow: View {
                 .font(.headline)
                 .frame(width: 28)
                 .foregroundStyle(rank == 1 ? Color.accentColor : .secondary)
-            Text(performance.member.initials)
-                .font(.subheadline.bold())
-                .foregroundColor(.white)
-                .frame(width: 40, height: 40)
-                .background(performance.member.avatarColor, in: Circle())
+            MemberAvatarView(member: performance.member, size: 40)
             VStack(alignment: .leading, spacing: 4) {
                 Text(performance.member.name)
                     .font(.subheadline.bold())

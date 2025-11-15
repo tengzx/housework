@@ -7,6 +7,9 @@
 
 import Foundation
 import Combine
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
 final class LoginViewModel: ObservableObject {
@@ -51,6 +54,16 @@ final class LoginViewModel: ObservableObject {
         authStore.authError = nil
         errorMessage = nil
     }
+    
+#if canImport(UIKit)
+    func signInWithGoogle() async {
+        guard let controller = UIApplication.shared.topMostViewController() else {
+            errorMessage = String(localized: "login.error.noPresenter")
+            return
+        }
+        await authStore.signInWithGoogle(presenting: controller)
+    }
+#endif
     
     private func bind() {
         authStore.$isProcessing

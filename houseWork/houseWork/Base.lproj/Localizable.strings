@@ -15,6 +15,8 @@
 "login.button.primary.signUp" = "Sign Up";
 "login.button.toggle.toSignUp" = "Need an account? Sign up";
 "login.button.toggle.toSignIn" = "Already have an account? Sign in";
+"login.button.google" = "Continue with Google";
+"login.error.noPresenter" = "Unable to start Google sign-in.";
 
 "taskBoard.error.title" = "Task Board Error";
 "taskBoard.loading" = "Loading tasks…";

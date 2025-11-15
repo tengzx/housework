@@ -7,11 +7,23 @@
 
 import Foundation
 import FirebaseAuth
+import FirebaseCore
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct AuthSession {
     let userId: String
     let displayName: String?
     let email: String?
+    let photoURL: URL?
+    
+    init(userId: String, displayName: String?, email: String?, photoURL: URL? = nil) {
+        self.userId = userId
+        self.displayName = displayName
+        self.email = email
+        self.photoURL = photoURL
+    }
 }
 
 protocol AuthenticationService {
@@ -20,6 +32,7 @@ protocol AuthenticationService {
     func signUp(name: String, email: String, password: String) async throws -> AuthSession
     func signOut() throws
     func updateDisplayName(_ name: String) async throws
+    func signInWithGoogle(presenting viewController: UIViewController?) async throws -> AuthSession
 }
 
 final class FirebaseAuthenticationService: AuthenticationService {
@@ -52,6 +65,9 @@ final class FirebaseAuthenticationService: AuthenticationService {
     
     func signOut() throws {
         try auth.signOut()
+#if canImport(GoogleSignIn)
+        GIDSignIn.sharedInstance.signOut()
+#endif
     }
     
     func updateDisplayName(_ name: String) async throws {
@@ -59,6 +75,31 @@ final class FirebaseAuthenticationService: AuthenticationService {
         let changeRequest = user.createProfileChangeRequest()
         changeRequest.displayName = name
         try await changeRequest.commitChanges()
+    }
+
+    func signInWithGoogle(presenting viewController: UIViewController?) async throws -> AuthSession {
+#if os(iOS)
+        let provider = OAuthProvider(providerID: "google.com", auth: auth)
+        provider.scopes = ["profile", "email"]
+        provider.customParameters = ["prompt": "select_account"]
+        let credential = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AuthCredential, Error>) in
+            provider.getCredentialWith(nil) { credential, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let credential else {
+                    continuation.resume(throwing: AuthenticationServiceError.missingCredential)
+                    return
+                }
+                continuation.resume(returning: credential)
+            }
+        }
+        let authResult = try await auth.signIn(with: credential)
+        return AuthSession(user: authResult.user)
+#else
+        throw AuthenticationServiceError.googleSignInUnavailable
+#endif
     }
 }
 
@@ -87,6 +128,7 @@ extension AuthSession {
         self.userId = user.uid
         self.displayName = user.displayName
         self.email = user.email
+        self.photoURL = user.photoURL
     }
 }
 
@@ -118,14 +160,14 @@ final class InMemoryAuthenticationService: AuthenticationService {
         guard let stored = credentials[email.lowercased()], stored.password == password else {
             throw AuthError.invalidCredentials
         }
-        let session = AuthSession(userId: UUID().uuidString, displayName: stored.displayName, email: email)
+        let session = AuthSession(userId: UUID().uuidString, displayName: stored.displayName, email: email, photoURL: nil)
         currentSession = session
         return session
     }
     
     func signUp(name: String, email: String, password: String) async throws -> AuthSession {
         credentials[email.lowercased()] = (password, name)
-        let session = AuthSession(userId: UUID().uuidString, displayName: name, email: email)
+        let session = AuthSession(userId: UUID().uuidString, displayName: name, email: email, photoURL: nil)
         currentSession = session
         return session
     }
@@ -136,10 +178,46 @@ final class InMemoryAuthenticationService: AuthenticationService {
     
     func updateDisplayName(_ name: String) async throws {
         guard let session = currentSession else { return }
-        currentSession = AuthSession(userId: session.userId, displayName: name, email: session.email)
+        currentSession = AuthSession(userId: session.userId, displayName: name, email: session.email, photoURL: session.photoURL)
     }
+
+#if canImport(UIKit)
+    func signInWithGoogle(presenting viewController: UIViewController?) async throws -> AuthSession {
+        let session = AuthSession(
+            userId: UUID().uuidString,
+            displayName: "Google User",
+            email: "google-user@example.com",
+            photoURL: nil
+        )
+        currentSession = session
+        return session
+    }
+#endif
     
     private func notifyListeners() {
         listeners.values.forEach { $0(currentSession) }
+    }
+}
+
+enum AuthenticationServiceError: LocalizedError {
+    case missingClientID
+    case missingPresentingController
+    case missingIDToken
+    case googleSignInUnavailable
+    case missingCredential
+    
+    var errorDescription: String? {
+        switch self {
+        case .missingClientID:
+            return "Missing Google client configuration."
+        case .missingPresentingController:
+            return "Unable to present Google sign-in."
+        case .missingIDToken:
+            return "Google sign-in did not return a valid token."
+        case .googleSignInUnavailable:
+            return "Google sign-in is not available on this platform."
+        case .missingCredential:
+            return "Unable to obtain Google credentials."
+        }
     }
 }

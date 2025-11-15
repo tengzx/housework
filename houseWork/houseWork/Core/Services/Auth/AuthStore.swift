@@ -8,6 +8,9 @@
 import Foundation
 import SwiftUI
 import Combine
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
 final class AuthStore: ObservableObject {
@@ -91,6 +94,24 @@ final class AuthStore: ObservableObject {
         }
         isProcessing = false
     }
+
+#if canImport(UIKit)
+    func signInWithGoogle(presenting viewController: UIViewController?) async {
+        isProcessing = true
+        authError = nil
+        do {
+            let session = try await authService.signInWithGoogle(presenting: viewController)
+            firebaseUserId = session.userId
+            currentEmail = session.email
+            defaults.set(session.userId, forKey: storedUserIdKey)
+            await loadProfile(for: session)
+            didProcessInitialSession = true
+        } catch {
+            authError = error.localizedDescription
+        }
+        isProcessing = false
+    }
+#endif
     
     private func handleSessionChange(_ session: AuthSession?) async {
         isLoading = false
@@ -160,6 +181,10 @@ final class AuthStore: ObservableObject {
                     existing.memberId = identifier.uuidString
                     requiresSave = true
                 }
+                if existing.avatarURL == nil, let photo = session.photoURL {
+                    existing.avatarURL = photo
+                    requiresSave = true
+                }
                 if requiresSave {
                     try await profileService.saveProfile(existing)
                 }
@@ -191,7 +216,7 @@ final class AuthStore: ObservableObject {
         let colorIndex = abs(session.userId.hashValue) % max(colors.count, 1)
         let selectedColor = colors[colorIndex]
         let identifier = memberIdentifier(for: session.userId)
-        return UserProfile(id: session.userId, name: name, email: email, accentColor: selectedColor, memberId: identifier.uuidString)
+        return UserProfile(id: session.userId, name: name, email: email, accentColor: selectedColor, memberId: identifier.uuidString, avatarURL: session.photoURL)
     }
     
     private func apply(profile: UserProfile, userId: String) {

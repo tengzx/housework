@@ -434,11 +434,7 @@ private struct TaskDetailView: View {
                         } else {
                             ForEach(task.assignedMembers, id: \.id) { member in
                                 HStack(spacing: 12) {
-                                    Text(member.initials)
-                                        .font(.subheadline.bold())
-                                        .foregroundColor(.white)
-                                        .frame(width: 36, height: 36)
-                                        .background(member.avatarColor, in: Circle())
+                                    MemberAvatarView(member: member, size: 36)
                                     VStack(alignment: .leading) {
                                         Text(member.name)
                                             .font(.subheadline)

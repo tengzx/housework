@@ -12,12 +12,14 @@ struct HouseholdMember: Identifiable, Hashable {
     var name: String
     var initials: String
     var accentColor: Color
+    var avatarURL: URL?
     
-    init(id: UUID = UUID(), name: String, initials: String? = nil, accentColor: Color) {
+    init(id: UUID = UUID(), name: String, initials: String? = nil, accentColor: Color, avatarURL: URL? = nil) {
         self.id = id
         self.name = name
         self.initials = initials ?? HouseholdMember.initials(from: name)
         self.accentColor = accentColor
+        self.avatarURL = avatarURL
     }
     
     static func initials(from name: String) -> String {
