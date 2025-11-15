@@ -12,12 +12,9 @@ import Combine
 @MainActor
 final class UserProfileViewModel: ObservableObject {
     @Published var name: String
-    @Published var selectedColor: Color
     @Published private(set) var email: String
     @Published private(set) var isSaving = false
     @Published var errorMessage: String?
-    
-    let colorOptions: [Color] = HouseholdMember.defaultAvatarColors
     
     private let authStore: AuthStore
     private var cancellables: Set<AnyCancellable> = []
@@ -26,7 +23,6 @@ final class UserProfileViewModel: ObservableObject {
         self.authStore = authStore
         let profile = authStore.userProfile
         self.name = profile?.name ?? authStore.currentUser?.name ?? ""
-        self.selectedColor = profile?.accentColor ?? authStore.currentUser?.accentColor ?? .blue
         self.email = profile?.email ?? authStore.currentEmail ?? ""
         bind()
     }
@@ -43,7 +39,7 @@ final class UserProfileViewModel: ObservableObject {
         }
         isSaving = true
         errorMessage = nil
-        let success = await authStore.updateProfile(name: trimmed, accentColor: selectedColor)
+        let success = await authStore.updateProfile(name: trimmed, accentColor: authStore.userProfile?.accentColor ?? authStore.currentUser?.accentColor ?? .blue)
         isSaving = false
         if !success {
             errorMessage = authStore.authError ?? String(localized: "userProfile.error.saveFailed")
@@ -58,7 +54,6 @@ final class UserProfileViewModel: ObservableObject {
                 guard let self, let profile else { return }
                 self.name = profile.name
                 self.email = profile.email
-                self.selectedColor = profile.accentColor
             }
             .store(in: &cancellables)
         
@@ -69,5 +64,9 @@ final class UserProfileViewModel: ObservableObject {
                 self.email = email
             }
             .store(in: &cancellables)
+    }
+    
+    func logout() {
+        authStore.logout()
     }
 }

@@ -32,11 +32,15 @@ struct ContentView: View {
         Group {
             switch viewModel.presentationState {
             case .loadingAccount:
-                ProgressView(LocalizedStringKey("loading.account"))
+                LoadingSplashView(message: LocalizedStringKey("loading.account"))
             case .authentication:
-                LoginView(viewModel: viewModel.loginViewModel)
+                if viewModel.authStore.isProcessing {
+                    LoadingSplashView(message: LocalizedStringKey("loading.account"))
+                } else {
+                    LoginView(viewModel: viewModel.loginViewModel)
+                }
             case .loadingHousehold:
-                ProgressView(LocalizedStringKey("loading.household"))
+                LoadingSplashView(message: LocalizedStringKey("loading.household"))
             case .needsHousehold:
                 HouseholdSetupView()
             case .dashboard:
@@ -69,6 +73,40 @@ struct ContentView: View {
         .environment(\.locale, languageStore.locale)
         .onAppear {
             viewModel.onAppear()
+        }
+    }
+}
+
+private struct LoadingSplashView: View {
+    let message: LocalizedStringKey
+    
+    var body: some View {
+        ZStack {
+            Image("loading")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+            
+            VStack(spacing: 16) {
+                Spacer()
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(.white)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundColor(.white)
+                Spacer().frame(height: 40)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 40)
+            .background(
+                LinearGradient(
+                    colors: [Color.black.opacity(0.6), Color.clear],
+                    startPoint: .bottom,
+                    endPoint: .top
+                )
+                .ignoresSafeArea(edges: .bottom)
+            )
         }
     }
 }

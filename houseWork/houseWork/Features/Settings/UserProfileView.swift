@@ -24,39 +24,22 @@ struct UserProfileView: View {
                 }
             }
             
-            Section(LocalizedStringKey("userProfile.section.avatar")) {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-                    ForEach(Array(viewModel.colorOptions.enumerated()), id: \.offset) { entry in
-                        let color = entry.element
-                        let isSelected = color.hexString == viewModel.selectedColor.hexString
-                        Button {
-                            viewModel.selectedColor = color
-                        } label: {
-                            Circle()
-                                .fill(color)
-                                .frame(width: 44, height: 44)
-                                .overlay {
-                                    if isSelected {
-                                        Image(systemName: "checkmark")
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                                .overlay(
-                                    Circle().stroke(Color.primary.opacity(isSelected ? 0.6 : 0.1), lineWidth: isSelected ? 2 : 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(LocalizedStringKey("userProfile.avatarColorOption"))
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            
             if let error = viewModel.errorMessage {
                 Section {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.red)
+                }
+            }
+            
+            Section {
+                Button(role: .destructive) {
+                    Haptics.impact()
+                    viewModel.logout()
+                    dismiss()
+                } label: {
+                    Text(LocalizedStringKey("settings.account.logout"))
+                        .frame(maxWidth: .infinity)
                 }
             }
         }

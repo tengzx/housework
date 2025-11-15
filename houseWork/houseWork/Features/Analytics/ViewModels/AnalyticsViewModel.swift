@@ -94,6 +94,7 @@ final class AnalyticsViewModel: ObservableObject {
             for member in task.assignedMembers {
                 let matchIndex = accumulators.firstIndex(where: { $0.member.matches(member) })
                 var entry = matchIndex.map { accumulators[$0] } ?? MemberAccumulator(member: member, bucketCount: buckets.count)
+                entry.member = member
                 if let bucketIndex {
                     entry.bucketCounts[bucketIndex] += 1
                     if bucketIndex == buckets.count - 1 {
@@ -160,7 +161,7 @@ final class AnalyticsViewModel: ObservableObject {
 // MARK: - Supporting Types
 
 private struct MemberAccumulator {
-    let member: HouseholdMember
+    var member: HouseholdMember
     var tasksCompleted: Int = 0
     var pointsEarned: Int = 0
     var minutesLogged: Int = 0

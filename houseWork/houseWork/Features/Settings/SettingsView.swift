@@ -38,16 +38,10 @@ struct SettingsView: View {
                                 }
                             }
                         }
-                        Button(LocalizedStringKey("settings.account.logout")) { authStore.logout() }
-                            .buttonStyle(.bordered)
                     } else {
                         Text(LocalizedStringKey("settings.account.notSignedIn"))
                             .foregroundStyle(.secondary)
                     }
-                    
-                    Text(LocalizedStringKey("settings.account.authDescription"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 
                 Section(LocalizedStringKey("settings.section.household")) {

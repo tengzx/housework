@@ -155,7 +155,6 @@ struct MemberAvatarStack: View {
                 ForEach(Array(members.prefix(3)).indices, id: \.self) { index in
                     let member = members[index]
                     MemberAvatarView(member: member, size: 32)
-                        .overlay(Circle().stroke(Color.white, lineWidth: 2))
                         .zIndex(Double(members.count - index))
                 }
                 if members.count > 3 {
