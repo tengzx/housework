@@ -110,7 +110,7 @@
 "catalog.action.addToBoard" = "Claim Task";
 "catalog.action.edit" = "Edit";
 "catalog.success.assigned" = "\"%@\" assigned to %@";
-"catalog.success.added" = "\"%@\" added to backlog";
+"catalog.success.added" = "Task added to backlog";
 "catalog.error.missingHousehold" = "Missing household context. Select a household and try again.";
 "catalog.row.minutes" = "%lld min";
 "catalog.row.points" = "%lld pts";

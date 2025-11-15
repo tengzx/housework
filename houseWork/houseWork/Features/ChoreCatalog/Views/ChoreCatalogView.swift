@@ -12,6 +12,7 @@ struct ChoreCatalogView: View {
     @EnvironmentObject private var taskStore: TaskBoardStore
     @EnvironmentObject private var authStore: AuthStore
     @EnvironmentObject private var householdStore: HouseholdStore
+    @Environment(\.locale) private var locale
     @StateObject private var viewModel: ChoreCatalogViewModel
     @State private var showFormSheet = false
     @State private var draft = ChoreTemplateDraft()
@@ -223,11 +224,7 @@ struct ChoreCatalogView: View {
             let succeeded = await taskStore.enqueue(template: template, assignedTo: authStore.currentUser)
             guard succeeded else { return }
             await MainActor.run {
-                if let user = authStore.currentUser {
-                    successMessage = LocalizedStringKey("catalog.success.assigned \(template.title) \(user.name)")
-                } else {
-                    successMessage = LocalizedStringKey("catalog.success.added \(template.title)")
-                }
+                successMessage = LocalizedStringKey("catalog.success.added")
                 withAnimation(.spring()) {
                     showSuccessBanner = true
                 }

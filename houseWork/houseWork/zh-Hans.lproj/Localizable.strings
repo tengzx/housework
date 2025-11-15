@@ -111,7 +111,7 @@
 "catalog.action.addToBoard" = "领取任务";
 "catalog.action.edit" = "编辑";
 "catalog.success.assigned" = "\"%@\" 已指派给 %@";
-"catalog.success.added" = "\"%@\" 已加入待办";
+"catalog.success.added" = "已加入待办";
 "catalog.error.missingHousehold" = "缺少家庭上下文，请选择一个家庭后重试。";
 "catalog.row.minutes" = "%lld 分钟";
 "catalog.row.points" = "%lld 分";
