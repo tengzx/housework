@@ -5,16 +5,16 @@ import SwiftUI
 final class RewardsViewModelTests: XCTestCase {
     
     @MainActor
-    func testAvailablePointsMatchCompletedTasks() async throws {
-        let context = await makeContext(completedScores: [40, 60])
+    func testAvailablePointsReflectProfilePoints() async throws {
+        let context = await makeContext(initialPoints: 150)
         await Task.yield()
-        XCTAssertEqual(context.viewModel.lifetimePoints, 100)
-        XCTAssertEqual(context.viewModel.availablePoints, 100)
+        XCTAssertEqual(context.viewModel.availablePoints, 150)
+        XCTAssertEqual(context.viewModel.lifetimePoints, 150)
     }
     
     @MainActor
     func testRedeemingRewardConsumesPoints() async throws {
-        let context = await makeContext(completedScores: [70])
+        let context = await makeContext(initialPoints: 200)
         await Task.yield()
         guard let reward = context.rewardsStore.catalog.first else {
             XCTFail("Catalog missing reward")
@@ -25,16 +25,15 @@ final class RewardsViewModelTests: XCTestCase {
         await Task.yield()
         
         XCTAssertEqual(context.viewModel.history.count, 1)
-        XCTAssertEqual(context.viewModel.availablePoints, max(0, 70 - reward.cost))
-        let alertMessage = context.viewModel.activeAlert?.message ?? ""
-        XCTAssertTrue(alertMessage.contains(NSLocalizedString(reward.titleKey, comment: "")))
+        XCTAssertEqual(context.viewModel.availablePoints, 200 - reward.cost)
+        XCTAssertEqual(context.authStore.userProfile?.points, 200 - reward.cost)
     }
     
     @MainActor
     private func makeContext(
-        completedScores: [Int],
+        initialPoints: Int,
         redemptions: [RewardRedemption] = []
-    ) async -> (viewModel: RewardsViewModel, rewardsStore: RewardsStore) {
+    ) async -> (viewModel: RewardsViewModel, rewardsStore: RewardsStore, authStore: AuthStore) {
         let session = AuthSession(userId: "user-\(UUID().uuidString)", displayName: "Test User", email: "test@example.com")
         let memberId = UUID()
         let profile = UserProfile(
@@ -42,7 +41,8 @@ final class RewardsViewModelTests: XCTestCase {
             name: session.displayName ?? "Tester",
             email: session.email ?? "",
             accentColor: .blue,
-            memberId: memberId.uuidString
+            memberId: memberId.uuidString,
+            points: initialPoints
         )
         let authStore = AuthStore(
             authService: InMemoryAuthenticationService(initialSession: session),
@@ -52,29 +52,14 @@ final class RewardsViewModelTests: XCTestCase {
         guard let member = authStore.currentUser else {
             fatalError("Expected current user")
         }
-        
-        let tasks = completedScores.map { score in
-            TaskItem(
-                title: "Task \(score)",
-                details: "",
-                status: .completed,
-                dueDate: Date(),
-                score: score,
-                roomTag: "General",
-                assignedMembers: [member],
-                completedAt: Date()
-            )
-        }
-        let taskStore = TaskBoardStore(previewTasks: tasks)
         let rewardsStore = RewardsStore(
             previewCatalog: RewardItem.sampleCatalog,
             previewRedemptions: redemptions
         )
         let viewModel = RewardsViewModel(
             rewardsStore: rewardsStore,
-            taskStore: taskStore,
             authStore: authStore
         )
-        return (viewModel, rewardsStore)
+        return (viewModel, rewardsStore, authStore)
     }
 }

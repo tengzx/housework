@@ -51,7 +51,6 @@ final class ContentViewModel: ObservableObject {
         )
         self.rewardsViewModel = RewardsViewModel(
             rewardsStore: rewardsStore,
-            taskStore: taskBoardStore,
             authStore: authStore
         )
         self.loginViewModel = LoginViewModel(authStore: authStore)

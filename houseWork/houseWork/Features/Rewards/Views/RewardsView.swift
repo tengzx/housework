@@ -25,14 +25,21 @@ struct RewardsView: View {
                 }
                 
                 Section(header: Text(LocalizedStringKey("rewards.section.catalog"))) {
-                    ForEach(viewModel.catalog) { reward in
-                        RewardRow(
-                            reward: reward,
-                            canRedeem: viewModel.canRedeem(reward)
-                        ) {
-                            Haptics.impact()
-                            Task {
-                                await viewModel.redeem(reward)
+                    if viewModel.catalog.isEmpty {
+                        Text(LocalizedStringKey("rewards.catalog.empty"))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                    } else {
+                        ForEach(viewModel.catalog) { reward in
+                            RewardRow(
+                                reward: reward,
+                                canRedeem: viewModel.canRedeem(reward)
+                            ) {
+                                Haptics.impact()
+                                Task {
+                                    await viewModel.redeem(reward)
+                                }
                             }
                         }
                     }
@@ -133,22 +140,10 @@ private struct RewardRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(reward.accentColor.opacity(0.2))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: reward.iconName)
-                        .font(.title3)
-                        .foregroundStyle(reward.accentColor)
-                }
+            HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(LocalizedStringKey(reward.titleKey))
+                    Text(reward.name)
                         .font(.headline)
-                    Text(LocalizedStringKey(reward.detailKey))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 Text(costText)
@@ -163,7 +158,6 @@ private struct RewardRow: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .tint(reward.accentColor)
             .disabled(!canRedeem)
         }
         .padding(.vertical, 8)
@@ -180,7 +174,7 @@ private struct RedemptionRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(LocalizedStringKey(redemption.rewardTitleKey))
+                Text(redemption.rewardName)
                     .font(.headline)
                 Text(
                     String(
@@ -213,7 +207,8 @@ private struct RedemptionRow: View {
         name: "Jordan Preview",
         email: session.email ?? "",
         accentColor: .blue,
-        memberId: memberId.uuidString
+        memberId: memberId.uuidString,
+        points: 250
     )
     let authStore = AuthStore(
         authService: InMemoryAuthenticationService(initialSession: session),
@@ -223,17 +218,9 @@ private struct RedemptionRow: View {
         previewCatalog: RewardItem.sampleCatalog,
         previewRedemptions: RewardRedemption.sample(memberId: memberId)
     )
-    let tasks = TaskItem.fixtures().map { task -> TaskItem in
-        var updated = task
-        updated.status = .completed
-        updated.assignedMembers = [profile.asHouseholdMember(fallbackId: memberId)]
-        return updated
-    }
-    let taskStore = TaskBoardStore(previewTasks: tasks)
     return RewardsView(
         viewModel: RewardsViewModel(
             rewardsStore: rewardsStore,
-            taskStore: taskStore,
             authStore: authStore
         )
     )

@@ -106,6 +106,7 @@
 
 "rewards.title" = "积分礼物";
 "rewards.section.catalog" = "礼物目录";
+"rewards.catalog.empty" = "还没有礼物，请前往设置添加。";
 "rewards.section.history" = "兑换记录";
 "rewards.history.empty" = "还没有兑换记录。";
 "rewards.header.title" = "积分概览";
@@ -123,14 +124,15 @@
 "rewards.error.noMember" = "请先登录后再兑换礼物。";
 "rewards.error.missingHousehold" = "缺少家庭信息，请先选择一个家庭。";
 "rewards.history.entry" = "%@ 兑换了 %lld 分";
-"rewards.reward.coffee.title" = "咖啡小憩";
-"rewards.reward.coffee.description" = "请自己喝一杯喜欢的咖啡。";
-"rewards.reward.movieNight.title" = "电影之夜";
-"rewards.reward.movieNight.description" = "租一部新电影或准备爆米花。";
-"rewards.reward.takeout.title" = "外卖晚餐";
-"rewards.reward.takeout.description" = "挑一家心仪的餐厅点单。";
-"rewards.reward.dayOff.title" = "家务免做券";
-"rewards.reward.dayOff.description" = "跳过一项指派家务，无需解释。";
+"rewards.management.title" = "管理礼物";
+"rewards.management.empty" = "创建礼物，成员就能用积分兑换。";
+"rewards.management.field.name" = "礼物名称";
+"rewards.management.field.cost" = "所需积分";
+"rewards.management.error.invalid" = "请输入有效的积分数。";
+"rewards.management.error.save" = "无法保存礼物。";
+"rewards.management.form.title" = "新增礼物";
+"settings.rewards.section" = "礼物";
+"settings.rewards.manage" = "管理礼物";
 
 "catalog.alert.title" = "清单错误";
 "catalog.button.newTemplate" = "新增模板";

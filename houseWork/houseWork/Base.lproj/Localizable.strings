@@ -105,6 +105,7 @@
 
 "rewards.title" = "Rewards";
 "rewards.section.catalog" = "Gift Catalog";
+"rewards.catalog.empty" = "No rewards yet. Add some from Settings.";
 "rewards.section.history" = "Recent Redemptions";
 "rewards.history.empty" = "No redemptions yet.";
 "rewards.header.title" = "Points Overview";
@@ -122,14 +123,15 @@
 "rewards.error.noMember" = "Please sign in to redeem rewards.";
 "rewards.error.missingHousehold" = "Missing household context. Select a household first.";
 "rewards.history.entry" = "%@ redeemed %lld pts";
-"rewards.reward.coffee.title" = "Coffee Break";
-"rewards.reward.coffee.description" = "Treat yourself to a specialty drink.";
-"rewards.reward.movieNight.title" = "Movie Night";
-"rewards.reward.movieNight.description" = "Rent a new release and grab popcorn.";
-"rewards.reward.takeout.title" = "Takeout Dinner";
-"rewards.reward.takeout.description" = "Pick a restaurant for delivery night.";
-"rewards.reward.dayOff.title" = "Chore Day Off";
-"rewards.reward.dayOff.description" = "Skip one assigned chore guilt-free.";
+"rewards.management.title" = "Manage Rewards";
+"rewards.management.empty" = "Create rewards so household members can redeem points.";
+"rewards.management.field.name" = "Reward name";
+"rewards.management.field.cost" = "Required points";
+"rewards.management.error.invalid" = "Enter a positive point value.";
+"rewards.management.error.save" = "Unable to save reward.";
+"rewards.management.form.title" = "New Reward";
+"settings.rewards.section" = "Rewards";
+"settings.rewards.manage" = "Manage rewards";
 
 "catalog.alert.title" = "Catalog Error";
 "catalog.button.newTemplate" = "New Template";

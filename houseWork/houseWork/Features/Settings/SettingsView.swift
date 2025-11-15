@@ -12,6 +12,7 @@ struct SettingsView: View {
     @EnvironmentObject private var authStore: AuthStore
     @EnvironmentObject private var householdStore: HouseholdStore
     @EnvironmentObject private var tagStore: TagStore
+    @EnvironmentObject private var rewardsStore: RewardsStore
     @EnvironmentObject private var languageStore: LanguageStore
     @State private var householdNameDraft: String = ""
     @State private var householdIdDraft: String = ""
@@ -46,6 +47,15 @@ struct SettingsView: View {
                 
                 Section(LocalizedStringKey("settings.section.household")) {
                     HouseholdSection()
+                }
+                
+                Section(LocalizedStringKey("settings.rewards.section")) {
+                    NavigationLink {
+                        RewardManagementView()
+                            .environmentObject(rewardsStore)
+                    } label: {
+                        Label(LocalizedStringKey("settings.rewards.manage"), systemImage: "gift.fill")
+                    }
                 }
                 
                 Section(LocalizedStringKey("settings.language.section")) {

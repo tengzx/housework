@@ -81,7 +81,10 @@ final class TaskBoardViewModel: ObservableObject {
     }
     
     func completeTask(_ task: TaskItem) async {
-        await taskStore.completeTask(task, actingUser: authStore.currentUser)
+        let success = await taskStore.completeTask(task, actingUser: authStore.currentUser)
+        if success {
+            await authStore.adjustPoints(by: task.score)
+        }
     }
     
     func quickComplete(_ task: TaskItem) async {
@@ -89,7 +92,11 @@ final class TaskBoardViewModel: ObservableObject {
     }
     
     func deleteTask(_ task: TaskItem) async {
-        await taskStore.deleteTask(task)
+        let wasCompleted = task.status == .completed && canMutate(task: task)
+        let success = await taskStore.deleteTask(task)
+        if success, wasCompleted {
+            await authStore.adjustPoints(by: -task.score)
+        }
     }
     
     func presentComposer() {

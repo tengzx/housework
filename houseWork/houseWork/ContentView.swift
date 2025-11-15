@@ -73,6 +73,7 @@ struct ContentView: View {
         .environmentObject(viewModel.authStore)
         .environmentObject(viewModel.tagStore)
         .environmentObject(viewModel.memberDirectory)
+        .environmentObject(viewModel.rewardsStore)
         .environmentObject(languageStore)
         .environment(\.locale, languageStore.locale)
         .onAppear {

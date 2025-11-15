@@ -25,19 +25,17 @@ final class RewardsViewModel: ObservableObject {
     @Published var activeAlert: AlertContext?
     
     private let rewardsStore: RewardsStore
-    private let taskStore: TaskBoardStore
     private let authStore: AuthStore
     private var cancellables: Set<AnyCancellable> = []
     
     init(
         rewardsStore: RewardsStore,
-        taskStore: TaskBoardStore,
         authStore: AuthStore
     ) {
         self.rewardsStore = rewardsStore
-        self.taskStore = taskStore
         self.authStore = authStore
         bind()
+        recalculatePoints()
     }
     
     var currentMemberName: String {
@@ -64,8 +62,9 @@ final class RewardsViewModel: ObservableObject {
         let success = await rewardsStore.redeem(reward, by: member)
         isRedeeming = false
         if success {
-            let rewardName = NSLocalizedString(reward.titleKey, comment: "")
+            let rewardName = reward.name
             let template = NSLocalizedString("rewards.success.redeemed", comment: "")
+            await authStore.adjustPoints(by: -reward.cost)
             activeAlert = AlertContext(
                 title: LocalizedStringKey("rewards.alert.success"),
                 message: String(format: template, rewardName)
@@ -101,14 +100,14 @@ final class RewardsViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
-        taskStore.$tasks
+        authStore.$currentUser
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.recalculatePoints()
             }
             .store(in: &cancellables)
         
-        authStore.$currentUser
+        authStore.$userProfile
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.recalculatePoints()
@@ -122,15 +121,11 @@ final class RewardsViewModel: ObservableObject {
             lifetimePoints = 0
             return
         }
-        
-        let completedTasks = taskStore.tasks.filter {
-            $0.status == .completed && $0.assignedMembers.contains(where: { $0.matches(member) })
-        }
-        let earned = completedTasks.reduce(0) { $0 + $1.score }
+        let profilePoints = authStore.userProfile?.points ?? 0
         let spent = rewardsStore.redemptions
             .filter { $0.memberId == member.id }
             .reduce(0) { $0 + $1.cost }
-        lifetimePoints = earned
-        availablePoints = max(0, earned - spent)
+        availablePoints = max(0, profilePoints)
+        lifetimePoints = max(0, profilePoints + spent)
     }
 }

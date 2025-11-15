@@ -144,11 +144,13 @@ final class AuthStore: ObservableObject {
             name: trimmedName,
             email: currentEmail ?? "",
             accentColor: accentColor,
-            memberId: identifier.uuidString
+            memberId: identifier.uuidString,
+            points: 0
         )
         profile.name = trimmedName
         profile.accentColor = accentColor
         profile.memberId = identifier.uuidString
+        profile.points = userProfile?.points ?? profile.points
         do {
             try await profileService.saveProfile(profile)
             try? await authService.updateDisplayName(trimmedName)
@@ -222,7 +224,7 @@ final class AuthStore: ObservableObject {
         let colorIndex = abs(session.userId.hashValue) % max(colors.count, 1)
         let selectedColor = colors[colorIndex]
         let identifier = memberIdentifier(for: session.userId)
-        return UserProfile(id: session.userId, name: name, email: email, accentColor: selectedColor, memberId: identifier.uuidString, avatarURL: session.photoURL)
+        return UserProfile(id: session.userId, name: name, email: email, accentColor: selectedColor, memberId: identifier.uuidString, avatarURL: session.photoURL, points: 0)
     }
     
     private func refreshedSession(basedOn session: AuthSession) async -> AuthSession {
@@ -254,5 +256,23 @@ final class AuthStore: ObservableObject {
         let newValue = UUID()
         defaults.set(newValue.uuidString, forKey: key)
         return newValue
+    }
+    
+    @discardableResult
+    func adjustPoints(by delta: Int) async -> Bool {
+        guard delta != 0 else { return true }
+        guard var profile = userProfile else { return false }
+        guard let userId = firebaseUserId else { return false }
+        let current = profile.points
+        let updated = max(0, current + delta)
+        profile.points = updated
+        do {
+            try await profileService.saveProfile(profile)
+            apply(profile: profile, userId: userId)
+            return true
+        } catch {
+            authError = error.localizedDescription
+            return false
+        }
     }
 }

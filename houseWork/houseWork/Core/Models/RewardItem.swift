@@ -5,37 +5,46 @@
 //  Represents a redeemable reward in the in-app catalog.
 //
 
-import SwiftUI
+import Foundation
 
-struct RewardItem: Identifiable, Hashable {
+struct RewardItem: Identifiable, Hashable, Codable {
     let id: UUID
-    let titleKey: String
-    let detailKey: String
-    let cost: Int
-    let iconName: String
-    let accentColor: Color
+    var name: String
+    var cost: Int
     
-    init(
-        id: UUID = UUID(),
-        titleKey: String,
-        detailKey: String,
-        cost: Int,
-        iconName: String,
-        accentColor: Color
-    ) {
+    init(id: UUID = UUID(), name: String, cost: Int) {
         self.id = id
-        self.titleKey = titleKey
-        self.detailKey = detailKey
+        self.name = name
         self.cost = cost
-        self.iconName = iconName
-        self.accentColor = accentColor
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case cost
+        case legacyTitleKey = "titleKey"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        let legacyName = try container.decodeIfPresent(String.self, forKey: .legacyTitleKey)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? legacyName ?? "Reward"
+        cost = try container.decodeIfPresent(Int.self, forKey: .cost) ?? 0
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(cost, forKey: .cost)
     }
 }
 
 struct RewardRedemption: Identifiable, Codable, Hashable {
     let id: UUID
     let rewardId: UUID
-    let rewardTitleKey: String
+    let rewardName: String
     let memberId: UUID
     let memberName: String
     let redeemedAt: Date
@@ -44,7 +53,7 @@ struct RewardRedemption: Identifiable, Codable, Hashable {
     init(
         id: UUID = UUID(),
         rewardId: UUID,
-        rewardTitleKey: String,
+        rewardName: String,
         memberId: UUID,
         memberName: String,
         redeemedAt: Date = Date(),
@@ -52,44 +61,54 @@ struct RewardRedemption: Identifiable, Codable, Hashable {
     ) {
         self.id = id
         self.rewardId = rewardId
-        self.rewardTitleKey = rewardTitleKey
+        self.rewardName = rewardName
         self.memberId = memberId
         self.memberName = memberName
         self.redeemedAt = redeemedAt
         self.cost = cost
     }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case rewardId
+        case rewardName
+        case memberId
+        case memberName
+        case redeemedAt
+        case cost
+        case legacyTitleKey = "rewardTitleKey"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        rewardId = try container.decode(UUID.self, forKey: .rewardId)
+        let legacyName = try container.decodeIfPresent(String.self, forKey: .legacyTitleKey)
+        rewardName = try container.decodeIfPresent(String.self, forKey: .rewardName) ?? legacyName ?? "Reward"
+        memberId = try container.decode(UUID.self, forKey: .memberId)
+        memberName = try container.decode(String.self, forKey: .memberName)
+        redeemedAt = try container.decode(Date.self, forKey: .redeemedAt)
+        cost = try container.decode(Int.self, forKey: .cost)
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(rewardId, forKey: .rewardId)
+        try container.encode(rewardName, forKey: .rewardName)
+        try container.encode(memberId, forKey: .memberId)
+        try container.encode(memberName, forKey: .memberName)
+        try container.encode(redeemedAt, forKey: .redeemedAt)
+        try container.encode(cost, forKey: .cost)
+    }
 }
 
 extension RewardItem {
     static let sampleCatalog: [RewardItem] = [
-        RewardItem(
-            titleKey: "rewards.reward.coffee.title",
-            detailKey: "rewards.reward.coffee.description",
-            cost: 50,
-            iconName: "cup.and.saucer.fill",
-            accentColor: Color(red: 0.95, green: 0.73, blue: 0.38)
-        ),
-        RewardItem(
-            titleKey: "rewards.reward.movieNight.title",
-            detailKey: "rewards.reward.movieNight.description",
-            cost: 120,
-            iconName: "popcorn.fill",
-            accentColor: Color(red: 0.82, green: 0.47, blue: 0.91)
-        ),
-        RewardItem(
-            titleKey: "rewards.reward.takeout.title",
-            detailKey: "rewards.reward.takeout.description",
-            cost: 180,
-            iconName: "takeoutbag.and.cup.and.straw.fill",
-            accentColor: Color(red: 0.32, green: 0.71, blue: 0.91)
-        ),
-        RewardItem(
-            titleKey: "rewards.reward.dayOff.title",
-            detailKey: "rewards.reward.dayOff.description",
-            cost: 250,
-            iconName: "sun.max.fill",
-            accentColor: Color(red: 0.97, green: 0.61, blue: 0.54)
-        )
+        RewardItem(name: "Coffee Break", cost: 50),
+        RewardItem(name: "Movie Night", cost: 120),
+        RewardItem(name: "Takeout Dinner", cost: 180),
+        RewardItem(name: "Day Off Voucher", cost: 250)
     ]
 }
 
@@ -98,7 +117,7 @@ extension RewardRedemption {
         [
             RewardRedemption(
                 rewardId: RewardItem.sampleCatalog[0].id,
-                rewardTitleKey: RewardItem.sampleCatalog[0].titleKey,
+                rewardName: RewardItem.sampleCatalog[0].name,
                 memberId: memberId,
                 memberName: "Sample Member",
                 redeemedAt: Date().addingTimeInterval(-3600),

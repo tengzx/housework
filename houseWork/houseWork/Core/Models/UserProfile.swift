@@ -14,14 +14,16 @@ struct UserProfile: Equatable {
     var accentColor: Color
     var memberId: String
     var avatarURL: URL?
+    var points: Int
     
-    init(id: String, name: String, email: String, accentColor: Color, memberId: String, avatarURL: URL? = nil) {
+    init(id: String, name: String, email: String, accentColor: Color, memberId: String, avatarURL: URL? = nil, points: Int = 0) {
         self.id = id
         self.name = name
         self.email = email
         self.accentColor = accentColor
         self.memberId = memberId
         self.avatarURL = avatarURL
+        self.points = points
     }
 }
 
@@ -34,7 +36,8 @@ extension UserProfile {
         let memberId = data["memberId"] as? String ?? UUID().uuidString
         let avatarURLString = data["avatarURL"] as? String
         let avatarURL = avatarURLString.flatMap { URL(string: $0) }
-        self.init(id: id, name: name, email: email, accentColor: color, memberId: memberId, avatarURL: avatarURL)
+        let points = data["points"] as? Int ?? 0
+        self.init(id: id, name: name, email: email, accentColor: color, memberId: memberId, avatarURL: avatarURL, points: points)
     }
     
     var firestoreData: [String: Any] {
@@ -42,7 +45,8 @@ extension UserProfile {
             "displayName": name,
             "name": name,
             "email": email,
-            "memberId": memberId
+            "memberId": memberId,
+            "points": points
         ]
         if let hex = accentColor.hexString {
             payload["avatarColor"] = hex
