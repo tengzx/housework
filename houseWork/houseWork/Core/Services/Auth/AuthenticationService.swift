@@ -33,6 +33,7 @@ protocol AuthenticationService {
     func signOut() throws
     func updateDisplayName(_ name: String) async throws
     func signInWithGoogle(presenting viewController: UIViewController?) async throws -> AuthSession
+    func refreshCurrentSession() async -> AuthSession?
 }
 
 final class FirebaseAuthenticationService: AuthenticationService {
@@ -101,6 +102,16 @@ final class FirebaseAuthenticationService: AuthenticationService {
         throw AuthenticationServiceError.googleSignInUnavailable
 #endif
     }
+    
+    func refreshCurrentSession() async -> AuthSession? {
+        guard let user = auth.currentUser else { return nil }
+        do {
+            try await user.reload()
+        } catch {
+            // Ignore reload errors and fall back to the last known snapshot.
+        }
+        return AuthSession(user: user)
+    }
 }
 
 private final class FirebaseAuthListenerToken: ListenerToken {
@@ -125,10 +136,13 @@ private final class FirebaseAuthListenerToken: ListenerToken {
 
 extension AuthSession {
     init(user: User) {
+        let googlePhoto = user.providerData
+            .first(where: { $0.providerID == "google.com" })?
+            .photoURL
         self.userId = user.uid
         self.displayName = user.displayName
         self.email = user.email
-        self.photoURL = user.photoURL
+        self.photoURL = googlePhoto ?? user.photoURL
     }
 }
 
@@ -193,6 +207,10 @@ final class InMemoryAuthenticationService: AuthenticationService {
         return session
     }
 #endif
+    
+    func refreshCurrentSession() async -> AuthSession? {
+        currentSession
+    }
     
     private func notifyListeners() {
         listeners.values.forEach { $0(currentSession) }

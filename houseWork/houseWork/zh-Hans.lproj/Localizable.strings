@@ -3,6 +3,7 @@
 "tabs.board" = "看板";
 "tabs.analytics" = "统计";
 "tabs.catalog" = "清单";
+"tabs.rewards" = "礼物";
 "tabs.settings" = "设置";
 
 "login.title" = "houseWork";
@@ -102,6 +103,34 @@
 "analytics.leaderboard.tasksAndPoints" = "%lld 个任务 · %lld 分";
 "analytics.leaderboard.minutesLogged" = "%lld 分钟记录";
 "analytics.leaderboard.delta" = "%+lld 周环比";
+
+"rewards.title" = "积分礼物";
+"rewards.section.catalog" = "礼物目录";
+"rewards.section.history" = "兑换记录";
+"rewards.history.empty" = "还没有兑换记录。";
+"rewards.header.title" = "积分概览";
+"rewards.header.available" = "可用积分";
+"rewards.header.available.subtitle" = "可立即兑换";
+"rewards.header.lifetime" = "累计积分";
+"rewards.header.lifetime.subtitle" = "已获得";
+"rewards.cost.format" = "%lld 分";
+"rewards.redeem.button" = "去兑换";
+"rewards.alert.success" = "兑换成功";
+"rewards.alert.error" = "无法兑换";
+"rewards.success.redeemed" = "已兑换“%@”！";
+"rewards.error.generic" = "请稍后再试。";
+"rewards.error.insufficientPoints" = "积分不足。";
+"rewards.error.noMember" = "请先登录后再兑换礼物。";
+"rewards.error.missingHousehold" = "缺少家庭信息，请先选择一个家庭。";
+"rewards.history.entry" = "%@ 兑换了 %lld 分";
+"rewards.reward.coffee.title" = "咖啡小憩";
+"rewards.reward.coffee.description" = "请自己喝一杯喜欢的咖啡。";
+"rewards.reward.movieNight.title" = "电影之夜";
+"rewards.reward.movieNight.description" = "租一部新电影或准备爆米花。";
+"rewards.reward.takeout.title" = "外卖晚餐";
+"rewards.reward.takeout.description" = "挑一家心仪的餐厅点单。";
+"rewards.reward.dayOff.title" = "家务免做券";
+"rewards.reward.dayOff.description" = "跳过一项指派家务，无需解释。";
 
 "catalog.alert.title" = "清单错误";
 "catalog.button.newTemplate" = "新增模板";

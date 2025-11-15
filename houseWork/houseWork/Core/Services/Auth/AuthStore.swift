@@ -83,7 +83,8 @@ final class AuthStore: ObservableObject {
         isProcessing = true
         authError = nil
         do {
-            let session = try await action()
+            var session = try await action()
+            session = await refreshedSession(basedOn: session)
             firebaseUserId = session.userId
             currentEmail = session.email
             defaults.set(session.userId, forKey: storedUserIdKey)
@@ -100,7 +101,8 @@ final class AuthStore: ObservableObject {
         isProcessing = true
         authError = nil
         do {
-            let session = try await authService.signInWithGoogle(presenting: viewController)
+            var session = try await authService.signInWithGoogle(presenting: viewController)
+            session = await refreshedSession(basedOn: session)
             firebaseUserId = session.userId
             currentEmail = session.email
             defaults.set(session.userId, forKey: storedUserIdKey)
@@ -124,9 +126,10 @@ final class AuthStore: ObservableObject {
             didProcessInitialSession = true
             return
         }
-        firebaseUserId = session.userId
-        currentEmail = session.email
-        await loadProfile(for: session)
+        let resolved = await refreshedSession(basedOn: session)
+        firebaseUserId = resolved.userId
+        currentEmail = resolved.email
+        await loadProfile(for: resolved)
         didProcessInitialSession = true
     }
     
@@ -181,9 +184,12 @@ final class AuthStore: ObservableObject {
                     existing.memberId = identifier.uuidString
                     requiresSave = true
                 }
-                if existing.avatarURL == nil, let photo = session.photoURL {
-                    existing.avatarURL = photo
-                    requiresSave = true
+                if let photo = session.photoURL {
+                    let previous = existing.avatarURL?.absoluteString
+                    if previous != photo.absoluteString {
+                        existing.avatarURL = photo
+                        requiresSave = true
+                    }
                 }
                 if requiresSave {
                     try await profileService.saveProfile(existing)
@@ -217,6 +223,13 @@ final class AuthStore: ObservableObject {
         let selectedColor = colors[colorIndex]
         let identifier = memberIdentifier(for: session.userId)
         return UserProfile(id: session.userId, name: name, email: email, accentColor: selectedColor, memberId: identifier.uuidString, avatarURL: session.photoURL)
+    }
+    
+    private func refreshedSession(basedOn session: AuthSession) async -> AuthSession {
+        guard let refreshed = await authService.refreshCurrentSession(), refreshed.userId == session.userId else {
+            return session
+        }
+        return refreshed
     }
     
     private func apply(profile: UserProfile, userId: String) {

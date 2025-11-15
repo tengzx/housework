@@ -25,7 +25,9 @@ final class ContentViewModel: ObservableObject {
     let taskBoardStore: TaskBoardStore
     let tagStore: TagStore
     let memberDirectory: MemberDirectory
+    let rewardsStore: RewardsStore
     let taskBoardViewModel: TaskBoardViewModel
+    let rewardsViewModel: RewardsViewModel
     let loginViewModel: LoginViewModel
     
     private var cancellables: Set<AnyCancellable> = []
@@ -39,12 +41,18 @@ final class ContentViewModel: ObservableObject {
         self.taskBoardStore = TaskBoardStore(householdStore: householdStore)
         self.tagStore = TagStore(householdStore: householdStore)
         self.memberDirectory = MemberDirectory()
+        self.rewardsStore = RewardsStore(householdStore: householdStore)
         self.taskBoardViewModel = TaskBoardViewModel(
             taskStore: taskBoardStore,
             authStore: authStore,
             householdStore: householdStore,
             tagStore: tagStore,
             memberDirectory: memberDirectory
+        )
+        self.rewardsViewModel = RewardsViewModel(
+            rewardsStore: rewardsStore,
+            taskStore: taskBoardStore,
+            authStore: authStore
         )
         self.loginViewModel = LoginViewModel(authStore: authStore)
         bindStores()

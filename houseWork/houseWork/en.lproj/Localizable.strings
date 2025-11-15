@@ -3,6 +3,7 @@
 "tabs.board" = "Board";
 "tabs.analytics" = "Analytics";
 "tabs.catalog" = "Catalog";
+"tabs.rewards" = "Rewards";
 "tabs.settings" = "Settings";
 
 "login.title" = "houseWork";
@@ -101,6 +102,34 @@
 "analytics.leaderboard.tasksAndPoints" = "%lld tasks · %lld pts";
 "analytics.leaderboard.minutesLogged" = "%lld min logged";
 "analytics.leaderboard.delta" = "%+lld WoW";
+
+"rewards.title" = "Rewards";
+"rewards.section.catalog" = "Gift Catalog";
+"rewards.section.history" = "Recent Redemptions";
+"rewards.history.empty" = "No redemptions yet.";
+"rewards.header.title" = "Points Overview";
+"rewards.header.available" = "Available";
+"rewards.header.available.subtitle" = "Ready to redeem";
+"rewards.header.lifetime" = "Lifetime";
+"rewards.header.lifetime.subtitle" = "Points earned";
+"rewards.cost.format" = "%lld pts";
+"rewards.redeem.button" = "Redeem";
+"rewards.alert.success" = "Success";
+"rewards.alert.error" = "Unable to Redeem";
+"rewards.success.redeemed" = "\"%@\" redeemed!";
+"rewards.error.generic" = "Please try again later.";
+"rewards.error.insufficientPoints" = "You don’t have enough points yet.";
+"rewards.error.noMember" = "Please sign in to redeem rewards.";
+"rewards.error.missingHousehold" = "Missing household context. Select a household first.";
+"rewards.history.entry" = "%@ redeemed %lld pts";
+"rewards.reward.coffee.title" = "Coffee Break";
+"rewards.reward.coffee.description" = "Treat yourself to a specialty drink.";
+"rewards.reward.movieNight.title" = "Movie Night";
+"rewards.reward.movieNight.description" = "Rent a new release and grab popcorn.";
+"rewards.reward.takeout.title" = "Takeout Dinner";
+"rewards.reward.takeout.description" = "Pick a restaurant for delivery night.";
+"rewards.reward.dayOff.title" = "Chore Day Off";
+"rewards.reward.dayOff.description" = "Skip one assigned chore guilt-free.";
 
 "catalog.alert.title" = "Catalog Error";
 "catalog.button.newTemplate" = "New Template";

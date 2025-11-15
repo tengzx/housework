@@ -52,6 +52,7 @@ struct AnalyticsView: View {
                 if useCustomRange { refreshAnalytics() }
             }
         }
+        .hideNavigationBar()
     }
     
     // MARK: - Sections

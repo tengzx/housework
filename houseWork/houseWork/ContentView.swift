@@ -57,6 +57,10 @@ struct ContentView: View {
                         .tabItem {
                             Label(LocalizedStringKey("tabs.catalog"), systemImage: "list.bullet.rectangle")
                         }
+                    RewardsView(viewModel: viewModel.rewardsViewModel)
+                        .tabItem {
+                            Label(LocalizedStringKey("tabs.rewards"), systemImage: "gift.fill")
+                        }
                     SettingsView()
                         .tabItem {
                             Label(LocalizedStringKey("tabs.settings"), systemImage: "gear")

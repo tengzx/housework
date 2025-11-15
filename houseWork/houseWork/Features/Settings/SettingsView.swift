@@ -64,6 +64,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .hideNavigationBar()
     }
     
     private var accountEmailText: String {

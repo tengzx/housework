@@ -48,6 +48,7 @@ struct ChoreCatalogView: View {
                 floatingAddButton
             }
         }
+        .hideNavigationBar()
         .sheet(isPresented: $showFormSheet) {
             navigationContainer {
                 ChoreTemplateForm(draft: $draft, isEditing: editingTemplate != nil) { template in

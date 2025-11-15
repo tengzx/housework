@@ -32,6 +32,7 @@ struct TaskBoardView: View {
             }
             .background(Color(.systemGroupedBackground))
         }
+        .hideNavigationBar()
         .alert(
             LocalizedStringKey("taskBoard.error.title"),
             isPresented: Binding(
