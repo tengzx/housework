@@ -15,8 +15,18 @@ struct UserProfile: Equatable {
     var memberId: String
     var avatarURL: URL?
     var points: Int
+    var lifetimePoints: Int
     
-    init(id: String, name: String, email: String, accentColor: Color, memberId: String, avatarURL: URL? = nil, points: Int = 0) {
+    init(
+        id: String,
+        name: String,
+        email: String,
+        accentColor: Color,
+        memberId: String,
+        avatarURL: URL? = nil,
+        points: Int = 0,
+        lifetimePoints: Int = 0
+    ) {
         self.id = id
         self.name = name
         self.email = email
@@ -24,6 +34,7 @@ struct UserProfile: Equatable {
         self.memberId = memberId
         self.avatarURL = avatarURL
         self.points = points
+        self.lifetimePoints = lifetimePoints
     }
 }
 
@@ -37,7 +48,8 @@ extension UserProfile {
         let avatarURLString = data["avatarURL"] as? String
         let avatarURL = avatarURLString.flatMap { URL(string: $0) }
         let points = data["points"] as? Int ?? 0
-        self.init(id: id, name: name, email: email, accentColor: color, memberId: memberId, avatarURL: avatarURL, points: points)
+        let lifetime = data["lifetimePoints"] as? Int ?? points
+        self.init(id: id, name: name, email: email, accentColor: color, memberId: memberId, avatarURL: avatarURL, points: points, lifetimePoints: lifetime)
     }
     
     var firestoreData: [String: Any] {
@@ -46,7 +58,8 @@ extension UserProfile {
             "name": name,
             "email": email,
             "memberId": memberId,
-            "points": points
+            "points": points,
+            "lifetimePoints": lifetimePoints
         ]
         if let hex = accentColor.hexString {
             payload["avatarColor"] = hex

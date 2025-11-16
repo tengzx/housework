@@ -64,7 +64,7 @@ final class RewardsViewModel: ObservableObject {
         if success {
             let rewardName = reward.name
             let template = NSLocalizedString("rewards.success.redeemed", comment: "")
-            await authStore.adjustPoints(by: -reward.cost)
+            await authStore.adjustPoints(availableDelta: -reward.cost)
             activeAlert = AlertContext(
                 title: LocalizedStringKey("rewards.alert.success"),
                 message: String(format: template, rewardName)
@@ -122,10 +122,11 @@ final class RewardsViewModel: ObservableObject {
             return
         }
         let profilePoints = authStore.userProfile?.points ?? 0
+        let lifetime = authStore.userProfile?.lifetimePoints ?? profilePoints
         let spent = rewardsStore.redemptions
             .filter { $0.memberId == member.id }
             .reduce(0) { $0 + $1.cost }
         availablePoints = max(0, profilePoints)
-        lifetimePoints = max(0, profilePoints + spent)
+        lifetimePoints = max(0, lifetime)
     }
 }

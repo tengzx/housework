@@ -83,7 +83,7 @@ final class TaskBoardViewModel: ObservableObject {
     func completeTask(_ task: TaskItem) async {
         let success = await taskStore.completeTask(task, actingUser: authStore.currentUser)
         if success {
-            await authStore.adjustPoints(by: task.score)
+            await authStore.adjustPoints(availableDelta: task.score, lifetimeDelta: task.score)
         }
     }
     
@@ -95,7 +95,7 @@ final class TaskBoardViewModel: ObservableObject {
         let wasCompleted = task.status == .completed && canMutate(task: task)
         let success = await taskStore.deleteTask(task)
         if success, wasCompleted {
-            await authStore.adjustPoints(by: -task.score)
+            await authStore.adjustPoints(availableDelta: -task.score, lifetimeDelta: -task.score)
         }
     }
     

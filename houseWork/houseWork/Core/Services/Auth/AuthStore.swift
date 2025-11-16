@@ -145,12 +145,14 @@ final class AuthStore: ObservableObject {
             email: currentEmail ?? "",
             accentColor: accentColor,
             memberId: identifier.uuidString,
-            points: 0
+            points: userProfile?.points ?? 0,
+            lifetimePoints: userProfile?.lifetimePoints ?? 0
         )
         profile.name = trimmedName
         profile.accentColor = accentColor
         profile.memberId = identifier.uuidString
         profile.points = userProfile?.points ?? profile.points
+        profile.lifetimePoints = userProfile?.lifetimePoints ?? profile.lifetimePoints
         do {
             try await profileService.saveProfile(profile)
             try? await authService.updateDisplayName(trimmedName)
@@ -224,7 +226,16 @@ final class AuthStore: ObservableObject {
         let colorIndex = abs(session.userId.hashValue) % max(colors.count, 1)
         let selectedColor = colors[colorIndex]
         let identifier = memberIdentifier(for: session.userId)
-        return UserProfile(id: session.userId, name: name, email: email, accentColor: selectedColor, memberId: identifier.uuidString, avatarURL: session.photoURL, points: 0)
+        return UserProfile(
+            id: session.userId,
+            name: name,
+            email: email,
+            accentColor: selectedColor,
+            memberId: identifier.uuidString,
+            avatarURL: session.photoURL,
+            points: 0,
+            lifetimePoints: 0
+        )
     }
     
     private func refreshedSession(basedOn session: AuthSession) async -> AuthSession {
@@ -259,16 +270,16 @@ final class AuthStore: ObservableObject {
     }
     
     @discardableResult
-    func adjustPoints(by delta: Int) async -> Bool {
-        guard delta != 0 else { return true }
+    func adjustPoints(availableDelta: Int, lifetimeDelta: Int = 0) async -> Bool {
+        guard availableDelta != 0 || lifetimeDelta != 0 else { return true }
         guard var profile = userProfile else { return false }
         guard let userId = firebaseUserId else { return false }
-        let current = profile.points
-        let updated = max(0, current + delta)
-        profile.points = updated
+        profile.points = max(0, profile.points + availableDelta)
+        profile.lifetimePoints = max(0, profile.lifetimePoints + lifetimeDelta)
         do {
             try await profileService.saveProfile(profile)
             apply(profile: profile, userId: userId)
+            authError = nil
             return true
         } catch {
             authError = error.localizedDescription

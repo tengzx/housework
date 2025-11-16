@@ -16,15 +16,21 @@ extension HouseholdMember {
         let initials = firestoreData["initials"] as? String ?? HouseholdMember.initials(from: name)
         let colorHex = firestoreData["color"] as? String
         let color = colorHex.flatMap(Color.init(hex:)) ?? .blue
-        self.init(id: uuid, name: name, initials: initials, accentColor: color)
+        let avatarString = firestoreData["avatarURL"] as? String
+        let avatarURL = avatarString.flatMap { URL(string: $0) }
+        self.init(id: uuid, name: name, initials: initials, accentColor: color, avatarURL: avatarURL)
     }
     
     var firestoreData: [String: Any] {
-        [
+        var payload: [String: Any] = [
             "id": id.uuidString,
             "name": name,
             "initials": initials,
             "color": accentColor.hexString ?? "#2563EBFF"
         ]
+        if let avatarURL {
+            payload["avatarURL"] = avatarURL.absoluteString
+        }
+        return payload
     }
 }

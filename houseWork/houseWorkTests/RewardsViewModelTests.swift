@@ -5,11 +5,11 @@ import SwiftUI
 final class RewardsViewModelTests: XCTestCase {
     
     @MainActor
-    func testAvailablePointsReflectProfilePoints() async throws {
-        let context = await makeContext(initialPoints: 150)
+    func testPointsReflectProfileValues() async throws {
+        let context = await makeContext(initialPoints: 150, initialLifetime: 320)
         await Task.yield()
         XCTAssertEqual(context.viewModel.availablePoints, 150)
-        XCTAssertEqual(context.viewModel.lifetimePoints, 150)
+        XCTAssertEqual(context.viewModel.lifetimePoints, 320)
     }
     
     @MainActor
@@ -27,11 +27,13 @@ final class RewardsViewModelTests: XCTestCase {
         XCTAssertEqual(context.viewModel.history.count, 1)
         XCTAssertEqual(context.viewModel.availablePoints, 200 - reward.cost)
         XCTAssertEqual(context.authStore.userProfile?.points, 200 - reward.cost)
+        XCTAssertEqual(context.viewModel.lifetimePoints, context.authStore.userProfile?.lifetimePoints)
     }
     
     @MainActor
     private func makeContext(
         initialPoints: Int,
+        initialLifetime: Int? = nil,
         redemptions: [RewardRedemption] = []
     ) async -> (viewModel: RewardsViewModel, rewardsStore: RewardsStore, authStore: AuthStore) {
         let session = AuthSession(userId: "user-\(UUID().uuidString)", displayName: "Test User", email: "test@example.com")
@@ -42,7 +44,8 @@ final class RewardsViewModelTests: XCTestCase {
             email: session.email ?? "",
             accentColor: .blue,
             memberId: memberId.uuidString,
-            points: initialPoints
+            points: initialPoints,
+            lifetimePoints: initialLifetime ?? initialPoints
         )
         let authStore = AuthStore(
             authService: InMemoryAuthenticationService(initialSession: session),

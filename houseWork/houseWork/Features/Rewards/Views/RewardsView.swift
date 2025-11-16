@@ -208,7 +208,8 @@ private struct RedemptionRow: View {
         email: session.email ?? "",
         accentColor: .blue,
         memberId: memberId.uuidString,
-        points: 250
+        points: 250,
+        lifetimePoints: 480
     )
     let authStore = AuthStore(
         authService: InMemoryAuthenticationService(initialSession: session),
