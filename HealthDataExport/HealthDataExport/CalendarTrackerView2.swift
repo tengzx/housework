@@ -707,25 +707,22 @@ private struct Calendar2EventFormSheet: View {
     }
 
     private var timeEditors: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("日期").font(.system(size: 13, weight: .semibold)).foregroundStyle(Calendar2Style.text2)
-                Spacer()
-                DatePicker("", selection: dateBinding, displayedComponents: .date)
-                    .labelsHidden().datePickerStyle(.compact)
-            }
-            HStack {
-                Text("开始").font(.system(size: 13, weight: .semibold)).foregroundStyle(Calendar2Style.text2)
-                Spacer()
-                DatePicker("", selection: startBinding, displayedComponents: .hourAndMinute)
-                    .labelsHidden().datePickerStyle(.compact)
-            }
-            HStack {
-                Text("结束").font(.system(size: 13, weight: .semibold)).foregroundStyle(Calendar2Style.text2)
-                Spacer()
-                DatePicker("", selection: endBinding, displayedComponents: .hourAndMinute)
-                    .labelsHidden().datePickerStyle(.compact)
-            }
+        HStack(spacing: 8) {
+            Text("日期")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Calendar2Style.text2)
+            DatePicker("", selection: dateBinding, displayedComponents: .date)
+                .labelsHidden().datePickerStyle(.compact)
+
+            Spacer()
+
+            DatePicker("", selection: startBinding, displayedComponents: .hourAndMinute)
+                .labelsHidden().datePickerStyle(.compact)
+            Text("–")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Calendar2Style.faint)
+            DatePicker("", selection: endBinding, displayedComponents: .hourAndMinute)
+                .labelsHidden().datePickerStyle(.compact)
         }
     }
 
