@@ -151,6 +151,16 @@ final class TimeCalendarStore: ObservableObject {
         return await update(event)
     }
 
+    func updateAll(id: String, name: String, categoryId: String, typeId: String?, start: Int, end: Int) async -> Calendar2Event? {
+        guard var event = events.first(where: { $0.id == id }) else { return nil }
+        event.name = name
+        event.category = categoryId
+        event.typeId = typeId
+        event.start = start
+        event.end = end
+        return await update(event)
+    }
+
     func delete(id: String) async -> Bool {
         guard let event = events.first(where: { $0.id == id }) else { return false }
         do {

@@ -39,26 +39,24 @@ struct CalendarTrackerView2: View {
             .simultaneousGesture(horizontalHistoryDrag)
         }
         .sheet(item: $selectedEvent) { event in
-            Calendar2DetailSheet(
-                event: event,
+            Calendar2EventFormSheet(
+                mode: .edit(event),
                 categories: store.categories,
                 categoryProvider: store.category(for:),
-                onChangeCategory: changeCategory,
-                onChangeName: changeName,
-                onChangeType: changeType,
-                onChangeTime: changeTime,
+                onSave: saveEditedEvent,
                 onDelete: deleteEvent
             )
-            .presentationDetents([.medium])
+            .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationBackground(Calendar2Style.sheet)
         }
         .sheet(item: $draftEvent) { draft in
-            Calendar2CreateSheet(
-                draft: draft,
+            Calendar2EventFormSheet(
+                mode: .create(draft),
                 categories: store.categories,
                 categoryProvider: store.category(for:),
-                onSave: createEvent
+                onSave: createEvent,
+                onDelete: nil
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -429,42 +427,20 @@ struct CalendarTrackerView2: View {
 
     private func createEvent(_ event: Calendar2Event) {
         Task {
-            if let created = await store.createEvent(event) {
-                draftEvent = nil
-                selectedEvent = created
-            }
+            _ = await store.createEvent(event)
         }
     }
 
-    private func changeCategory(id: String, category: String) {
+    private func saveEditedEvent(_ event: Calendar2Event) {
         Task {
-            if let event = await store.updateCategory(id: id, categoryId: category) {
-                selectedEvent = event
-            }
-        }
-    }
-
-    private func changeName(id: String, name: String, category: String, typeId: String?) {
-        Task {
-            if let event = await store.updateName(id: id, name: name, categoryId: category, typeId: typeId) {
-                selectedEvent = event
-            }
-        }
-    }
-
-    private func changeType(id: String, category: String, typeId: String?) {
-        Task {
-            if let event = await store.updateType(id: id, categoryId: category, typeId: typeId) {
-                selectedEvent = event
-            }
-        }
-    }
-
-    private func changeTime(id: String, start: Int, end: Int) {
-        Task {
-            if let event = await store.updateTime(id: id, start: start, end: end) {
-                selectedEvent = event
-            }
+            _ = await store.updateAll(
+                id: event.id,
+                name: event.name,
+                categoryId: event.category,
+                typeId: event.typeId,
+                start: event.start,
+                end: event.end
+            )
         }
     }
 
@@ -477,344 +453,21 @@ struct CalendarTrackerView2: View {
     }
 }
 
-private struct Calendar2DetailSheet: View {
-    let event: Calendar2Event
-    let categories: [Calendar2Category]
-    let categoryProvider: (String) -> Calendar2Category
-    let onChangeCategory: (String, String) -> Void
-    let onChangeName: (String, String, String, String?) -> Void
-    let onChangeType: (String, String, String?) -> Void
-    let onChangeTime: (String, Int, Int) -> Void
-    let onDelete: (String) -> Void
+// MARK: - 编辑 & 新增共用表单
 
-    @State private var pickedCategory: String
-    @State private var draftName: String
-    @State private var isEditingTime = false
-
-    init(
-        event: Calendar2Event,
-        categories: [Calendar2Category],
-        categoryProvider: @escaping (String) -> Calendar2Category,
-        onChangeCategory: @escaping (String, String) -> Void,
-        onChangeName: @escaping (String, String, String, String?) -> Void,
-        onChangeType: @escaping (String, String, String?) -> Void,
-        onChangeTime: @escaping (String, Int, Int) -> Void,
-        onDelete: @escaping (String) -> Void
-    ) {
-        self.event = event
-        self.categories = categories
-        self.categoryProvider = categoryProvider
-        self.onChangeCategory = onChangeCategory
-        self.onChangeName = onChangeName
-        self.onChangeType = onChangeType
-        self.onChangeTime = onChangeTime
-        self.onDelete = onDelete
-        _pickedCategory = State(initialValue: event.category)
-        _draftName = State(initialValue: event.name)
+private struct Calendar2EventFormSheet: View {
+    enum Mode {
+        case edit(Calendar2Event)
+        case create(Calendar2Event)
     }
 
-    private var category: Calendar2Category {
-        categoryProvider(event.category)
-    }
-
-    private var eventTint: Color {
-        category.color
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(eventTint)
-                        .frame(width: 12, height: 12)
-
-                    Text(event.name)
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Calendar2Style.text)
-
-                    Spacer()
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("名称")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1.5)
-                        .foregroundStyle(Calendar2Style.muted)
-
-                    HStack(spacing: 10) {
-                        TextField("输入事件名称", text: $draftName)
-                            .textInputAutocapitalization(.never)
-                            .disableAutocorrection(true)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Calendar2Style.text)
-                            .padding(.horizontal, 14)
-                            .frame(height: 46)
-                            .background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(Calendar2Style.line2, lineWidth: 1)
-                            )
-
-                        Button("保存") {
-                            commitNameChange()
-                        }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(canSaveName ? Calendar2Style.accent : Calendar2Style.faint)
-                        .frame(width: 60, height: 46)
-                        .background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(canSaveName ? Calendar2Style.accent.opacity(0.35) : Calendar2Style.line2, lineWidth: 1)
-                        )
-                        .buttonStyle(.plain)
-                        .disabled(!canSaveName)
-                    }
-                }
-
-                HStack(spacing: 0) {
-                    metric(title: "时长", value: Calendar2Format.duration(event.end - event.start), tint: Calendar2Style.accent)
-
-                    Rectangle()
-                        .fill(Calendar2Style.surface)
-                        .frame(width: 1)
-                        .padding(.horizontal, 16)
-
-                    timeMetric
-                }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 16)
-                .background(Calendar2Style.surface2, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                if isEditingTime {
-                    timeEditors
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 14)
-                        .background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Calendar2Style.line, lineWidth: 1)
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("分类")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1.5)
-                        .foregroundStyle(Calendar2Style.muted)
-
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                        ForEach(categories) { item in
-                            let key = item.id
-                            let isOn = pickedCategory == key
-                            Button {
-                                pickedCategory = key
-                                onChangeCategory(event.id, key)
-                            } label: {
-                                HStack(spacing: 7) {
-                                    Circle()
-                                        .fill(item.color)
-                                        .frame(width: 9, height: 9)
-                                    Text(item.label)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(isOn ? .white : Calendar2Style.text2)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 46)
-                                .background(isOn ? item.color.opacity(0.18) : Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(isOn ? item.color : Calendar2Style.line2, lineWidth: 1.5)
-                                )
-                            }
-                            .buttonStyle(Calendar2PressStyle())
-                        }
-                    }
-
-                    Text("小类")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1)
-                        .foregroundStyle(Calendar2Style.faint)
-
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
-                        ForEach(categoryProvider(pickedCategory).types) { type in
-                            let isOn = event.typeId == type.id && event.category == pickedCategory
-                            let tint = categoryProvider(pickedCategory).color
-                            Button {
-                                onChangeType(event.id, pickedCategory, type.id)
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Circle()
-                                        .fill(tint)
-                                        .frame(width: 8, height: 8)
-                                    Text(type.label)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(isOn ? tint : Calendar2Style.text2)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 40)
-                                .background(isOn ? tint.opacity(0.12) : Calendar2Style.surface, in: Capsule())
-                                .overlay(
-                                    Capsule()
-                                        .stroke(isOn ? tint : tint.opacity(0.35), lineWidth: 1.5)
-                                )
-                            }
-                            .buttonStyle(Calendar2PressStyle())
-                        }
-                    }
-
-                    Button(role: .destructive) {
-                        onDelete(event.id)
-                    } label: {
-                        Label("删除记录", systemImage: "trash")
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                    }
-                    .buttonStyle(Calendar2PressStyle())
-                    .padding(.top, 6)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
-            .padding(.bottom, 32)
-        }
-        .background(Calendar2Style.sheet)
-        .onChange(of: event.name) { _, newValue in
-            draftName = newValue
-        }
-        .onChange(of: event.category) { _, newValue in
-            pickedCategory = newValue
-        }
-        .onSubmit(of: .text) {
-            commitNameChange()
-        }
-    }
-
-    private var trimmedDraftName: String {
-        draftName.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var canSaveName: Bool {
-        !trimmedDraftName.isEmpty && trimmedDraftName != event.name
-    }
-
-    private func commitNameChange() {
-        guard canSaveName else { return }
-        onChangeName(event.id, trimmedDraftName, pickedCategory, nil)
-    }
-
-    private func metric(title: String, value: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(1.5)
-                .foregroundStyle(Calendar2Style.muted)
-            Text(value)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var timeMetric: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text("起止")
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(1.5)
-                    .foregroundStyle(Calendar2Style.muted)
-
-                Spacer(minLength: 0)
-
-                if event.spansMultipleDays {
-                    Text("跨天记录")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Calendar2Style.faint)
-                } else {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            isEditingTime.toggle()
-                        }
-                    } label: {
-                        Label(isEditingTime ? "完成" : "修改", systemImage: isEditingTime ? "checkmark" : "pencil")
-                            .font(.system(size: 12, weight: .semibold))
-                            .labelStyle(.titleAndIcon)
-                            .foregroundStyle(Calendar2Style.accent)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Text("\(Calendar2Format.clock(event.start)) - \(Calendar2Format.clock(event.end))")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(Calendar2Style.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var timeEditors: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("开始")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Calendar2Style.text2)
-
-                Spacer()
-
-                DatePicker("", selection: startBinding, displayedComponents: .hourAndMinute)
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
-            }
-
-            HStack {
-                Text("结束")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Calendar2Style.text2)
-
-                Spacer()
-
-                DatePicker("", selection: endBinding, displayedComponents: .hourAndMinute)
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
-            }
-        }
-    }
-
-    private var startBinding: Binding<Date> {
-        Binding(
-            get: { Calendar2Format.date(fromMinute: event.start) },
-            set: { newValue in
-                let start = Calendar2Format.minute(fromDate: newValue)
-                let end = max(event.end, start + 5)
-                onChangeTime(event.id, start, min(end, Calendar2Layout.dayEnd * 60))
-            }
-        )
-    }
-
-    private var endBinding: Binding<Date> {
-        Binding(
-            get: { Calendar2Format.date(fromMinute: event.end) },
-            set: { newValue in
-                let end = Calendar2Format.minute(fromDate: newValue)
-                let start = event.start
-                onChangeTime(event.id, start, max(end, start + 5))
-            }
-        )
-    }
-}
-
-private struct Calendar2CreateSheet: View {
-    let draft: Calendar2Event
+    let mode: Mode
     let categories: [Calendar2Category]
     let categoryProvider: (String) -> Calendar2Category
     let onSave: (Calendar2Event) -> Void
+    let onDelete: ((String) -> Void)?
+
+    @Environment(\.dismiss) private var dismiss
 
     @State private var draftName: String
     @State private var pickedCategory: String
@@ -825,60 +478,72 @@ private struct Calendar2CreateSheet: View {
     @State private var isSaving = false
 
     init(
-        draft: Calendar2Event,
+        mode: Mode,
         categories: [Calendar2Category],
         categoryProvider: @escaping (String) -> Calendar2Category,
-        onSave: @escaping (Calendar2Event) -> Void
+        onSave: @escaping (Calendar2Event) -> Void,
+        onDelete: ((String) -> Void)?
     ) {
-        self.draft = draft
+        self.mode = mode
         self.categories = categories
         self.categoryProvider = categoryProvider
         self.onSave = onSave
-        _draftName = State(initialValue: draft.name)
-        _pickedCategory = State(initialValue: draft.category)
-        _pickedType = State(initialValue: draft.typeId)
-        _pickedDayOffset = State(initialValue: draft.dayOffset)
-        _start = State(initialValue: draft.start)
-        _end = State(initialValue: draft.end)
+        self.onDelete = onDelete
+        let source: Calendar2Event
+        switch mode {
+        case .edit(let e), .create(let e): source = e
+        }
+        _draftName = State(initialValue: source.name)
+        _pickedCategory = State(initialValue: source.category)
+        _pickedType = State(initialValue: source.typeId)
+        _pickedDayOffset = State(initialValue: source.dayOffset)
+        _start = State(initialValue: source.start)
+        _end = State(initialValue: source.end)
     }
 
-    private var category: Calendar2Category {
-        categoryProvider(pickedCategory)
+    private var isEdit: Bool {
+        if case .edit = mode { return true }
+        return false
     }
 
-    private var pickedTypeTint: Color {
-        category.color
+    private var originalEvent: Calendar2Event? {
+        if case .edit(let e) = mode { return e }
+        return nil
     }
 
-    private var trimmedName: String {
-        draftName.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var canSave: Bool {
-        !trimmedName.isEmpty && end > start && !isSaving
-    }
+    private var category: Calendar2Category { categoryProvider(pickedCategory) }
+    private var trimmedName: String { draftName.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canSave: Bool { !trimmedName.isEmpty && end > start && !isSaving }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(pickedTypeTint)
-                        .frame(width: 12, height: 12)
 
-                    Text("新建记录")
+                // 标题行
+                HStack(spacing: 10) {
+                    Circle().fill(category.color).frame(width: 12, height: 12)
+                    Text(isEdit ? "编辑记录" : "新建记录")
                         .font(.system(size: 22, weight: .semibold, design: .rounded))
                         .foregroundStyle(Calendar2Style.text)
-
                     Spacer()
+                    if isEdit, let onDelete, let event = originalEvent {
+                        Button(role: .destructive) {
+                            onDelete(event.id)
+                            dismiss()
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.red.opacity(0.8))
+                                .frame(width: 34, height: 34)
+                                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(Calendar2PressStyle())
+                    }
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("名称")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1.5)
-                        .foregroundStyle(Calendar2Style.muted)
-
+                // 名称
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionLabel("名称")
                     TextField("输入事件名称", text: $draftName)
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
@@ -893,20 +558,12 @@ private struct Calendar2CreateSheet: View {
                         )
                 }
 
+                // 时长 & 起止展示
                 HStack(spacing: 0) {
-                    metric(title: "时长", value: Calendar2Format.duration(max(end - start, 0)), tint: Calendar2Style.accent)
-
-                    Rectangle()
-                        .fill(Calendar2Style.surface)
-                        .frame(width: 1)
-                        .padding(.horizontal, 16)
-
+                    metricView(title: "时长", value: Calendar2Format.duration(max(end - start, 0)), tint: Calendar2Style.accent)
+                    Rectangle().fill(Calendar2Style.surface).frame(width: 1).padding(.horizontal, 16)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("起止")
-                            .font(.system(size: 11, weight: .semibold))
-                            .tracking(1.5)
-                            .foregroundStyle(Calendar2Style.muted)
-
+                        sectionLabel("起止")
                         Text("\(Calendar2Format.clock(start)) - \(Calendar2Format.clock(end))")
                             .font(.system(size: 18, weight: .bold, design: .rounded))
                             .monospacedDigit()
@@ -916,43 +573,42 @@ private struct Calendar2CreateSheet: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 16)
+                .padding(.horizontal, 18).padding(.vertical, 16)
                 .background(Calendar2Style.surface2, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
+                // 时间选择器
                 timeEditors
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
+                    .padding(.horizontal, 18).padding(.vertical, 14)
                     .background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .stroke(Calendar2Style.line, lineWidth: 1)
                     )
 
+                // 大类
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("分类")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1.5)
-                        .foregroundStyle(Calendar2Style.muted)
-
+                    sectionLabel("分类")
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                         ForEach(categories) { item in
                             let isOn = pickedCategory == item.id
                             Button {
-                                pickedCategory = item.id
-                                pickedType = item.types.first?.id
+                                if pickedCategory != item.id {
+                                    pickedCategory = item.id
+                                    pickedType = item.types.first?.id
+                                    draftName = item.types.first?.label ?? item.label
+                                }
                             } label: {
                                 HStack(spacing: 7) {
-                                    Circle()
-                                        .fill(item.color)
-                                        .frame(width: 9, height: 9)
+                                    Circle().fill(item.color).frame(width: 9, height: 9)
                                     Text(item.label)
                                         .font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(isOn ? .white : Calendar2Style.text2)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 46)
-                                .background(isOn ? item.color.opacity(0.18) : Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .frame(maxWidth: .infinity).frame(height: 46)
+                                .background(
+                                    isOn ? item.color.opacity(0.18) : Calendar2Style.surface,
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                                         .stroke(isOn ? item.color : Calendar2Style.line2, lineWidth: 1.5)
@@ -962,56 +618,51 @@ private struct Calendar2CreateSheet: View {
                         }
                     }
 
+                    // 小类
                     Text("小类")
                         .font(.system(size: 11, weight: .semibold))
                         .tracking(1)
                         .foregroundStyle(Calendar2Style.faint)
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
-                        ForEach(category.types) { type in
+                        ForEach(categoryProvider(pickedCategory).types) { type in
                             let isOn = pickedType == type.id
-                            let tint = category.color
+                            let tint = categoryProvider(pickedCategory).color
                             Button {
                                 pickedType = type.id
+                                draftName = type.label
                             } label: {
                                 HStack(spacing: 6) {
-                                    Circle()
-                                        .fill(tint)
-                                        .frame(width: 8, height: 8)
+                                    Circle().fill(tint).frame(width: 8, height: 8)
                                     Text(type.label)
                                         .font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(isOn ? tint : Calendar2Style.text2)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 40)
+                                .frame(maxWidth: .infinity).frame(height: 40)
                                 .background(isOn ? tint.opacity(0.12) : Calendar2Style.surface, in: Capsule())
-                                .overlay(
-                                    Capsule()
-                                        .stroke(isOn ? tint : tint.opacity(0.35), lineWidth: 1.5)
-                                )
+                                .overlay(Capsule().stroke(isOn ? tint : tint.opacity(0.35), lineWidth: 1.5))
                             }
                             .buttonStyle(Calendar2PressStyle())
                         }
                     }
                 }
 
-                Button {
-                    commit()
-                } label: {
+                // 保存按钮
+                Button { commit() } label: {
                     Text("保存")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(canSave ? Calendar2Style.accent : Calendar2Style.faint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .frame(maxWidth: .infinity).frame(height: 50)
+                        .background(
+                            canSave ? Calendar2Style.accent : Calendar2Style.faint,
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
                 }
                 .buttonStyle(Calendar2PressStyle())
                 .disabled(!canSave)
                 .padding(.top, 4)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
-            .padding(.bottom, 32)
+            .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 32)
         }
         .background(Calendar2Style.sheet)
     }
@@ -1019,32 +670,38 @@ private struct Calendar2CreateSheet: View {
     private func commit() {
         guard canSave else { return }
         isSaving = true
+        let original = originalEvent
         let event = Calendar2Event(
-            id: "",
+            id: original?.id ?? "",
+            sourceEventId: original?.sourceEventId,
+            absoluteStartedAt: original?.absoluteStartedAt,
+            absoluteEndedAt: original?.absoluteEndedAt,
             dayOffset: pickedDayOffset,
             start: start,
             end: end,
             name: trimmedName,
             category: pickedCategory,
             typeId: pickedType,
-            source: "manual",
-            note: ""
+            source: original?.source ?? "manual",
+            note: original?.note
         )
         onSave(event)
+        dismiss()
     }
 
-    private func metric(title: String, value: String, tint: Color) -> some View {
+    private func sectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(1.5)
+            .foregroundStyle(Calendar2Style.muted)
+    }
+
+    private func metricView(title: String, value: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(1.5)
-                .foregroundStyle(Calendar2Style.muted)
+            sectionLabel(title)
             Text(value)
                 .font(.system(size: 18, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
+                .monospacedDigit().foregroundStyle(tint).lineLimit(1).minimumScaleFactor(0.78)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1052,39 +709,22 @@ private struct Calendar2CreateSheet: View {
     private var timeEditors: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("日期")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Calendar2Style.text2)
-
+                Text("日期").font(.system(size: 13, weight: .semibold)).foregroundStyle(Calendar2Style.text2)
                 Spacer()
-
                 DatePicker("", selection: dateBinding, displayedComponents: .date)
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
+                    .labelsHidden().datePickerStyle(.compact)
             }
-
             HStack {
-                Text("开始")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Calendar2Style.text2)
-
+                Text("开始").font(.system(size: 13, weight: .semibold)).foregroundStyle(Calendar2Style.text2)
                 Spacer()
-
                 DatePicker("", selection: startBinding, displayedComponents: .hourAndMinute)
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
+                    .labelsHidden().datePickerStyle(.compact)
             }
-
             HStack {
-                Text("结束")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Calendar2Style.text2)
-
+                Text("结束").font(.system(size: 13, weight: .semibold)).foregroundStyle(Calendar2Style.text2)
                 Spacer()
-
                 DatePicker("", selection: endBinding, displayedComponents: .hourAndMinute)
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
+                    .labelsHidden().datePickerStyle(.compact)
             }
         }
     }
@@ -1092,9 +732,7 @@ private struct Calendar2CreateSheet: View {
     private var dateBinding: Binding<Date> {
         Binding(
             get: { Calendar2Format.day(offset: pickedDayOffset) },
-            set: { newValue in
-                pickedDayOffset = Calendar2Format.dayOffset(for: newValue)
-            }
+            set: { pickedDayOffset = Calendar2Format.dayOffset(for: $0) }
         )
     }
 
@@ -1103,9 +741,7 @@ private struct Calendar2CreateSheet: View {
             get: { Calendar2Format.date(fromMinute: start) },
             set: { newValue in
                 start = Calendar2Format.minute(fromDate: newValue)
-                if end <= start {
-                    end = min(start + 5, Calendar2Layout.dayEnd * 60)
-                }
+                if end <= start { end = min(start + 5, Calendar2Layout.dayEnd * 60) }
             }
         )
     }
@@ -1113,13 +749,11 @@ private struct Calendar2CreateSheet: View {
     private var endBinding: Binding<Date> {
         Binding(
             get: { Calendar2Format.date(fromMinute: end) },
-            set: { newValue in
-                let value = Calendar2Format.minute(fromDate: newValue)
-                end = max(value, start + 5)
-            }
+            set: { end = max(Calendar2Format.minute(fromDate: $0), start + 5) }
         )
     }
 }
+
 
 struct Calendar2Event: Identifiable, Equatable {
     let id: String
