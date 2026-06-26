@@ -6,6 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2A0000012FE0000000000001 /* HealthDataExportWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000022FE0000000000002 /* HealthDataExportWatchApp.swift */; };
+		2A0000032FE0000000000003 /* HealthDataExport/WatchTimeTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000042FE0000000000004 /* HealthDataExport/WatchTimeTrackerView.swift */; };
+		2A0000052FE0000000000005 /* HealthDataExport/ShortcutRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000062FE0000000000006 /* HealthDataExport/ShortcutRecord.swift */; };
+		2A0000102FE0000000000010 /* HealthDataExport Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2A0000072FE0000000000007 /* HealthDataExport Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2A0000142FE0000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2A0000152FE0000000000015 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		1B38A35A2FD6D715008783FC /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,17 +29,56 @@
 			remoteGlobalIDString = 1B38A34B2FD6D714008783FC;
 			remoteInfo = HealthDataExport;
 		};
+		2A0000112FE0000000000011 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1B38A3442FD6D714008783FC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2A00000A2FE000000000000A;
+			remoteInfo = "HealthDataExport Watch App";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2A0000122FE0000000000012 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				2A0000102FE0000000000010 /* HealthDataExport Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		1B38A34C2FD6D714008783FC /* HealthDataExport.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HealthDataExport.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B38A3592FD6D715008783FC /* HealthDataExportTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HealthDataExportTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B38A3632FD6D716008783FC /* HealthDataExportUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HealthDataExportUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A0000022FE0000000000002 /* HealthDataExportWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExportWatchApp.swift; sourceTree = "<group>"; };
+		2A0000042FE0000000000004 /* HealthDataExport/WatchTimeTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/WatchTimeTrackerView.swift; sourceTree = SOURCE_ROOT; };
+		2A0000062FE0000000000006 /* HealthDataExport/ShortcutRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/ShortcutRecord.swift; sourceTree = SOURCE_ROOT; };
+		2A0000072FE0000000000007 /* HealthDataExport Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "HealthDataExport Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A0000152FE0000000000015 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1B38A3762FD6E001008783FC /* Exceptions for "HealthDataExport" folder in "HealthDataExport" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1B38A34B2FD6D714008783FC /* HealthDataExport */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1B38A34E2FD6D714008783FC /* HealthDataExport */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1B38A3762FD6E001008783FC /* Exceptions for "HealthDataExport" folder in "HealthDataExport" target */,
+			);
 			path = HealthDataExport;
 			sourceTree = "<group>";
 		};
@@ -69,6 +116,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2A0000082FE0000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -76,6 +130,7 @@
 			isa = PBXGroup;
 			children = (
 				1B38A34E2FD6D714008783FC /* HealthDataExport */,
+				2A0000092FE0000000000009 /* HealthDataExportWatchApp */,
 				1B38A35C2FD6D715008783FC /* HealthDataExportTests */,
 				1B38A3662FD6D716008783FC /* HealthDataExportUITests */,
 				1B38A34D2FD6D714008783FC /* Products */,
@@ -86,10 +141,22 @@
 			isa = PBXGroup;
 			children = (
 				1B38A34C2FD6D714008783FC /* HealthDataExport.app */,
+				2A0000072FE0000000000007 /* HealthDataExport Watch App.app */,
 				1B38A3592FD6D715008783FC /* HealthDataExportTests.xctest */,
 				1B38A3632FD6D716008783FC /* HealthDataExportUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		2A0000092FE0000000000009 /* HealthDataExportWatchApp */ = {
+			isa = PBXGroup;
+			children = (
+				2A0000022FE0000000000002 /* HealthDataExportWatchApp.swift */,
+				2A0000152FE0000000000015 /* Assets.xcassets */,
+				2A0000042FE0000000000004 /* HealthDataExport/WatchTimeTrackerView.swift */,
+				2A0000062FE0000000000006 /* HealthDataExport/ShortcutRecord.swift */,
+			);
+			path = HealthDataExportWatchApp;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -102,10 +169,12 @@
 				1B38A3482FD6D714008783FC /* Sources */,
 				1B38A3492FD6D714008783FC /* Frameworks */,
 				1B38A34A2FD6D714008783FC /* Resources */,
+				2A0000122FE0000000000012 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				2A0000132FE0000000000013 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				1B38A34E2FD6D714008783FC /* HealthDataExport */,
@@ -163,6 +232,25 @@
 			productReference = 1B38A3632FD6D716008783FC /* HealthDataExportUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		2A00000A2FE000000000000A /* HealthDataExport Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A00000B2FE000000000000B /* Build configuration list for PBXNativeTarget "HealthDataExport Watch App" */;
+			buildPhases = (
+				2A00000C2FE000000000000C /* Sources */,
+				2A0000082FE0000000000008 /* Frameworks */,
+				2A00000D2FE000000000000D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "HealthDataExport Watch App";
+			packageProductDependencies = (
+			);
+			productName = "HealthDataExport Watch App";
+			productReference = 2A0000072FE0000000000007 /* HealthDataExport Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +272,9 @@
 						CreatedOnToolsVersion = 26.1.1;
 						TestTargetID = 1B38A34B2FD6D714008783FC;
 					};
+					2A00000A2FE000000000000A = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
 				};
 			};
 			buildConfigurationList = 1B38A3472FD6D714008783FC /* Build configuration list for PBXProject "HealthDataExport" */;
@@ -201,6 +292,7 @@
 			projectRoot = "";
 			targets = (
 				1B38A34B2FD6D714008783FC /* HealthDataExport */,
+				2A00000A2FE000000000000A /* HealthDataExport Watch App */,
 				1B38A3582FD6D715008783FC /* HealthDataExportTests */,
 				1B38A3622FD6D716008783FC /* HealthDataExportUITests */,
 			);
@@ -229,6 +321,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2A00000D2FE000000000000D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A0000142FE0000000000014 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -253,6 +353,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2A00000C2FE000000000000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A0000012FE0000000000001 /* HealthDataExportWatchApp.swift in Sources */,
+				2A0000032FE0000000000003 /* HealthDataExport/WatchTimeTrackerView.swift in Sources */,
+				2A0000052FE0000000000005 /* HealthDataExport/ShortcutRecord.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +375,11 @@
 			isa = PBXTargetDependency;
 			target = 1B38A34B2FD6D714008783FC /* HealthDataExport */;
 			targetProxy = 1B38A3642FD6D716008783FC /* PBXContainerItemProxy */;
+		};
+		2A0000132FE0000000000013 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2A00000A2FE000000000000A /* HealthDataExport Watch App */;
+			targetProxy = 2A0000112FE0000000000011 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -390,6 +505,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HealthDataExport/HealthDataExport.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y5S7NUB77K;
@@ -397,17 +513,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HealthDataExport/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -418,13 +525,13 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Debug;
@@ -434,6 +541,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HealthDataExport/HealthDataExport.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y5S7NUB77K;
@@ -441,17 +549,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HealthDataExport/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -462,13 +561,13 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Release;
@@ -575,6 +674,78 @@
 			};
 			name = Release;
 		};
+		2A00000E2FE000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y5S7NUB77K;
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_PREVIEWS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = FLOW;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tengzx.HealthDataExport;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tengzx.HealthDataExport.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		2A00000F2FE000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y5S7NUB77K;
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_PREVIEWS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = FLOW;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tengzx.HealthDataExport;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tengzx.HealthDataExport.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -610,6 +781,15 @@
 			buildConfigurations = (
 				1B38A3742FD6D716008783FC /* Debug */,
 				1B38A3752FD6D716008783FC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2A00000B2FE000000000000B /* Build configuration list for PBXNativeTarget "HealthDataExport Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2A00000E2FE000000000000E /* Debug */,
+				2A00000F2FE000000000000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
