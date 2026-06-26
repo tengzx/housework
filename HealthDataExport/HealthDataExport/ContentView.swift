@@ -26,7 +26,7 @@ private struct RecordWorkspaceView: View {
     @State private var selection = 0
 
     var body: some View {
-        Group {
+        ZStack {
             switch selection {
             case 1:
                 CalendarTrackerView2()
@@ -34,13 +34,14 @@ private struct RecordWorkspaceView: View {
                 RecordView()
             }
         }
+        .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) {
             RecordWorkspaceSwitcher(selection: $selection)
                 .padding(.horizontal, 18)
                 .padding(.top, 6)
                 .padding(.bottom, 8)
                 .frame(maxWidth: .infinity)
-                .background(Color(hex: "F5F6F8"))
+                .background(Color(hex: "F5F6F8").ignoresSafeArea(edges: .top))
         }
     }
 }

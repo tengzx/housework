@@ -63,7 +63,6 @@ struct RecordView: View {
                 .zIndex(10)
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
         .animation(.easeInOut(duration: 0.18), value: isAdding)
         .task {
             await refreshRunningSession()
