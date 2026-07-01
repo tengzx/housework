@@ -67,28 +67,6 @@ struct FitnessTemplateListView: View {
                                 .font(.system(size: 21, weight: .bold))
                                 .foregroundStyle(Color(hex: "1C1C1E"))
                             Spacer()
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(Color(hex: "E4E4E9"))
-                                    .frame(width: 34, height: 34)
-                                    .overlay(
-                                        Text("···")
-                                            .font(.system(size: 16, weight: .bold))
-                                            .foregroundStyle(Color(hex: "5B5B61"))
-                                            .offset(y: -3)
-                                    )
-                                Button { showCreateSheet = true } label: {
-                                    Circle()
-                                        .fill(Color(hex: "E4E4E9"))
-                                        .frame(width: 34, height: 34)
-                                        .overlay(
-                                            Image(systemName: "plus")
-                                                .font(.system(size: 15, weight: .semibold))
-                                                .foregroundStyle(Color(hex: "5B5B61"))
-                                        )
-                                }
-                                .disabled(isCreating)
-                            }
                         }
                         .padding(.horizontal, 20)
                         .padding(.bottom, 14)

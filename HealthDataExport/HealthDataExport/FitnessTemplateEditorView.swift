@@ -271,6 +271,7 @@ struct FitnessTemplateEditorView: View {
     @State private var showLibrary = false
     @State private var showDeleteConfirm = false
     @State private var progressTarget: ExerciseProgressTarget?
+    @State private var editingSetId: UUID?
 
     init(
         payload: FitnessTemplateEditorPayload,
@@ -325,6 +326,7 @@ struct FitnessTemplateEditorView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 8)
 
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         TextField("模板名称", text: $vm.templateName)
@@ -358,7 +360,8 @@ struct FitnessTemplateEditorView: View {
                                             name: ex.exerciseName,
                                             trackingType: ex.trackingType
                                         )
-                                    }
+                                    },
+                                    onEditSet: { editingSetId = $0 }
                                 )
                                     .padding(.horizontal, 16)
                                     .padding(.top, 18)
@@ -366,6 +369,17 @@ struct FitnessTemplateEditorView: View {
                         }
                     }
                     .padding(.bottom, 120)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: editingSetId) { _, setId in
+                    guard let setId else { return }
+                    // Lift the tapped field to a comfortable middle-slightly-above
+                    // position (not jammed against the top) so the keyboard doesn't
+                    // cover it — same behaviour as the active training view.
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        proxy.scrollTo("set-\(setId)", anchor: UnitPoint(x: 0.5, y: 0.35))
+                    }
+                }
                 }
             }
 
@@ -505,6 +519,7 @@ private struct ExerciseCard: View {
     @Binding var exercise: DraftExercise
     let vm: TemplateEditorViewModel
     let onProgress: () -> Void
+    let onEditSet: (UUID?) -> Void
     @State private var showRestInputs = false
 
     var body: some View {
@@ -583,10 +598,15 @@ private struct ExerciseCard: View {
                     isTimeBased: exercise.isTimeBased,
                     showSecondColumn: exercise.showSecondColumn,
                     secondPlaceholder: exercise.showDistanceColumn ? "米" : "kg",
-                    showRestInput: showRestInputs
-                ) {
-                    vm.deleteSet(exerciseId: exercise.id, setId: set.id)
-                }
+                    showRestInput: showRestInputs,
+                    onDelete: {
+                        vm.deleteSet(exerciseId: exercise.id, setId: set.id)
+                    },
+                    onFocusChange: { isEditing in
+                        onEditSet(isEditing ? set.id : nil)
+                    }
+                )
+                .id("set-\(set.id)")
                 .padding(.top, 10)
             }
 
@@ -660,6 +680,7 @@ private struct SetRow: View {
     let secondPlaceholder: String
     let showRestInput: Bool
     let onDelete: () -> Void
+    let onFocusChange: (Bool) -> Void
 
     @FocusState private var focused: TemplateSetField?
     @State private var dragOffset: CGFloat = 0
@@ -779,6 +800,9 @@ private struct SetRow: View {
                 }
                 .padding(.leading, 74)
             }
+        }
+        .onChange(of: focused) { _, new in
+            onFocusChange(new != nil)
         }
         .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { notification in
             if let textField = notification.object as? UITextField {
