@@ -2,17 +2,48 @@ import Combine
 import Foundation
 import SwiftUI
 
+struct ShortcutCategory: Identifiable {
+    let id: String
+    let label: String
+    let colorHex: String
+    let subtypes: [ShortcutSubtype]
+    var color: Color { Color(hex: colorHex) }
+
+    init(id: String, label: String, colorHex: String, subtypes: [ShortcutSubtype]) {
+        self.id = id
+        self.label = label
+        self.colorHex = colorHex
+        self.subtypes = subtypes
+    }
+
+    fileprivate init(response: RemoteCategoryResponse) {
+        id = response.id
+        label = response.label
+        colorHex = response.color.replacingOccurrences(of: "#", with: "")
+        subtypes = response.types.map { ShortcutSubtype(id: $0.id, label: $0.label) }
+    }
+}
+
+struct ShortcutSubtype: Identifiable {
+    let id: String
+    let label: String
+}
+
 struct ShortcutTask: Codable, Identifiable, Hashable {
     let id: UUID
     var name: String
     var symbolName: String
     var colorHex: String
+    var categoryId: String?
+    var subtypeId: String?
 
-    init(id: UUID = UUID(), name: String, symbolName: String, colorHex: String) {
+    init(id: UUID = UUID(), name: String, symbolName: String, colorHex: String, categoryId: String? = nil, subtypeId: String? = nil) {
         self.id = id
         self.name = name
         self.symbolName = symbolName
         self.colorHex = colorHex
+        self.categoryId = categoryId
+        self.subtypeId = subtypeId
     }
 
     var color: Color {
@@ -65,10 +96,10 @@ final class ShortcutRecordStore: ObservableObject {
         self.events = Self.load([ShortcutEvent].self, key: eventsKey, from: userDefaults) ?? Self.defaultEvents
     }
 
-    func addTask(name: String, template: ShortcutTask) {
+    func addTask(name: String, template: ShortcutTask, categoryId: String?, subtypeId: String?) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        tasks.append(ShortcutTask(name: trimmedName, symbolName: template.symbolName, colorHex: template.colorHex))
+        tasks.append(ShortcutTask(name: trimmedName, symbolName: template.symbolName, colorHex: template.colorHex, categoryId: categoryId, subtypeId: subtypeId))
         saveTasks()
     }
 
@@ -144,6 +175,45 @@ final class ShortcutRecordStore: ObservableObject {
         guard let data = try? JSONEncoder().encode(value) else { return }
         userDefaults.set(data, forKey: key)
     }
+
+    nonisolated static let categories: [ShortcutCategory] = [
+        ShortcutCategory(id: "work", label: "工作", colorHex: "3F7BF7", subtypes: [
+            ShortcutSubtype(id: "work.coding",   label: "编程"),
+            ShortcutSubtype(id: "work.meeting",  label: "会议"),
+            ShortcutSubtype(id: "work.writing",  label: "写作"),
+            ShortcutSubtype(id: "work.design",   label: "设计"),
+        ]),
+        ShortcutCategory(id: "study", label: "学习", colorHex: "6C5CE7", subtypes: [
+            ShortcutSubtype(id: "study.reading",  label: "阅读"),
+            ShortcutSubtype(id: "study.course",   label: "课程"),
+            ShortcutSubtype(id: "study.notes",    label: "笔记"),
+            ShortcutSubtype(id: "study.practice", label: "练习"),
+        ]),
+        ShortcutCategory(id: "life", label: "生活", colorHex: "24C48E", subtypes: [
+            ShortcutSubtype(id: "life.meal",     label: "吃饭"),
+            ShortcutSubtype(id: "life.shopping", label: "购物"),
+            ShortcutSubtype(id: "life.commute",  label: "通勤"),
+            ShortcutSubtype(id: "life.chores",   label: "家务"),
+        ]),
+        ShortcutCategory(id: "sport", label: "运动", colorHex: "FF6257", subtypes: [
+            ShortcutSubtype(id: "sport.gym",     label: "健身"),
+            ShortcutSubtype(id: "sport.running", label: "跑步"),
+            ShortcutSubtype(id: "sport.yoga",    label: "瑜伽"),
+            ShortcutSubtype(id: "sport.ball",    label: "球类"),
+        ]),
+        ShortcutCategory(id: "rest", label: "休息", colorHex: "FFB02E", subtypes: [
+            ShortcutSubtype(id: "rest.sleep",      label: "睡眠"),
+            ShortcutSubtype(id: "rest.nap",        label: "小憩"),
+            ShortcutSubtype(id: "rest.meditation", label: "冥想"),
+            ShortcutSubtype(id: "rest.leisure",    label: "放松"),
+        ]),
+        ShortcutCategory(id: "fun", label: "娱乐", colorHex: "F642A8", subtypes: [
+            ShortcutSubtype(id: "fun.game",   label: "游戏"),
+            ShortcutSubtype(id: "fun.music",  label: "音乐"),
+            ShortcutSubtype(id: "fun.video",  label: "视频"),
+            ShortcutSubtype(id: "fun.social", label: "社交"),
+        ]),
+    ]
 
     nonisolated static let defaultTasks: [ShortcutTask] = [
         ShortcutTask(name: "写代码", symbolName: "chevron.left.forwardslash.chevron.right", colorHex: "FF7847"),
@@ -279,6 +349,7 @@ enum ShortcutAPI {
     static let runningURL = URL(string: "http://100.67.64.11:8081/api/mobile/time-entries/running")!
     static let startURL = URL(string: "http://100.67.64.11:8081/api/mobile/time-entries/start")!
     static let endURL = URL(string: "http://100.67.64.11:8081/api/mobile/time-entries/end")!
+    static let categoriesURL = URL(string: "http://100.67.64.11:8081/api/time-categories")!
 
     static func running() async throws -> RunningShortcutEntry? {
         var request = URLRequest(url: runningURL)
@@ -300,9 +371,22 @@ enum ShortcutAPI {
         return try JSONDecoder.timeEntryDecoder.decode(TimeEntryResponse.self, from: data).runningEntry
     }
 
-    static func start(taskName: String) async throws {
+    static func categories() async throws -> [ShortcutCategory] {
+        var request = URLRequest(url: categoriesURL)
+        request.httpMethod = "GET"
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        let decoded = try JSONDecoder().decode(ShortcutCategoriesResponse.self, from: data)
+        return decoded.categories.map { ShortcutCategory(response: $0) }
+    }
+
+    static func start(taskName: String, typeId: String? = nil) async throws {
         let requestBody = StartTimeEntryRequest(
             taskName: taskName,
+            typeId: typeId.flatMap { Int($0) },
             startedAt: Date().apiISOString,
             source: "mobile",
             note: nil
@@ -342,9 +426,70 @@ enum ShortcutAPI {
 
 private struct StartTimeEntryRequest: Encodable {
     var taskName: String
+    var typeId: Int?
     var startedAt: String?
     var source: String?
     var note: String?
+}
+
+private struct ShortcutCategoriesResponse: Decodable {
+    var categories: [RemoteCategoryResponse]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        categories = try container.decodeIfPresent([RemoteCategoryResponse].self, forKey: .categories) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case categories
+    }
+}
+
+private struct RemoteCategoryResponse: Decodable {
+    var id: String
+    var label: String
+    var color: String
+    var types: [RemoteTypeResponse]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeFlexID(forKey: .id)
+        label = (try? c.decode(String.self, forKey: .label))
+            ?? (try? c.decode(String.self, forKey: .name))
+            ?? id
+        color = (try? c.decode(String.self, forKey: .color)) ?? "#8A8F9C"
+        types = (try? c.decode([RemoteTypeResponse].self, forKey: .types)) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, label, name, color, types
+    }
+}
+
+private struct RemoteTypeResponse: Decodable {
+    var id: String
+    var label: String
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeFlexID(forKey: .id)
+        label = (try? c.decode(String.self, forKey: .label))
+            ?? (try? c.decode(String.self, forKey: .name))
+            ?? id
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, label, name
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeFlexID(forKey key: Key) throws -> String {
+        if let v = try? decode(String.self, forKey: key) { return v }
+        if let v = try? decode(Int.self, forKey: key) { return String(v) }
+        if let v = try? decode(Int64.self, forKey: key) { return String(v) }
+        throw DecodingError.keyNotFound(key, .init(codingPath: codingPath, debugDescription: "Missing id"))
+    }
 }
 
 private struct EndTimeEntryRequest: Encodable {

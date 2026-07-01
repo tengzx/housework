@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct RecordView: View {
+    @ObservedObject var calendarStore: TimeCalendarStore
     @StateObject private var store = ShortcutRecordStore()
     @State private var text = ""
     @State private var isAdding = false
@@ -20,50 +21,50 @@ struct RecordView: View {
         ZStack(alignment: .bottom) {
             Design.bg.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header
-                    .padding(.bottom, 18)
+            ScrollView {
+                VStack(spacing: 0) {
+                    header
+                        .padding(.bottom, 18)
 
-                activeCard
-                    .padding(.bottom, 18)
+                    activeCard
+                        .padding(.bottom, 18)
 
-                inputBar
-                    .padding(.bottom, 18)
+                    inputBar
+                        .padding(.bottom, 18)
 
-                sectionHeader
-                    .padding(.bottom, 12)
+                    sectionHeader
+                        .padding(.bottom, 12)
 
-                shortcutsGrid
+                    shortcutsGrid
 
-                if !statusMessage.isEmpty {
-                    Text(statusMessage)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(statusMessage.contains("失败") ? .red : Design.muted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 12)
+                    if !statusMessage.isEmpty {
+                        Text(statusMessage)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(statusMessage.contains("失败") ? .red : Design.muted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 12)
+                    }
                 }
-
-                Spacer(minLength: 0)
+                .padding(.horizontal, 18)
+                .padding(.top, 20)
+                .padding(.bottom, 18)
+                .frame(maxWidth: 430)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 20)
-            .padding(.bottom, 18)
-            .frame(maxWidth: 430)
+            .scrollDismissesKeyboard(.immediately)
+            .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
             .onTapGesture {
                 isInputFocused = false
             }
 
-            if isAdding {
-                AddShortcutOverlay(
-                    store: store,
-                    isPresented: $isAdding
-                )
-                .transition(.opacity)
-                .zIndex(10)
-            }
         }
-        .animation(.easeInOut(duration: 0.18), value: isAdding)
+        .ignoresSafeArea(.keyboard)
+        .sheet(isPresented: $isAdding) {
+            AddShortcutSheet(store: store, calendarStore: calendarStore)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(.white)
+        }
         .task {
             await refreshRunningSession()
         }
@@ -352,7 +353,7 @@ struct RecordView: View {
             if hadActiveSession {
                 try await ShortcutAPI.end(note: "")
             }
-            try await ShortcutAPI.start(taskName: task.name)
+            try await ShortcutAPI.start(taskName: task.name, typeId: task.subtypeId)
         } catch {
             statusMessage = "\(task.name) 同步失败：\(error.localizedDescription)"
         }
@@ -410,204 +411,416 @@ struct RecordView: View {
 }
 
 @MainActor
-private struct AddShortcutOverlay: View {
+private struct AddShortcutSheet: View {
     @ObservedObject var store: ShortcutRecordStore
-    @Binding var isPresented: Bool
+    @ObservedObject var calendarStore: TimeCalendarStore
+    @Environment(\.dismiss) private var dismiss
+
     @State private var name = ""
-    @State private var selectedTemplate = ShortcutRecordStore.creationTemplates.first ?? ShortcutRecordStore.defaultTasks[0]
+    @State private var selectedTemplate = ShortcutRecordStore.iconOptions.first ?? ShortcutRecordStore.defaultTasks[0]
     @State private var searchText = ""
+    @State private var iconFilterTag: String = "common"
+    @State private var pickedCategory: String
+    @State private var pickedSubtype: String?
+    @State private var showManagement = false
+    @State private var managementTab: ManagementTab = .category
     @FocusState private var isNameFocused: Bool
 
     private let iconColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 6)
 
-    private var filteredOptions: [ShortcutTask] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let options = ShortcutRecordStore.iconOptions
-        if query.isEmpty {
-            return Array(options.prefix(36))
-        }
-        return Array(options.filter {
-            $0.name.lowercased().contains(query) || $0.symbolName.lowercased().contains(query)
-        }.prefix(60))
+    private static let iconFilterTags: [(id: String, label: String)] = [
+        ("common", "常用"), ("work", "工作"), ("study", "学习"),
+        ("life", "生活"), ("sport", "运动"), ("rest", "休息"),
+        ("fun", "娱乐"), ("all", "全部"),
+    ]
+
+    private static let iconCategorySymbols: [String: [String]] = [
+        "common": ["star.fill", "heart.fill", "clock.fill", "calendar", "bookmark.fill",
+                   "flag.fill", "note.text", "camera.fill", "music.note", "moon.stars.fill",
+                   "flame.fill", "leaf.fill"],
+        "work":   ["briefcase.fill", "doc.fill", "envelope.fill", "phone.fill", "message.fill",
+                   "printer.fill", "desktopcomputer", "iphone", "ipad.landscape", "calendar",
+                   "clock.fill", "video.fill"],
+        "study":  ["book.fill", "book.closed.fill", "note.text", "doc.fill",
+                   "music.note", "mic.fill", "star.fill", "bookmark.fill"],
+        "life":   ["house.fill", "fork.knife", "cup.and.saucer.fill", "mug.fill", "cart.fill",
+                   "bag.fill", "car.fill", "umbrella.fill", "key.fill", "wallet.pass.fill",
+                   "suitcase.fill", "gift.fill"],
+        "sport":  ["figure.run", "figure.walk", "dumbbell.fill", "bicycle", "heart.circle.fill",
+                   "figure.mind.and.body", "flame.fill", "mountain.2.fill"],
+        "rest":   ["moon.stars.fill", "moon.fill", "sun.max.fill", "cloud.fill", "leaf.fill",
+                   "figure.mind.and.body", "cup.and.saucer.fill", "drop.fill", "water.waves"],
+        "fun":    ["gamecontroller.fill", "music.note", "video.fill", "mic.fill", "photo.fill",
+                   "camera.fill", "heart.fill", "gift.fill", "map.fill", "airplane"],
+    ]
+
+    init(store: ShortcutRecordStore, calendarStore: TimeCalendarStore) {
+        self.store = store
+        self.calendarStore = calendarStore
+        let first = calendarStore.categories.first
+        _pickedCategory = State(initialValue: first?.id ?? "")
+        _pickedSubtype = State(initialValue: first?.types.first?.id)
     }
 
+    private var category: Calendar2Category {
+        calendarStore.categories.first { $0.id == pickedCategory }
+            ?? calendarStore.category(for: pickedCategory)
+    }
+
+    private var filteredOptions: [ShortcutTask] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let all = ShortcutRecordStore.iconOptions
+        if !query.isEmpty {
+            return Array(all.filter {
+                $0.name.lowercased().contains(query) || $0.symbolName.lowercased().contains(query)
+            }.prefix(60))
+        }
+        if iconFilterTag == "all" { return all }
+        if let symbols = Self.iconCategorySymbols[iconFilterTag] {
+            let filtered = all.filter { symbols.contains($0.symbolName) }
+            if !filtered.isEmpty { return filtered }
+        }
+        return Array(all.prefix(12))
+    }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.black.opacity(0.35)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    isPresented = false
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    header
+                    nameField
+                    iconSection
+                    categorySection
+                    subcategorySection
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
 
-            VStack(spacing: 0) {
-                Capsule()
-                    .fill(Design.line)
-                    .frame(width: 40, height: 4)
-                    .padding(.bottom, 18)
+            saveBar
+        }
+        .background(Calendar2Style.sheet)
+        .ignoresSafeArea(.keyboard)
+        .sheet(isPresented: $showManagement) {
+            Calendar2ManagementSheet(
+                initialTab: managementTab,
+                store: calendarStore,
+                onDone: {
+                    let cats = calendarStore.categories
+                    if !cats.contains(where: { $0.id == pickedCategory }) {
+                        pickedCategory = cats.first?.id ?? pickedCategory
+                        pickedSubtype = cats.first?.types.first?.id
+                    } else if cats.first(where: { $0.id == pickedCategory })?.types.contains(where: { $0.id == pickedSubtype }) == false {
+                        pickedSubtype = cats.first(where: { $0.id == pickedCategory })?.types.first?.id
+                    }
+                }
+            )
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                isNameFocused = true
+            }
+        }
+        .task {
+            try? await calendarStore.reloadCategories()
+            if let first = calendarStore.categories.first {
+                if pickedCategory.isEmpty {
+                    pickedCategory = first.id
+                    pickedSubtype = first.types.first?.id
+                }
+            }
+        }
+    }
 
-                HStack {
-                    Text("新增快捷指令")
-                        .font(.system(size: 19, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Design.text)
+    // MARK: - Header
 
-                    Spacer()
+    private var header: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(category.color)
+                .frame(width: 13, height: 13)
+            Text("新增快捷指令")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "23232A"))
+            Spacer()
+        }
+    }
 
-                    Button {
-                        isPresented = false
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Design.muted)
-                            .frame(width: 34, height: 34)
-                            .background(Design.surface2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    // MARK: - Name Field
+
+    private var nameField: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            sectionLabel("名称")
+            TextField("例如：写日记", text: $name)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .focused($isNameFocused)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color(hex: "23232A"))
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                .background(Calendar2Style.sheet, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+                )
+        }
+    }
+
+    // MARK: - Icon Section
+
+    private var iconSection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            sectionLabel("图标")
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(Color(hex: "9A9AA2"))
+                TextField("搜索图标（如：健身 / music / heart）", text: $searchText)
+                    .font(.system(size: 14, weight: .regular))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                if !searchText.isEmpty {
+                    Button { searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(Color(hex: "B0B0B8"))
                     }
                     .buttonStyle(PressButtonStyle())
                 }
-                .padding(.bottom, 20)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 46)
+            .background(Color(hex: "F5F5F7"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+            )
 
-                fieldLabel("名称")
-                TextField("例如：写日记", text: $name)
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(Design.text)
-                    .textInputAutocapitalization(.never)
-                    .focused($isNameFocused)
-                    .padding(.horizontal, 16)
-                    .frame(height: 50)
-                    .background(Design.surface2, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Design.line, lineWidth: 1)
-                    )
-                    .padding(.bottom, 20)
-
-                fieldLabel("图标")
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(Design.muted)
-
-                    TextField("搜索图标（英文，如 music / heart / book）", text: $searchText)
-                        .font(.system(size: 14, weight: .regular))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    if !searchText.isEmpty {
-                        Button {
-                            searchText = ""
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Design.muted)
-                                .padding(4)
-                        }
-                        .buttonStyle(PressButtonStyle())
-                    }
-                }
-                .padding(.horizontal, 14)
-                .frame(height: 46)
-                .background(Design.surface2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Design.line, lineWidth: 1)
-                )
-                .padding(.bottom, 12)
-
-                HStack(spacing: 10) {
-                    Image(systemName: selectedTemplate.symbolName)
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(Design.accent)
-                        .frame(width: 24, height: 24)
-
-                    Text(selectedTemplate.symbolName)
-                        .font(.system(size: 13, weight: .regular, design: .monospaced))
-                        .foregroundStyle(Design.muted)
-
-                    Spacer()
-                }
-                .padding(.bottom, 12)
-
-                ScrollView {
-                    LazyVGrid(columns: iconColumns, spacing: 8) {
-                        ForEach(filteredOptions) { template in
-                            let isOn = selectedTemplate.symbolName == template.symbolName
-                            Button {
-                                selectedTemplate = template
-                            } label: {
-                                Image(systemName: template.symbolName)
-                                    .font(.system(size: 19, weight: .medium))
-                                    .foregroundStyle(isOn ? .white : Design.icon)
-                                    .frame(maxWidth: .infinity)
-                                    .aspectRatio(1, contentMode: .fit)
-                                    .background(isOn ? Design.accent : Design.iconSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .stroke(isOn ? Design.accent : Design.iconLine, lineWidth: 1)
+            if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        ForEach(Self.iconFilterTags, id: \.id) { tag in
+                            let isOn = iconFilterTag == tag.id
+                            Button { iconFilterTag = tag.id } label: {
+                                Text(tag.label)
+                                    .font(.system(size: 13, weight: isOn ? .semibold : .medium))
+                                    .foregroundStyle(isOn ? .white : Color(hex: "4A4A54"))
+                                    .padding(.horizontal, 13)
+                                    .padding(.vertical, 7)
+                                    .background(
+                                        isOn ? Calendar2Style.accent : Color(hex: "F0F0F5"),
+                                        in: Capsule()
                                     )
                             }
                             .buttonStyle(PressButtonStyle())
+                            .animation(.easeOut(duration: 0.15), value: iconFilterTag)
                         }
                     }
+                    .padding(.vertical, 2)
+                }
+            }
 
-                    if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false && filteredOptions.isEmpty {
-                        Text("没找到匹配的图标，换个英文关键词试试")
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(Design.muted)
+            HStack(spacing: 8) {
+                Image(systemName: selectedTemplate.symbolName)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Calendar2Style.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("已选图标")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color(hex: "B0B0B8"))
+                    Text(selectedTemplate.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(hex: "4A4A54"))
+                }
+                Spacer()
+            }
+
+            LazyVGrid(columns: iconColumns, spacing: 8) {
+                ForEach(filteredOptions) { template in
+                    let isOn = selectedTemplate.symbolName == template.symbolName
+                    Button { selectedTemplate = template } label: {
+                        Image(systemName: template.symbolName)
+                            .font(.system(size: 19, weight: .medium))
+                            .foregroundStyle(isOn ? .white : Design.icon)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 20)
+                            .aspectRatio(1, contentMode: .fit)
+                            .background(
+                                isOn ? Calendar2Style.accent : Color(hex: "F5F5F7"),
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(isOn ? Calendar2Style.accent : Color(hex: "ECECEF"), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(PressButtonStyle())
+                }
+            }
+
+            if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && filteredOptions.isEmpty {
+                Text("没找到匹配的图标，换个关键词试试")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(Color(hex: "9A9AA2"))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+            }
+        }
+    }
+
+    // MARK: - Category Section
+
+    private var categorySection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack {
+                sectionLabel("分类")
+                Spacer()
+                manageButton(tab: .category)
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                ForEach(calendarStore.categories) { item in
+                    let isOn = pickedCategory == item.id
+                    Button {
+                        guard pickedCategory != item.id else { return }
+                        pickedCategory = item.id
+                        pickedSubtype = item.types.first?.id
+                    } label: {
+                        HStack(spacing: 8) {
+                            Circle().fill(item.color).frame(width: 9, height: 9)
+                            Text(item.label)
+                                .font(.system(size: 15, weight: isOn ? .semibold : .medium))
+                                .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                        .background(
+                            isOn ? item.color.opacity(0.13) : Color(hex: "F5F5F7"),
+                            in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .stroke(isOn ? item.color.opacity(0.55) : Color.clear, lineWidth: 1.5)
+                        )
+                    }
+                    .buttonStyle(Calendar2PressStyle())
+                }
+            }
+        }
+    }
+
+    // MARK: - Subcategory Section
+
+    private var subcategorySection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack {
+                sectionLabel("小类 · \(category.label)")
+                Spacer()
+                manageButton(tab: .subcategory)
+            }
+            let types = category.types
+            if types.isEmpty {
+                Text("该分类暂无小类，点「管理」添加")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(hex: "B5B5BC"))
+                    .padding(.top, 6)
+                    .padding(.horizontal, 2)
+            } else {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
+                    ForEach(types) { type in
+                        let isOn = pickedSubtype == type.id
+                        let tint = category.color
+                        Button { pickedSubtype = type.id } label: {
+                            HStack(spacing: 8) {
+                                Circle().fill(tint).frame(width: 9, height: 9)
+                                Text(type.label)
+                                    .font(.system(size: 15, weight: isOn ? .semibold : .medium))
+                                    .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(height: 44)
+                            .padding(.horizontal, 14)
+                            .background(
+                                isOn ? tint.opacity(0.13) : Color(hex: "F5F5F7"),
+                                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .stroke(isOn ? tint.opacity(0.55) : Color.clear, lineWidth: 1.5)
+                            )
+                        }
+                        .buttonStyle(Calendar2PressStyle())
                     }
                 }
-                .frame(minHeight: 120)
-                .padding(.bottom, 16)
-
-                Button {
-                    save()
-                } label: {
-                    Text("保存指令")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(Design.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-                .buttonStyle(PressButtonStyle())
-                .disabled(trimmedName.isEmpty)
-                .opacity(trimmedName.isEmpty ? 0.4 : 1)
             }
-            .padding(.horizontal, 20)
+        }
+    }
+
+    // MARK: - Save Bar
+
+    private var saveBar: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Color.black.opacity(0.05))
+                .frame(height: 1)
+            Button { save() } label: {
+                Text("保存指令")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        trimmedName.isEmpty ? Calendar2Style.faint : Calendar2Style.accent,
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    )
+                    .shadow(color: trimmedName.isEmpty ? .clear : Calendar2Style.accent.opacity(0.35), radius: 10, x: 0, y: 5)
+            }
+            .buttonStyle(Calendar2PressStyle())
+            .disabled(trimmedName.isEmpty)
+            .padding(.horizontal, 22)
             .padding(.top, 12)
-            .padding(.bottom, 28)
-            .frame(maxWidth: 430)
-            .frame(maxHeight: UIScreen.main.bounds.height * 0.88)
-            .background(Design.surface)
-            .clipShape(TopRoundedRectangle(radius: 24))
-            .overlay(alignment: .top) {
-                TopRoundedRectangle(radius: 24)
-                    .stroke(Design.line, lineWidth: 1)
+            .padding(.bottom, 16)
+        }
+        .background(Calendar2Style.sheet.ignoresSafeArea(edges: .bottom))
+    }
+
+    // MARK: - Helpers
+
+    private func manageButton(tab: ManagementTab) -> some View {
+        Button {
+            managementTab = tab
+            showManagement = true
+        } label: {
+            HStack(spacing: 3) {
+                Text("管理")
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
             }
-            .transition(.move(edge: .bottom))
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(Calendar2Style.accent)
         }
-        .onAppear {
-            isNameFocused = true
-        }
+        .buttonStyle(.plain)
     }
 
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func fieldLabel(_ title: String) -> some View {
+    private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 12, weight: .semibold))
-            .tracking(1.5)
-            .foregroundStyle(Design.muted)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 8)
+            .font(.system(size: 12.5, weight: .semibold))
+            .tracking(0.6)
+            .foregroundStyle(Color(hex: "9A9AA2"))
     }
 
     private func save() {
         guard !trimmedName.isEmpty else { return }
-        store.addTask(name: trimmedName, template: selectedTemplate)
-        isPresented = false
+        store.addTask(name: trimmedName, template: selectedTemplate, categoryId: pickedCategory.isEmpty ? nil : pickedCategory, subtypeId: pickedSubtype)
+        dismiss()
     }
 }
 
@@ -616,35 +829,6 @@ private struct PressButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
-    }
-}
-
-private struct TopRoundedRectangle: Shape {
-    let radius: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        let radius = min(radius, min(rect.width, rect.height) / 2)
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
-        path.addArc(
-            center: CGPoint(x: rect.minX + radius, y: rect.minY + radius),
-            radius: radius,
-            startAngle: .degrees(180),
-            endAngle: .degrees(270),
-            clockwise: false
-        )
-        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
-        path.addArc(
-            center: CGPoint(x: rect.maxX - radius, y: rect.minY + radius),
-            radius: radius,
-            startAngle: .degrees(270),
-            endAngle: .degrees(0),
-            clockwise: false
-        )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.closeSubpath()
-        return path
     }
 }
 

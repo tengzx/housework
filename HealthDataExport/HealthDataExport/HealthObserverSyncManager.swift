@@ -36,6 +36,7 @@ final class HealthObserverSyncManager: ObservableObject {
     private var pendingRetryReason: String?
     private var pendingRetryMetricIDs: Set<HealthMetric.ID>?
     private let defaults: UserDefaults
+    private var cancellables = Set<AnyCancellable>()
 
     private static let enabledKey = "observerSync.enabled"
     private static let lastSyncAtKey = "observerSync.lastSyncAt"
@@ -59,24 +60,25 @@ final class HealthObserverSyncManager: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            Task {
-                await self.retryPendingSyncIfNeeded()
-            }
+            Task { await self.retryPendingSyncIfNeeded() }
         }
+
+        ConfigurationStore.shared.$configurations
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.configurationDidChange()
+            }
+            .store(in: &cancellables)
     }
 
     func start() {
         guard !hasStarted else { return }
         hasStarted = true
-        Task {
-            await refreshObservers()
-        }
+        Task { await refreshObservers() }
     }
 
     func configurationDidChange() {
-        Task {
-            await refreshObservers()
-        }
+        Task { await refreshObservers() }
     }
 
     func setEnabled(_ enabled: Bool) {
@@ -85,9 +87,7 @@ final class HealthObserverSyncManager: ObservableObject {
 
         if enabled {
             addLog(level: "info", message: "自动同步已开启")
-            Task {
-                await refreshObservers(force: true)
-            }
+            Task { await refreshObservers(force: true) }
         } else {
             stopObservers()
             statusText = "自动同步已关闭"
@@ -104,7 +104,7 @@ final class HealthObserverSyncManager: ObservableObject {
             return
         }
 
-        let configurations = ConfigurationPersistence.load().filter(\.isReadyToSend)
+        let configurations = ConfigurationStore.shared.configurations.filter(\.isReadyToSend)
         let types = Set(configurations.flatMap { $0.selectedMetrics.compactMap(\.sampleType) })
         let signature = configurationSignature(for: configurations)
 
@@ -152,24 +152,20 @@ final class HealthObserverSyncManager: ObservableObject {
     func syncNow(reason: String, changedMetricIDs: Set<HealthMetric.ID>? = nil) async {
         guard !isSyncing else { return }
 
-        let configurations = ConfigurationPersistence.load()
+        let configurations = ConfigurationStore.shared.configurations
             .filter(\.isReadyToSend)
             .filter { configuration in
                 guard let changedMetricIDs else { return true }
                 return !configuration.selectedMetricIDs.isDisjoint(with: changedMetricIDs)
             }
         guard !configurations.isEmpty else {
-            await MainActor.run {
-                statusText = "没有可发送的自动同步配置"
-            }
+            statusText = "没有可发送的自动同步配置"
             addLog(level: "warning", message: "触发自动同步但没有可发送配置")
             return
         }
 
         isSyncing = true
-        await MainActor.run {
-            statusText = "正在自动同步：\(reason)"
-        }
+        statusText = "正在自动同步：\(reason)"
         addLog(level: "info", message: "收到 HealthKit 更新：\(reason)")
 
         let backgroundTaskID = await MainActor.run {
@@ -194,7 +190,7 @@ final class HealthObserverSyncManager: ObservableObject {
                     shouldRequestAuthorization: false,
                     allowProtectedDataUnavailable: true
                 )
-                ConfigurationPersistence.markSent(id: configuration.id, status: "[自动] \(result)")
+                ConfigurationStore.shared.markSent(id: configuration.id, status: "[自动] \(result)")
                 await MainActor.run {
                     statusText = "[自动] \(configuration.name)：\(result)"
                     lastSyncAt = .now
@@ -203,7 +199,7 @@ final class HealthObserverSyncManager: ObservableObject {
                 addLog(level: "success", message: "\(configuration.name) 自动上传成功")
             } catch {
                 let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                ConfigurationPersistence.markSent(id: configuration.id, status: "[自动] \(message)")
+                ConfigurationStore.shared.markSent(id: configuration.id, status: "[自动] \(message)")
                 await MainActor.run {
                     statusText = "[自动] \(configuration.name)：\(message)"
                 }
@@ -223,7 +219,6 @@ final class HealthObserverSyncManager: ObservableObject {
                 completionHandler()
                 return
             }
-
             if let error {
                 Task { @MainActor in
                     self.statusText = "Observer 错误：\(error.localizedDescription)"
@@ -232,13 +227,11 @@ final class HealthObserverSyncManager: ObservableObject {
                 completionHandler()
                 return
             }
-
             Task {
                 await self.handleObserverUpdate(for: sampleType)
                 completionHandler()
             }
         }
-
         observerQueries.append(query)
         healthStore.execute(query)
     }
@@ -324,22 +317,18 @@ final class HealthObserverSyncManager: ObservableObject {
                     continuation.resume(returning: (0, 0, false))
                     return
                 }
-
                 if let error {
                     continuation.resume(throwing: error)
                     return
                 }
-
                 if let newAnchor {
                     self.save(anchor: newAnchor, for: sampleType)
                 }
-
                 let addedCount = samples?.count ?? 0
                 let deletedCount = deletedObjects?.count ?? 0
                 let hasChanges = initializeIfNeeded ? false : (addedCount > 0 || deletedCount > 0)
                 continuation.resume(returning: (addedCount, deletedCount, hasChanges))
             }
-
             self.healthStore.execute(query)
         }
     }

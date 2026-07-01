@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>时间日历接口需求文档</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f5f6f8;
+      color: #1a1c20;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+    h1, h2, h3 {
+      line-height: 1.25;
+      margin: 0;
+    }
+    h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 22px;
+      margin-top: 36px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e4e6eb;
+    }
+    h3 {
+      font-size: 17px;
+      margin-top: 22px;
+    }
+    p {
+      margin: 8px 0;
+    }
+    .meta {
+      color: #6f7480;
+      margin-bottom: 28px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e4e6eb;
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 14px;
+    }
+    code {
+      background: #f0f1f4;
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      background: #111318;
+      color: #f7f8fa;
+      padding: 16px;
+      border-radius: 8px;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      background: #fff;
+    }
+    th, td {
+      border: 1px solid #e4e6eb;
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f0f1f4;
+      font-weight: 700;
+    }
+    ul {
+      margin-top: 8px;
+    }
+    .method {
+      display: inline-block;
+      min-width: 54px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 12px;
+      text-align: center;
+    }
+    .get { background: #3fa9f5; }
+    .post { background: #22c55e; }
+    .patch { background: #ff7847; }
+    .delete { background: #ef4444; }
+    .endpoint {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>时间日历接口需求文档</h1>
+    <p class="meta">用于记录页日历视图。第一版先支持按日期范围展示、修改分类、修改起止时间；后续支持补录、删除和进行中记录。</p>
+
+    <h2>一、通用约定</h2>
+    <div class="card">
+      <p><strong>时间格式：</strong>所有时间字段使用 ISO 8601，并带时区，例如 <code>2026-06-22T09:00:00+03:00</code>。</p>
+      <p><strong>日期范围：</strong><code>from</code> 和 <code>to</code> 使用 <code>YYYY-MM-DD</code>。建议 <code>to</code> 按包含当天处理。</p>
+      <p><strong>颜色：</strong>分类颜色由后端返回十六进制色值，例如 <code>#7B8AF0</code>。</p>
+      <p><strong>重叠记录：</strong>当前 UI 可以显示重叠，但建议后端返回冲突提示或统一决定是否允许重叠。</p>
+    </div>
+
+    <h2>二、最小交付接口</h2>
+    <p>第一版日历接入后端，至少需要以下 3 个接口：</p>
+    <ul>
+      <li><code>GET /api/time-events?from=&to=</code>：拉取日历记录</li>
+      <li><code>GET /api/time-categories</code>：拉取分类和颜色</li>
+      <li><code>PATCH /api/time-events/{id}</code>：修改记录分类、名称、起止时间</li>
+    </ul>
+
+    <h2>三、接口详情</h2>
+
+    <h3><span class="method get">GET</span> <span class="endpoint">/api/time-events?from=2026-06-21&amp;to=2026-06-25</span></h3>
+    <p>按日期范围获取日历记录。日历左右滑动时会按可见日期范围分页拉取。</p>
+    <h4>返回示例</h4>
+    <pre>{
+  "events": [
+    {
+      "id": "evt_001",
+      "name": "睡觉",
+      "categoryId": "rest",
+      "typeId": "sleep",
+      "startedAt": "2026-06-21T05:30:00+03:00",
+      "endedAt": "2026-06-21T08:00:00+03:00",
+      "source": "shortcut",
+      "note": ""
+    }
+  ]
+}</pre>
+
+    <table>
+      <thead>
+        <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>id</code></td><td>string</td><td>记录唯一 ID</td></tr>
+        <tr><td><code>name</code></td><td>string</td><td>显示在日历色块上的名称</td></tr>
+        <tr><td><code>categoryId</code></td><td>string</td><td>大类 ID，用于决定颜色</td></tr>
+        <tr><td><code>typeId</code></td><td>string</td><td>小类 ID</td></tr>
+        <tr><td><code>startedAt</code></td><td>string</td><td>开始时间，ISO 8601，带时区</td></tr>
+        <tr><td><code>endedAt</code></td><td>string | null</td><td>结束时间；进行中记录可为 null</td></tr>
+        <tr><td><code>source</code></td><td>string</td><td>来源，例如 <code>shortcut</code>、<code>manual</code>、<code>import</code></td></tr>
+        <tr><td><code>note</code></td><td>string</td><td>备注，可为空</td></tr>
+      </tbody>
+    </table>
+
+    <h3><span class="method get">GET</span> <span class="endpoint">/api/time-categories</span></h3>
+    <p>获取大类、小类和大类颜色。详情弹窗的分类选择器依赖这个接口。</p>
+    <h4>返回示例</h4>
+    <pre>{
+  "categories": [
+    {
+      "id": "work",
+      "label": "工作",
+      "color": "#7B8AF0",
+      "types": [
+        { "id": "work_office", "label": "上班" },
+        { "id": "coding", "label": "写代码" },
+        { "id": "meeting", "label": "开会" }
+      ]
+    },
+    {
+      "id": "life",
+      "label": "生活",
+      "color": "#3FA9F5",
+      "types": [
+        { "id": "breakfast", "label": "吃早饭" },
+        { "id": "lunch", "label": "吃午饭" }
+      ]
+    }
+  ]
+}</pre>
+
+    <h3><span class="method patch">PATCH</span> <span class="endpoint">/api/time-events/{id}</span></h3>
+    <p>修改单条记录。用于详情弹窗里修改分类、小类、名称、起止时间和备注。</p>
+    <h4>请求示例</h4>
+    <pre>{
+  "categoryId": "work",
+  "typeId": "coding",
+  "name": "写代码",
+  "startedAt": "2026-06-22T09:00:00+03:00",
+  "endedAt": "2026-06-22T11:00:00+03:00",
+  "note": ""
+}</pre>
+    <h4>返回示例</h4>
+    <pre>{
+  "event": {
+    "id": "evt_001",
+    "name": "写代码",
+    "categoryId": "work",
+    "typeId": "coding",
+    "startedAt": "2026-06-22T09:00:00+03:00",
+    "endedAt": "2026-06-22T11:00:00+03:00",
+    "source": "manual",
+    "note": ""
+  }
+}</pre>
+    <div class="card">
+      <p><strong>后端校验建议：</strong></p>
+      <ul>
+        <li><code>endedAt</code> 必须大于 <code>startedAt</code></li>
+        <li>最小持续时间建议为 1 分钟或 5 分钟</li>
+        <li>如果不允许重叠记录，返回明确错误码和冲突记录 ID</li>
+      </ul>
+    </div>
+
+    <h2>四、后续增强接口</h2>
+
+    <h3><span class="method post">POST</span> <span class="endpoint">/api/time-events</span></h3>
+    <p>新增或补录记录。后续如果支持在日历中长按/拖拽创建事件，需要该接口。</p>
+    <h4>请求示例</h4>
+    <pre>{
+  "name": "跑步",
+  "categoryId": "health",
+  "typeId": "running",
+  "startedAt": "2026-06-22T13:30:00+03:00",
+  "endedAt": "2026-06-22T14:20:00+03:00",
+  "note": ""
+}</pre>
+
+    <h3><span class="method delete">DELETE</span> <span class="endpoint">/api/time-events/{id}</span></h3>
+    <p>删除记录。后续详情弹窗增加删除按钮时使用。</p>
+    <h4>返回示例</h4>
+    <pre>{
+  "ok": true
+}</pre>
+
+    <h3><span class="method get">GET</span> <span class="endpoint">/api/time-events/running</span></h3>
+    <p>获取当前正在进行中的记录，用于和记录页同步，也可以在日历中显示持续中的色块。</p>
+    <h4>返回示例</h4>
+    <pre>{
+  "event": {
+    "id": "evt_running",
+    "name": "写代码",
+    "categoryId": "work",
+    "typeId": "coding",
+    "startedAt": "2026-06-25T09:20:00+03:00",
+    "endedAt": null,
+    "source": "shortcut",
+    "note": ""
+  }
+}</pre>
+    <p>没有进行中记录时：</p>
+    <pre>{
+  "event": null
+}</pre>
+
+    <h2>五、错误返回建议</h2>
+    <pre>{
+  "error": {
+    "code": "TIME_EVENT_CONFLICT",
+    "message": "该时间段与已有记录重叠",
+    "details": {
+      "conflictEventId": "evt_099"
+    }
+  }
+}</pre>
+  </main>
+</body>
+</html>

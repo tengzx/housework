@@ -8,6 +8,11 @@ struct ContentView: View {
                     Label("记录", systemImage: "list.bullet.rectangle.portrait.fill")
                 }
 
+            FitnessTemplateListView()
+                .tabItem {
+                    Label("健身", systemImage: "figure.strengthtraining.traditional")
+                }
+
             HealthExportView()
                 .tabItem {
                     Label("数据", systemImage: "house")
@@ -23,26 +28,50 @@ struct ContentView: View {
 }
 
 private struct RecordWorkspaceView: View {
+    @StateObject private var calendarStore = TimeCalendarStore()
+    @StateObject private var dashboardVM = TimeDashboardViewModel()
     @State private var selection = 0
+    private let switcherHeight: CGFloat = 40
+    private let switcherTopPadding: CGFloat = 0
+    private let switcherBottomPadding: CGFloat = 8
+    private var switcherContainerHeight: CGFloat {
+        switcherHeight + switcherTopPadding + switcherBottomPadding
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            RecordWorkspaceSwitcher(selection: $selection)
-                .padding(.horizontal, 18)
-                .padding(.top, 6)
-                .padding(.bottom, 8)
-                .frame(maxWidth: .infinity)
-
-            ZStack {
-                switch selection {
-                case 1:
-                    CalendarTrackerView2()
-                default:
-                    RecordView()
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                ZStack {
+                    switch selection {
+                    case 1:
+                        CalendarTrackerView2(store: calendarStore)
+                    case 2:
+                        TimeDashboardView(viewModel: dashboardVM)
+                    default:
+                        RecordView(calendarStore: calendarStore)
+                    }
                 }
+                .frame(
+                    width: proxy.size.width,
+                    height: max(proxy.size.height - switcherContainerHeight, 0)
+                )
+                .offset(y: switcherContainerHeight)
+                .transaction { transaction in
+                    transaction.disablesAnimations = true
+                }
+
+                RecordWorkspaceSwitcher(selection: $selection)
+                    .padding(.horizontal, 18)
+                    .padding(.top, switcherTopPadding)
+                    .padding(.bottom, switcherBottomPadding)
+                    .frame(width: proxy.size.width)
+                    .frame(height: switcherContainerHeight, alignment: .top)
+                    .zIndex(1)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
+        .ignoresSafeArea(.keyboard)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color(hex: "F5F6F8").ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -50,36 +79,46 @@ private struct RecordWorkspaceView: View {
 
 private struct RecordWorkspaceSwitcher: View {
     @Binding var selection: Int
+    private let height: CGFloat = 40
+    private let buttonHeight: CGFloat = 32
 
     var body: some View {
         HStack(spacing: 4) {
             switchButton(title: "记录", symbol: "timer", tag: 0)
             switchButton(title: "日历", symbol: "calendar", tag: 1)
+            switchButton(title: "报表", symbol: "chart.bar.fill", tag: 2)
         }
         .padding(4)
+        .frame(height: height)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(
             Capsule()
                 .stroke(Color.white.opacity(0.18), lineWidth: 1)
         )
-        .frame(maxWidth: 220)
+        .frame(width: 300, height: height)
     }
 
     private func switchButton(title: String, symbol: String, tag: Int) -> some View {
         let isOn = selection == tag
         return Button {
             endEditingIfAvailable()
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                selection = tag
-            }
+            selection = tag
         } label: {
-            Label(title, systemImage: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(isOn ? .white : Color(hex: "8A8F9C"))
-                .frame(maxWidth: .infinity)
-                .frame(height: 32)
-                .background(isOn ? Color(hex: "FF7847") : .clear, in: Capsule())
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 15, height: 15)
+
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .foregroundStyle(isOn ? .white : Color(hex: "8A8F9C"))
+            .frame(maxWidth: .infinity)
+            .frame(height: buttonHeight)
+            .background(isOn ? Color(hex: "FF7847") : .clear, in: Capsule())
+            .animation(.spring(response: 0.28, dampingFraction: 0.82), value: isOn)
         }
         .buttonStyle(.plain)
     }
@@ -106,16 +145,8 @@ private struct PlaceholderTabView: View {
 
 struct HealthExportView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var store = ConfigurationStore()
-    @StateObject private var observerSyncManager = HealthObserverSyncManager.shared
-    @State private var selectedConfigurationID: UUID?
-    @State private var draft = ExportConfiguration()
-    @State private var isSending = false
-    @State private var isGeneratingPreview = false
-    @State private var statusMessage = ""
-    @State private var previewPayload: HealthExportPayload?
-    @State private var previewSummary = ""
-    @State private var previewJSON = ""
+    @StateObject private var viewModel = HealthExportViewModel()
+    @ObservedObject private var observerSyncManager = HealthObserverSyncManager.shared
 
     var body: some View {
         NavigationStack {
@@ -132,28 +163,27 @@ struct HealthExportView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        let config = store.addConfiguration()
-                        select(config)
+                        let config = viewModel.store.addConfiguration()
+                        viewModel.select(config)
                     } label: {
                         Label("新增接口", systemImage: "plus")
                     }
                 }
             }
             .onAppear {
-                reloadSelectedConfiguration()
+                viewModel.reloadSelectedConfiguration()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
-                    reloadSelectedConfiguration()
+                    viewModel.reloadSelectedConfiguration()
                 }
             }
-            .onChange(of: selectedConfigurationID) { _, newValue in
-                guard let newValue, let config = store.configuration(id: newValue) else { return }
-                draft = config
+            .onChange(of: viewModel.selectedConfigurationID) { _, newValue in
+                guard let newValue, let config = viewModel.store.configuration(id: newValue) else { return }
+                viewModel.draft = config
             }
-            .onChange(of: draft) { _, newValue in
-                store.update(newValue)
-                clearPreview()
+            .onChange(of: viewModel.draft) { _, newValue in
+                viewModel.draftDidChange(newValue)
             }
         }
     }
@@ -161,42 +191,42 @@ struct HealthExportView: View {
     private var configurationSection: some View {
         Section("接口配置") {
             Picker("当前接口", selection: Binding(
-                get: { selectedConfigurationID ?? draft.id },
-                set: { selectedConfigurationID = $0 }
+                get: { viewModel.selectedConfigurationID ?? viewModel.draft.id },
+                set: { viewModel.selectedConfigurationID = $0 }
             )) {
-                ForEach(store.configurations) { configuration in
+                ForEach(viewModel.store.configurations) { configuration in
                     Text(configuration.name).tag(configuration.id)
                 }
             }
 
-            TextField("配置名称", text: $draft.name)
+            TextField("配置名称", text: $viewModel.draft.name)
                 .textInputAutocapitalization(.never)
 
-            Stepper(value: $draft.lookbackHours, in: 1...168) {
-                LabeledContent("发送窗口", value: "\(draft.lookbackHours) 小时")
+            Stepper(value: $viewModel.draft.lookbackHours, in: 1...168) {
+                LabeledContent("发送窗口", value: "\(viewModel.draft.lookbackHours) 小时")
             }
 
-            Toggle("包含最近样本明细", isOn: $draft.includeSamples)
+            Toggle("包含最近样本明细", isOn: $viewModel.draft.includeSamples)
 
             Button(role: .destructive) {
-                let removed = draft
-                store.delete(removed)
-                select(store.configurations.first ?? store.addConfiguration())
+                let removed = viewModel.draft
+                viewModel.store.delete(removed)
+                viewModel.select(viewModel.store.configurations.first ?? viewModel.store.addConfiguration())
             } label: {
                 Label("删除当前接口", systemImage: "trash")
             }
-            .disabled(store.configurations.count <= 1)
+            .disabled(viewModel.store.configurations.count <= 1)
         }
     }
 
     private var endpointSection: some View {
         Section("接收地址") {
-            TextField("https://example.com/api/health/daily-sync", text: $draft.endpointURL, axis: .vertical)
+            TextField("http://100.67.64.11:8081/api/health/ingest", text: $viewModel.draft.endpointURL, axis: .vertical)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
 
-            SecureField("Bearer Token，可选", text: $draft.bearerToken)
+            SecureField("Bearer Token，可选", text: $viewModel.draft.bearerToken)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
         }
@@ -208,7 +238,7 @@ struct HealthExportView: View {
                 let metrics = HealthMetric.allCases.filter { $0.priority == priority }
                 DisclosureGroup(priority.rawValue) {
                     ForEach(metrics) { metric in
-                        Toggle(isOn: metricBinding(metric)) {
+                        Toggle(isOn: viewModel.metricBinding(metric)) {
                             Label {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(metric.title)
@@ -230,36 +260,36 @@ struct HealthExportView: View {
     private var sendSection: some View {
         Section("发送") {
             Button {
-                Task { await generatePreview() }
+                Task { await viewModel.generatePreview() }
             } label: {
-                Label(isGeneratingPreview ? "生成中" : "生成数据预览", systemImage: "doc.text.magnifyingglass")
+                Label(viewModel.isGeneratingPreview ? "生成中" : "生成数据预览", systemImage: "doc.text.magnifyingglass")
             }
-            .disabled(isGeneratingPreview || isSending || !draft.isReadyToPreview)
+            .disabled(viewModel.isGeneratingPreview || viewModel.isSending || !viewModel.draft.isReadyToPreview)
 
             Button {
-                Task { await sendNow() }
+                Task { await viewModel.sendNow() }
             } label: {
-                Label(isSending ? "发送中" : "发送当前预览", systemImage: "paperplane.fill")
+                Label(viewModel.isSending ? "发送中" : "发送当前预览", systemImage: "paperplane.fill")
             }
-            .disabled(isSending || previewPayload == nil || !draft.isReadyToSend)
+            .disabled(viewModel.isSending || viewModel.previewPayload == nil || !viewModel.draft.isReadyToSend)
 
-            if let lastSentAt = draft.lastSentAt {
+            if let lastSentAt = viewModel.draft.lastSentAt {
                 LabeledContent("上次发送", value: lastSentAt.formatted(date: .abbreviated, time: .shortened))
             }
 
-            if let lastStatus = draft.lastStatus, !lastStatus.isEmpty {
+            if let lastStatus = viewModel.draft.lastStatus, !lastStatus.isEmpty {
                 Text(lastStatus)
                     .font(.footnote)
                     .foregroundStyle(lastStatus.contains("成功") ? .green : .red)
             }
 
-            if !statusMessage.isEmpty {
-                Text(statusMessage)
+            if !viewModel.statusMessage.isEmpty {
+                Text(viewModel.statusMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            if previewPayload != nil && !draft.isReadyToSend {
+            if viewModel.previewPayload != nil && !viewModel.draft.isReadyToSend {
                 Text("预览已生成。填写有效的 http/https 接口地址后才能发送。")
                     .font(.footnote)
                     .foregroundStyle(.orange)
@@ -269,18 +299,17 @@ struct HealthExportView: View {
 
     private var previewSection: some View {
         Section("数据预览") {
-            if previewJSON.isEmpty {
-                Text("点击“生成数据预览”后，这里会显示本次将发送到接口的 JSON。")
+            if viewModel.previewJSON.isEmpty {
+                Text("点击\u{201C}生成数据预览\u{201D}后，这里会显示本次将发送到接口的 JSON。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                if !previewSummary.isEmpty {
-                    Text(previewSummary)
+                if !viewModel.previewSummary.isEmpty {
+                    Text(viewModel.previewSummary)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-
-                TextEditor(text: .constant(previewJSON))
+                TextEditor(text: .constant(viewModel.previewJSON))
                     .font(.system(.caption, design: .monospaced))
                     .frame(minHeight: 320)
                     .scrollContentBackground(.hidden)
@@ -291,7 +320,7 @@ struct HealthExportView: View {
 
     private var shortcutsSection: some View {
         Section("快捷指令") {
-            Label("在快捷指令 App 中添加“发送健康数据”动作，然后选择这里保存的接口配置。", systemImage: "timer")
+            Label("在快捷指令 App 中添加\u{201C}发送健康数据\u{201D}动作，然后选择这里保存的接口配置。", systemImage: "timer")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -365,95 +394,6 @@ struct HealthExportView: View {
                 }
             }
         }
-    }
-
-    private func select(_ configuration: ExportConfiguration) {
-        selectedConfigurationID = configuration.id
-        draft = configuration
-    }
-
-    private func reloadSelectedConfiguration() {
-        store.load()
-        if let selectedConfigurationID,
-           let selected = store.configuration(id: selectedConfigurationID) {
-            draft = selected
-        } else {
-            select(store.configurations.first ?? store.addConfiguration())
-        }
-    }
-
-    private func metricBinding(_ metric: HealthMetric) -> Binding<Bool> {
-        Binding {
-            draft.selectedMetricIDs.contains(metric.id)
-        } set: { isEnabled in
-            if isEnabled {
-                draft.selectedMetricIDs.insert(metric.id)
-            } else {
-                draft.selectedMetricIDs.remove(metric.id)
-            }
-        }
-    }
-
-    private func clearPreview() {
-        previewPayload = nil
-        previewSummary = ""
-        previewJSON = ""
-    }
-
-    private func generatePreview() async {
-        isGeneratingPreview = true
-        statusMessage = ""
-        do {
-            let exporter = HealthKitExporter()
-            statusMessage = "正在请求 HealthKit 权限并生成 JSON..."
-            try await exporter.requestAuthorization(for: draft)
-            let payload = try await exporter.buildPayload(for: draft)
-            let data = try payload.jsonData
-            guard let json = String(data: data, encoding: .utf8), !json.isEmpty else {
-                throw ExportError.invalidPreview
-            }
-            previewPayload = payload
-            previewSummary = previewSummaryText(for: payload)
-            previewJSON = json
-            statusMessage = "预览已生成，确认无误后再发送。"
-        } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            statusMessage = message
-        }
-        isGeneratingPreview = false
-    }
-
-    private func sendNow() async {
-        guard let previewPayload else {
-            statusMessage = "请先生成数据预览。"
-            return
-        }
-
-        isSending = true
-        statusMessage = ""
-        do {
-            let result = try await HealthKitExporter().send(payload: previewPayload)
-            store.markSent(id: draft.id, status: result)
-            if let updated = store.configuration(id: draft.id) {
-                draft = updated
-            }
-            statusMessage = result
-        } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            store.markSent(id: draft.id, status: message)
-            if let updated = store.configuration(id: draft.id) {
-                draft = updated
-            }
-            statusMessage = message
-        }
-        isSending = false
-    }
-
-    private func previewSummaryText(for payload: HealthExportPayload) -> String {
-        if payload.itemCount == 0 {
-            return "预览类型：健康指标，0 条 metrics。当前发送窗口内没有可发送指标。"
-        }
-        return "预览类型：健康指标，\(payload.itemCount) 条 metrics。"
     }
 }
 

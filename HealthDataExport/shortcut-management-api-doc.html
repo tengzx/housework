@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>快捷指令远端管理接口文档</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f5f6f8;
+      color: #1a1c20;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+    h1, h2, h3 {
+      line-height: 1.25;
+      margin: 0;
+    }
+    h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 22px;
+      margin-top: 36px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e4e6eb;
+    }
+    h3 {
+      font-size: 17px;
+      margin-top: 22px;
+    }
+    h4 {
+      margin: 16px 0 6px;
+    }
+    p {
+      margin: 8px 0;
+    }
+    .meta {
+      color: #6f7480;
+      margin-bottom: 28px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e4e6eb;
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 14px;
+    }
+    code {
+      background: #f0f1f4;
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      background: #111318;
+      color: #f7f8fa;
+      padding: 16px;
+      border-radius: 8px;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      background: #fff;
+    }
+    th, td {
+      border: 1px solid #e4e6eb;
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f0f1f4;
+      font-weight: 700;
+    }
+    ul {
+      margin-top: 8px;
+    }
+    .method {
+      display: inline-block;
+      min-width: 54px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 12px;
+      text-align: center;
+    }
+    .get { background: #3fa9f5; }
+    .post { background: #22c55e; }
+    .patch { background: #ff7847; }
+    .delete { background: #ef4444; }
+    .endpoint {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>快捷指令远端管理接口文档</h1>
+    <p class="meta">用于把记录页的快捷指令列表从本地 UserDefaults 迁移到远端。覆盖列表拉取、新增、修改、删除、排序，以及和当前进行中记录的关系。</p>
+
+    <h2>一、通用约定</h2>
+    <div class="card">
+      <p><strong>服务器地址：</strong><code>http://100.67.64.11:8081/</code>。本文件以下路径默认基于 <code>/api/mobile</code>，完整地址示例为 <code>http://100.67.64.11:8081/api/mobile/shortcut-tasks</code>。</p>
+      <p><strong>请求格式：</strong><code>Content-Type: application/json</code>，返回 <code>application/json</code>。</p>
+      <p><strong>ID：</strong>快捷指令 ID 建议由后端生成稳定字符串，例如 <code>task_01J...</code>。App 端可以映射到本地 <code>UUID</code>，但远端应以字符串 ID 为准。</p>
+      <p><strong>图标：</strong><code>symbolName</code> 使用 SF Symbols 名称，例如 <code>book</code>、<code>dumbbell.fill</code>、<code>briefcase</code>。</p>
+      <p><strong>颜色：</strong><code>colorHex</code> 使用不带井号的 6 位十六进制，例如 <code>FF7847</code>。返回带 <code>#</code> 也可以，但 App 侧会统一清洗。</p>
+      <p><strong>排序：</strong><code>sortOrder</code> 越小越靠前。后端返回列表时应已按 <code>sortOrder ASC, createdAt ASC</code> 排序。</p>
+    </div>
+
+    <h2>二、最小交付接口</h2>
+    <p>要支持远端新增、删除、管理，至少需要以下 5 个接口：</p>
+    <ul>
+      <li><code>GET /api/mobile/shortcut-tasks</code>：拉取快捷指令列表</li>
+      <li><code>POST /api/mobile/shortcut-tasks</code>：新增快捷指令</li>
+      <li><code>PATCH /api/mobile/shortcut-tasks/{id}</code>：修改名称、图标、颜色、启用状态</li>
+      <li><code>DELETE /api/mobile/shortcut-tasks/{id}</code>：删除快捷指令</li>
+      <li><code>PUT /api/mobile/shortcut-tasks/reorder</code>：保存排序</li>
+    </ul>
+
+    <h2>三、数据模型</h2>
+    <table>
+      <thead>
+        <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>id</code></td><td>string</td><td>返回必填</td><td>快捷指令唯一 ID</td></tr>
+        <tr><td><code>name</code></td><td>string</td><td>是</td><td>显示名称，例如 <code>写代码</code></td></tr>
+        <tr><td><code>symbolName</code></td><td>string</td><td>是</td><td>SF Symbols 图标名</td></tr>
+        <tr><td><code>colorHex</code></td><td>string</td><td>是</td><td>主题色，例如 <code>FF7847</code></td></tr>
+        <tr><td><code>sortOrder</code></td><td>number</td><td>是</td><td>列表排序值</td></tr>
+        <tr><td><code>isEnabled</code></td><td>boolean</td><td>否</td><td>默认 <code>true</code>。软删除或临时隐藏时可设为 <code>false</code></td></tr>
+        <tr><td><code>createdAt</code></td><td>string</td><td>返回建议</td><td>ISO 8601，带时区</td></tr>
+        <tr><td><code>updatedAt</code></td><td>string</td><td>返回建议</td><td>ISO 8601，带时区</td></tr>
+      </tbody>
+    </table>
+
+    <h2>四、接口详情</h2>
+
+    <h3><span class="method get">GET</span> <span class="endpoint">/api/mobile/shortcut-tasks</span></h3>
+    <p>获取当前用户的快捷指令列表。App 启动记录页、从后台回到前台、下拉刷新时调用。</p>
+    <h4>返回示例</h4>
+    <pre>{
+  "tasks": [
+    {
+      "id": "task_coding",
+      "name": "写代码",
+      "symbolName": "chevron.left.forwardslash.chevron.right",
+      "colorHex": "FF7847",
+      "sortOrder": 10,
+      "isEnabled": true,
+      "createdAt": "2026-06-25T10:00:00+03:00",
+      "updatedAt": "2026-06-25T10:00:00+03:00"
+    },
+    {
+      "id": "task_reading",
+      "name": "阅读",
+      "symbolName": "book",
+      "colorHex": "FF7847",
+      "sortOrder": 20,
+      "isEnabled": true,
+      "createdAt": "2026-06-25T10:00:00+03:00",
+      "updatedAt": "2026-06-25T10:00:00+03:00"
+    }
+  ]
+}</pre>
+    <div class="card">
+      <p><strong>兼容建议：</strong>如果还没有远端数据，后端可以返回空数组，App 会使用内置默认指令并在用户第一次新增/修改时同步到远端。</p>
+    </div>
+
+    <h3><span class="method post">POST</span> <span class="endpoint">/api/mobile/shortcut-tasks</span></h3>
+    <p>新增快捷指令。用户在“新增快捷指令”弹窗中输入名称并选择图标后调用。</p>
+    <h4>请求示例</h4>
+    <pre>{
+  "name": "写日记",
+  "symbolName": "pencil",
+  "colorHex": "FF7847"
+}</pre>
+    <h4>返回示例</h4>
+    <pre>{
+  "task": {
+    "id": "task_01J1ABCDE",
+    "name": "写日记",
+    "symbolName": "pencil",
+    "colorHex": "FF7847",
+    "sortOrder": 70,
+    "isEnabled": true,
+    "createdAt": "2026-06-25T13:45:00+03:00",
+    "updatedAt": "2026-06-25T13:45:00+03:00"
+  }
+}</pre>
+    <table>
+      <thead>
+        <tr><th>校验</th><th>建议</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>名称为空</td><td>返回 <code>400 SHORTCUT_TASK_NAME_REQUIRED</code></td></tr>
+        <tr><td>名称过长</td><td>建议限制 1-30 个字符</td></tr>
+        <tr><td>同名</td><td>可以允许；如果不允许，返回 <code>409 SHORTCUT_TASK_DUPLICATE_NAME</code></td></tr>
+        <tr><td>图标非法</td><td>建议接受任意字符串，前端负责展示兜底图标</td></tr>
+      </tbody>
+    </table>
+
+    <h3><span class="method patch">PATCH</span> <span class="endpoint">/api/mobile/shortcut-tasks/{id}</span></h3>
+    <p>修改快捷指令。用于后续管理页里重命名、换图标、换颜色、启用/隐藏。</p>
+    <h4>请求示例</h4>
+    <pre>{
+  "name": "深度写作",
+  "symbolName": "pencil.and.outline",
+  "colorHex": "6C5CE7",
+  "isEnabled": true
+}</pre>
+    <p>所有字段都是可选字段，后端只更新请求中出现的字段。</p>
+    <h4>返回示例</h4>
+    <pre>{
+  "task": {
+    "id": "task_01J1ABCDE",
+    "name": "深度写作",
+    "symbolName": "pencil.and.outline",
+    "colorHex": "6C5CE7",
+    "sortOrder": 70,
+    "isEnabled": true,
+    "createdAt": "2026-06-25T13:45:00+03:00",
+    "updatedAt": "2026-06-25T13:50:00+03:00"
+  }
+}</pre>
+
+    <h3><span class="method delete">DELETE</span> <span class="endpoint">/api/mobile/shortcut-tasks/{id}</span></h3>
+    <p>删除快捷指令。当前 App 点击管理模式下的减号时调用。</p>
+    <h4>返回示例</h4>
+    <pre>{
+  "ok": true
+}</pre>
+    <div class="card">
+      <p><strong>删除进行中的快捷指令：</strong>如果被删除的 task 正在进行中，建议后端同时结束当前 time entry，并返回 <code>endedRunningEntry: true</code>。</p>
+      <pre>{
+  "ok": true,
+  "endedRunningEntry": true
+}</pre>
+      <p>如果后端不自动结束，应返回 <code>409 SHORTCUT_TASK_RUNNING</code>，App 再调用现有 <code>POST /api/mobile/time-entries/end</code>。</p>
+    </div>
+
+    <h3><span class="method post">PUT</span> <span class="endpoint">/api/mobile/shortcut-tasks/reorder</span></h3>
+    <p>保存快捷指令排序。用户拖动排序后一次性提交完整顺序。</p>
+    <h4>请求示例</h4>
+    <pre>{
+  "taskIds": [
+    "task_coding",
+    "task_reading",
+    "task_fitness",
+    "task_meeting"
+  ]
+}</pre>
+    <h4>返回示例</h4>
+    <pre>{
+  "tasks": [
+    {
+      "id": "task_coding",
+      "name": "写代码",
+      "symbolName": "chevron.left.forwardslash.chevron.right",
+      "colorHex": "FF7847",
+      "sortOrder": 10,
+      "isEnabled": true,
+      "createdAt": "2026-06-25T10:00:00+03:00",
+      "updatedAt": "2026-06-25T14:00:00+03:00"
+    }
+  ]
+}</pre>
+
+    <h2>五、和开始/结束记录的关系</h2>
+    <p>当前 App 已经使用以下现有接口同步“正在做什么”：</p>
+    <ul>
+      <li><code>GET /api/mobile/time-entries/running</code>：获取进行中记录</li>
+      <li><code>POST /api/mobile/time-entries/start</code>：开始记录</li>
+      <li><code>POST /api/mobile/time-entries/end</code>：结束记录</li>
+    </ul>
+    <p>建议把 <code>POST /api/mobile/time-entries/start</code> 扩展为优先接收 <code>taskId</code>，同时继续兼容旧的 <code>taskName</code>。</p>
+    <h4>推荐开始请求</h4>
+    <pre>{
+  "taskId": "task_coding",
+  "taskName": "写代码",
+  "startedAt": "2026-06-25T13:39:20+03:00",
+  "source": "mobile",
+  "note": null
+}</pre>
+    <h4>推荐 running 返回</h4>
+    <pre>{
+  "id": 1196,
+  "taskId": "task_coding",
+  "taskName": "写代码",
+  "status": "running",
+  "startedAt": "2026-06-25T13:39:20+03:00",
+  "endedAt": null,
+  "durationSeconds": 20,
+  "source": "mobile",
+  "note": null
+}</pre>
+
+    <h2>六、错误返回建议</h2>
+    <p>建议所有错误都使用统一结构，方便 App 显示中文提示或做分支处理。</p>
+    <pre>{
+  "success": false,
+  "error": "快捷指令不存在",
+  "code": "SHORTCUT_TASK_NOT_FOUND",
+  "details": {
+    "taskId": "task_missing"
+  }
+}</pre>
+    <table>
+      <thead>
+        <tr><th>HTTP 状态</th><th>code</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>400</td><td><code>SHORTCUT_TASK_NAME_REQUIRED</code></td><td>名称为空</td></tr>
+        <tr><td>400</td><td><code>SHORTCUT_TASK_INVALID_COLOR</code></td><td>颜色不是合法十六进制</td></tr>
+        <tr><td>404</td><td><code>SHORTCUT_TASK_NOT_FOUND</code></td><td>快捷指令不存在或不属于当前用户</td></tr>
+        <tr><td>409</td><td><code>SHORTCUT_TASK_RUNNING</code></td><td>删除的快捷指令正在进行中，且后端没有自动结束</td></tr>
+        <tr><td>409</td><td><code>SHORTCUT_TASK_DUPLICATE_NAME</code></td><td>后端不允许同名时返回</td></tr>
+      </tbody>
+    </table>
+
+    <h2>七、后端实现备注</h2>
+    <div class="card">
+      <ul>
+        <li>快捷指令属于用户级配置，建议按用户隔离；如果当前没有登录系统，可以先按设备或固定默认用户隔离。</li>
+        <li>删除建议优先做软删除，保留历史 time entry 中的 <code>taskName</code> 快照，避免旧记录无法展示。</li>
+        <li>开始记录时建议同时保存 <code>taskId</code> 和 <code>taskName</code>。名称以后被修改时，历史记录仍能保留当时的展示名。</li>
+        <li>如果 App 首次接入远端，后端可以预置默认 6 个快捷指令：写代码、阅读、健身、开会、吃饭、休息。</li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>

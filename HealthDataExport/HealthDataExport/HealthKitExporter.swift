@@ -34,6 +34,28 @@ enum ExportError: LocalizedError {
 final class HealthKitExporter {
     private let healthStore = HKHealthStore()
 
+    // Maps HealthMetric id → (backend metric name, unit) for the events direct path.
+    private static let eventMetricMap: [HealthMetric: (metric: String, unit: String)] = [
+        .hrvSDNN:        ("hrv_sdnn",               "ms"),
+        .restingHeartRate: ("resting_heart_rate",   "bpm"),
+        .activeEnergyBurned: ("active_energy",      "kcal"),
+        .exerciseTime:   ("exercise_minutes",        "min"),
+        .stepCount:      ("step_count",              "count"),
+        .respiratoryRate: ("respiratory_rate",       "count/min"),
+        .bloodOxygen:    ("blood_oxygen",            "%"),
+        .wristTemperature: ("wrist_temperature_delta", "degC"),
+    ]
+
+    // Holds both the raw metrics block and the structured entries for one metric.
+    private struct MetricPayloadResult {
+        var block: [String: Any]
+        var events: [[String: Any]] = []
+        var heartRateSamples: [[String: Any]] = []
+        var sleepSessions: [[String: Any]] = []
+        var workoutSessions: [[String: Any]] = []
+        var stateOfMindEntries: [[String: Any]] = []
+    }
+
     func requestAuthorization(for configuration: ExportConfiguration) async throws {
         guard HKHealthStore.isHealthDataAvailable() else {
             throw ExportError.healthDataUnavailable
@@ -45,13 +67,11 @@ final class HealthKitExporter {
         }
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            healthStore.requestAuthorization(toShare: [], read: types) { success, error in
+            healthStore.requestAuthorization(toShare: [], read: types) { _, error in
                 if let error {
                     continuation.resume(throwing: error)
-                } else if success {
-                    continuation.resume()
                 } else {
-                    continuation.resume(throwing: ExportError.healthDataUnavailable)
+                    continuation.resume()
                 }
             }
         }
@@ -73,11 +93,27 @@ final class HealthKitExporter {
         let endDate = Date()
         let startDate = Calendar.current.date(byAdding: .hour, value: -configuration.lookbackHours, to: endDate) ?? endDate.addingTimeInterval(-86_400)
 
-        var metricPayloads: [[String: Any]] = []
+        var metricBlocks: [[String: Any]] = []
+        var allEvents: [[String: Any]] = []
+        var allHeartRateSamples: [[String: Any]] = []
+        var allSleepSessions: [[String: Any]] = []
+        var allWorkouts: [[String: Any]] = []
+        var allStateOfMindEntries: [[String: Any]] = []
 
         for metric in configuration.selectedMetrics {
-            let payload = try await payload(for: metric, startDate: startDate, endDate: endDate, includeSamples: configuration.includeSamples)
-            metricPayloads.append(payload)
+            do {
+                let result = try await metricResult(for: metric, startDate: startDate, endDate: endDate, includeSamples: configuration.includeSamples)
+                metricBlocks.append(result.block)
+                allEvents.append(contentsOf: result.events)
+                allHeartRateSamples.append(contentsOf: result.heartRateSamples)
+                allSleepSessions.append(contentsOf: result.sleepSessions)
+                allWorkouts.append(contentsOf: result.workoutSessions)
+                allStateOfMindEntries.append(contentsOf: result.stateOfMindEntries)
+            } catch {
+                var errBlock = basePayload(metric: metric, value: NSNull(), unit: metric.unit?.unitString)
+                errBlock["error"] = error.localizedDescription
+                metricBlocks.append(errBlock)
+            }
         }
 
         return HealthExportPayload(
@@ -85,7 +121,12 @@ final class HealthKitExporter {
             generatedAt: endDate,
             startDate: startDate,
             endDate: endDate,
-            metrics: metricPayloads
+            metrics: metricBlocks,
+            events: allEvents,
+            heartRateSamples: allHeartRateSamples,
+            sleepSessions: allSleepSessions,
+            workouts: allWorkouts,
+            stateOfMindEntries: allStateOfMindEntries
         )
     }
 
@@ -125,176 +166,349 @@ final class HealthKitExporter {
         return "发送成功，HTTP \(httpResponse.statusCode)，\(payload.itemCount) 条数据"
     }
 
-    private func payload(for metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> [String: Any] {
+    // MARK: - Metric dispatch
+
+    private func metricResult(for metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> MetricPayloadResult {
         switch metric {
         case .sleepAnalysis:
-            return try await sleepPayload(metric: metric, startDate: startDate, endDate: endDate, includeSamples: includeSamples)
+            return try await sleepResult(metric: metric, startDate: startDate, endDate: endDate, includeSamples: includeSamples)
         case .workouts:
-            return try await workoutsPayload(metric: metric, startDate: startDate, endDate: endDate, includeSamples: includeSamples)
+            return try await workoutsResult(metric: metric, startDate: startDate, endDate: endDate, includeSamples: includeSamples)
         case .mindfulState:
-            return try await stateOfMindPayload(metric: metric, startDate: startDate, endDate: endDate, includeSamples: includeSamples)
+            return try await stateOfMindResult(metric: metric, startDate: startDate, endDate: endDate, includeSamples: includeSamples)
         default:
-            return try await quantityPayload(metric: metric, startDate: startDate, endDate: endDate, includeSamples: includeSamples)
+            return try await quantityResult(metric: metric, startDate: startDate, endDate: endDate, includeSamples: includeSamples)
         }
     }
 
-    private func quantityPayload(metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> [String: Any] {
+    // MARK: - Quantity metrics (HRV, HR, step count, etc.)
+
+    private func quantityResult(metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> MetricPayloadResult {
         guard let quantityType = metric.sampleType as? HKQuantityType, let unit = metric.unit else {
-            return basePayload(metric: metric, value: NSNull(), unit: nil)
+            return MetricPayloadResult(block: basePayload(metric: metric, value: NSNull(), unit: nil))
         }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
         let options = statisticsOptions(for: metric)
+        let samples = try await quantitySamples(for: quantityType, unit: unit, predicate: predicate)
+
+        let latestValue: Any = samples.first?["value"] ?? NSNull()
+        var block = basePayload(metric: metric, value: latestValue, unit: unit.unitString)
+
         let statistics = try await statistics(for: quantityType, predicate: predicate, options: options)
-        var payload = basePayload(metric: metric, value: NSNull(), unit: unit.unitString)
-
-        if options.contains(.cumulativeSum), let sum = statistics.sumQuantity()?.doubleValue(for: unit) {
-            payload["summary"] = ["sum": sum]
-        } else {
-            var summary: [String: Any] = [:]
-            if let average = statistics.averageQuantity()?.doubleValue(for: unit) {
-                summary["average"] = average
+        if let statistics {
+            if options.contains(.cumulativeSum), let sum = statistics.sumQuantity()?.doubleValue(for: unit) {
+                block["summary"] = ["sum": sum, "sample_count": samples.count]
+            } else {
+                var summary: [String: Any] = ["sample_count": samples.count]
+                if let avg = statistics.averageQuantity()?.doubleValue(for: unit) { summary["average"] = avg }
+                if let min = statistics.minimumQuantity()?.doubleValue(for: unit) { summary["minimum"] = min }
+                if let max = statistics.maximumQuantity()?.doubleValue(for: unit) { summary["maximum"] = max }
+                block["summary"] = summary
             }
-            if let minimum = statistics.minimumQuantity()?.doubleValue(for: unit) {
-                summary["minimum"] = minimum
-            }
-            if let maximum = statistics.maximumQuantity()?.doubleValue(for: unit) {
-                summary["maximum"] = maximum
-            }
-            payload["summary"] = summary
         }
 
-        if includeSamples {
-            payload["samples"] = try await quantitySamples(for: quantityType, unit: unit, predicate: predicate)
+        if includeSamples { block["samples"] = samples }
+
+        var result = MetricPayloadResult(block: block)
+
+        if metric == .heartRate {
+            result.heartRateSamples = samples.compactMap { buildHeartRateSample(from: $0) }
+        } else if let mapping = Self.eventMetricMap[metric] {
+            result.events = samples.compactMap { buildMetricEvent(from: $0, metric: metric, mapping: mapping) }
         }
 
-        return payload
+        return result
     }
 
-    private func sleepPayload(metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> [String: Any] {
+    // MARK: - Sleep
+
+    private func sleepResult(metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> MetricPayloadResult {
         guard let sleepType = metric.sampleType as? HKCategoryType else {
-            return basePayload(metric: metric, value: NSNull(), unit: "minute")
+            return MetricPayloadResult(block: basePayload(metric: metric, value: NSNull(), unit: "minute"))
         }
 
+        // Extend lookback by 12 h to catch sleep that started before the window.
         let sleepStartDate = Calendar.current.date(byAdding: .hour, value: -12, to: startDate) ?? startDate
         let predicate = HKQuery.predicateForSamples(withStart: sleepStartDate, end: endDate, options: [])
-        let samples = filteredSleepSamples(try await categorySamples(for: sleepType, predicate: predicate))
+        let allSamples = filteredSleepSamples(try await categorySamples(for: sleepType, predicate: predicate))
+
         var asleepMinutes = 0
         var records: [[String: Any]] = []
         let inBedMinutes = SleepMinuteMath.roundedUnionMinutes(
-            from: samples
+            from: allSamples
                 .filter { $0.value == HKCategoryValueSleepAnalysis.inBed.rawValue }
                 .map { ($0.startDate, $0.endDate) }
         )
 
-        for sample in samples {
-            let roundedMinutes = SleepMinuteMath.roundedMinutes(from: sample.startDate, to: sample.endDate)
+        for sample in allSamples {
+            let mins = SleepMinuteMath.roundedMinutes(from: sample.startDate, to: sample.endDate)
             let stage = sleepStageName(rawValue: sample.value)
-            if isAsleepSleepStage(rawValue: sample.value) {
-                asleepMinutes += roundedMinutes
-            }
-
+            if isAsleepSleepStage(rawValue: sample.value) { asleepMinutes += mins }
             records.append([
                 "start_time": sample.startDate.iso8601String,
                 "end_time": sample.endDate.iso8601String,
                 "stage": stage,
-                "duration_minutes": roundedMinutes
+                "duration_minutes": mins
             ])
         }
 
-        var payload = basePayload(metric: metric, value: NSNull(), unit: "minute")
-        payload["summary"] = [
-            "asleep_minutes": asleepMinutes,
-            "in_bed_minutes": inBedMinutes,
-            "record_count": samples.count
-        ]
-        if includeSamples {
-            payload["samples"] = records
+        var block = basePayload(metric: metric, value: asleepMinutes, unit: "minute")
+        block["summary"] = ["asleep_minutes": asleepMinutes, "in_bed_minutes": inBedMinutes, "record_count": allSamples.count]
+        if includeSamples { block["samples"] = records }
+
+        var result = MetricPayloadResult(block: block)
+        let clusters = clusterSleepSamples(allSamples)
+        result.sleepSessions = clusters.enumerated().compactMap { idx, cluster in
+            buildSleepSessionEntry(from: cluster, index: idx + 1)
         }
-        return payload
+        return result
     }
 
-    private func workoutsPayload(metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> [String: Any] {
+    // MARK: - Workouts
+
+    private func workoutsResult(metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> MetricPayloadResult {
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
-        let workouts = try await workouts(predicate: predicate)
-        let totalDuration = workouts.reduce(0.0) { $0 + $1.duration / 60 }
-        let totalEnergy = workouts.reduce(0.0) { partial, workout in
-            partial + (workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()) ?? 0)
+        let hkWorkouts = try await workouts(predicate: predicate)
+        let totalDuration = hkWorkouts.reduce(0.0) { $0 + $1.duration / 60 }
+        let totalEnergy = hkWorkouts.reduce(0.0) { sum, w in
+            sum + (w.totalEnergyBurned?.doubleValue(for: .kilocalorie()) ?? 0)
         }
 
-        var payload = basePayload(metric: metric, value: NSNull(), unit: "minute")
-        payload["summary"] = [
-            "workout_count": workouts.count,
+        var block = basePayload(metric: metric, value: hkWorkouts.count, unit: "minute")
+        block["summary"] = [
+            "workout_count": hkWorkouts.count,
             "total_duration_minutes": totalDuration,
             "total_active_energy_kcal": totalEnergy
         ]
         if includeSamples {
-            payload["samples"] = workouts.map { workout in
-                [
-                    "start_time": workout.startDate.iso8601String,
-                    "end_time": workout.endDate.iso8601String,
-                    "duration_minutes": workout.duration / 60,
-                    "activity_type": workout.workoutActivityType.name,
-                    "active_energy_kcal": workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()) as Any
+            block["samples"] = hkWorkouts.map { w -> [String: Any] in
+                var s: [String: Any] = [
+                    "start_time": w.startDate.iso8601String,
+                    "end_time": w.endDate.iso8601String,
+                    "duration_minutes": w.duration / 60,
+                    "activity_type": w.workoutActivityType.name
                 ]
+                if let kcal = w.totalEnergyBurned?.doubleValue(for: .kilocalorie()) {
+                    s["active_energy_kcal"] = kcal
+                }
+                return s
             }
         }
-        return payload
+
+        var result = MetricPayloadResult(block: block)
+        result.workoutSessions = hkWorkouts.map { buildWorkoutEntry(from: $0) }
+        return result
     }
 
-    private func sampleCountPayload(metric: HealthMetric, startDate: Date, endDate: Date) async throws -> [String: Any] {
-        guard let sampleType = metric.sampleType else {
-            return basePayload(metric: metric, value: NSNull(), unit: nil)
-        }
+    // MARK: - State of Mind
 
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
-        let count = try await sampleCount(for: sampleType, predicate: predicate)
-        var payload = basePayload(metric: metric, value: NSNull(), unit: "count")
-        payload["summary"] = ["record_count": count]
-        return payload
-    }
-
-    private func stateOfMindPayload(metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> [String: Any] {
+    private func stateOfMindResult(metric: HealthMetric, startDate: Date, endDate: Date, includeSamples: Bool) async throws -> MetricPayloadResult {
         guard #available(iOS 17.0, *), let sampleType = metric.sampleType else {
-            return basePayload(metric: metric, value: NSNull(), unit: "valence")
+            return MetricPayloadResult(block: basePayload(metric: metric, value: NSNull(), unit: "valence"))
         }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
         let samples = try await stateOfMindSamples(for: sampleType, predicate: predicate)
         let latestSample = samples.first
         let latestValence: Any = latestSample?.valence ?? NSNull()
-        var payload = basePayload(metric: metric, value: latestValence, unit: "valence")
+        var block = basePayload(metric: metric, value: latestValence, unit: "valence")
 
         if samples.isEmpty {
-            payload["summary"] = ["record_count": 0]
-            return payload
+            block["summary"] = ["record_count": 0]
+            return MetricPayloadResult(block: block)
         }
 
         let valences = samples.map(\.valence)
-        let averageValence = valences.reduce(0, +) / Double(valences.count)
-        let minimumValence: Any = valences.min() ?? NSNull()
-        let maximumValence: Any = valences.max() ?? NSNull()
+        let avgValence = valences.reduce(0, +) / Double(valences.count)
         var summary: [String: Any] = [
             "record_count": samples.count,
             "latest_valence": latestValence,
-            "average_valence": averageValence,
-            "minimum_valence": minimumValence,
-            "maximum_valence": maximumValence
+            "average_valence": avgValence,
+            "minimum_valence": valences.min() as Any,
+            "maximum_valence": valences.max() as Any
         ]
-        if let latestSample {
-            summary["latest_kind"] = stateOfMindKindName(latestSample.kind)
-            summary["latest_valence_classification"] = stateOfMindValenceClassificationName(latestSample.valenceClassification)
-            summary["latest_labels"] = latestSample.labels.map(stateOfMindLabelName)
-            summary["latest_associations"] = latestSample.associations.map(stateOfMindAssociationName)
+        if let s = latestSample {
+            summary["latest_kind"] = stateOfMindKindName(s.kind)
+            summary["latest_valence_classification"] = stateOfMindValenceClassificationName(s.valenceClassification)
+            summary["latest_labels"] = s.labels.map(stateOfMindLabelName)
+            summary["latest_associations"] = s.associations.map(stateOfMindAssociationName)
         }
-        payload["summary"] = summary
+        block["summary"] = summary
 
-        if includeSamples {
-            payload["samples"] = samples.map(stateOfMindRecord)
+        if includeSamples { block["samples"] = samples.map(stateOfMindRecord) }
+
+        var result = MetricPayloadResult(block: block)
+        if #available(iOS 17.0, *) {
+            result.stateOfMindEntries = samples.map { buildStateOfMindEntry(from: $0) }
         }
-
-        return payload
+        return result
     }
+
+    // MARK: - Structured entry builders
+
+    private func buildMetricEvent(from sample: [String: Any], metric: HealthMetric, mapping: (metric: String, unit: String)) -> [String: Any]? {
+        guard let startTime = sample["start_time"] as? String,
+              let endTime = sample["end_time"] as? String,
+              let value = sample["value"] as? Double else { return nil }
+        return [
+            "external_id": "\(metric.id)_\(startTime)_\(endTime)",
+            "metric": mapping.metric,
+            "value": value,
+            "unit": mapping.unit,
+            "start_time": startTime,
+            "end_time": endTime,
+            "recorded_at": endTime,
+            "sample_type": metric.id,
+            "source_name": "HealthDataExport"
+        ]
+    }
+
+    private func buildHeartRateSample(from sample: [String: Any]) -> [String: Any]? {
+        guard let endTime = sample["end_time"] as? String,
+              let bpm = sample["value"] as? Double else { return nil }
+        let startTime = sample["start_time"] as? String ?? endTime
+        return [
+            "external_id": "heartRate_\(startTime)_\(endTime)",
+            "sample_time": endTime,
+            "bpm": bpm,
+            "source_name": "HealthDataExport"
+        ]
+    }
+
+    private func clusterSleepSamples(_ samples: [HKCategorySample]) -> [[HKCategorySample]] {
+        let sorted = samples.sorted { $0.startDate < $1.startDate }
+        guard let first = sorted.first else { return [] }
+
+        var clusters: [[HKCategorySample]] = []
+        var current: [HKCategorySample] = [first]
+        var clusterEnd = first.endDate
+
+        for sample in sorted.dropFirst() {
+            if sample.startDate.timeIntervalSince(clusterEnd) > 6 * 3600 {
+                clusters.append(current)
+                current = []
+                clusterEnd = sample.endDate
+            } else {
+                clusterEnd = max(clusterEnd, sample.endDate)
+            }
+            current.append(sample)
+        }
+        clusters.append(current)
+        return clusters
+    }
+
+    private func buildSleepSessionEntry(from cluster: [HKCategorySample], index: Int) -> [String: Any]? {
+        guard let sessionStart = cluster.min(by: { $0.startDate < $1.startDate })?.startDate,
+              let sessionEnd = cluster.max(by: { $0.endDate < $1.endDate })?.endDate else { return nil }
+
+        var asleep = 0, awake = 0, deep = 0, rem = 0, core = 0
+        var stages: [[String: Any]] = []
+        var allIntervals: [(startDate: Date, endDate: Date)] = []
+
+        for sample in cluster {
+            let mins = SleepMinuteMath.roundedMinutes(from: sample.startDate, to: sample.endDate)
+            let rawStage = sleepStageName(rawValue: sample.value)
+            guard let backendStage = sleepStageToBackend(rawStage) else { continue }
+            stages.append([
+                "stage": backendStage,
+                "start_time": sample.startDate.iso8601String,
+                "end_time": sample.endDate.iso8601String,
+                "minutes": mins
+            ])
+            allIntervals.append((startDate: sample.startDate, endDate: sample.endDate))
+            switch backendStage {
+            case "deep":   deep += mins;  asleep += mins
+            case "rem":    rem += mins;   asleep += mins
+            case "core", "asleep": core += mins; asleep += mins
+            case "awake":  awake += mins
+            default: break
+            }
+        }
+
+        // Use union of all sample intervals to avoid double-counting when inBed and
+        // stage samples overlap (Apple Watch writes both for the same time window).
+        let inBed = SleepMinuteMath.roundedUnionMinutes(from: allIntervals)
+
+        if asleep == 0 { asleep = max(SleepMinuteMath.roundedMinutes(from: sessionStart, to: sessionEnd), 0) }
+
+        var entry: [String: Any] = [
+            "external_id": "sleepAnalysis_\(sessionStart.iso8601String)_\(index)",
+            "session_type": "main_sleep",
+            "start_time": sessionStart.iso8601String,
+            "end_time": sessionEnd.iso8601String,
+            "in_bed_minutes": inBed,
+            "asleep_minutes": asleep,
+            "sleep_stage_count": stages.count,
+            "sample_type": "sleepAnalysis",
+            "source_name": "HealthDataExport",
+            "sleep_stages": stages
+        ]
+        if awake > 0 { entry["awake_minutes"] = awake }
+        if deep > 0  { entry["deep_minutes"]  = deep }
+        if rem > 0   { entry["rem_minutes"]   = rem }
+        if core > 0  { entry["core_minutes"]  = core }
+        return entry
+    }
+
+    private func sleepStageToBackend(_ stage: String) -> String? {
+        switch stage {
+        case "in_bed":            "in_bed"
+        case "asleep":            "asleep"
+        case "awake":             "awake"
+        case "asleep_core":       "core"
+        case "asleep_deep":       "deep"
+        case "asleep_rem":        "rem"
+        case "asleep_unspecified": "asleep"
+        default:                  nil
+        }
+    }
+
+    private func buildWorkoutEntry(from workout: HKWorkout) -> [String: Any] {
+        let durationSec = Int(workout.duration.rounded())
+        var entry: [String: Any] = [
+            "external_id": "workout_\(workout.startDate.iso8601String)_\(workout.endDate.iso8601String)",
+            "workout_type": workout.workoutActivityType.backendTypeName,
+            "start_time": workout.startDate.iso8601String,
+            "end_time": workout.endDate.iso8601String,
+            "duration_seconds": durationSec,
+            "source_name": "HealthDataExport"
+        ]
+        if let kcal = workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()) {
+            entry["active_energy_kcal"] = kcal
+        }
+        return entry
+    }
+
+    @available(iOS 17.0, *)
+    private func buildStateOfMindEntry(from sample: HKStateOfMind) -> [String: Any] {
+        // Map valence (-1…+1) to a 0–10 mood score.
+        let moodScore = Int(round((sample.valence + 1.0) * 5.0))
+        let energyColor: String
+        if sample.valence > 0.33 {
+            energyColor = "green"
+        } else if sample.valence > -0.33 {
+            energyColor = "yellow"
+        } else {
+            energyColor = "red"
+        }
+        return [
+            "external_id": "stateOfMind_\(sample.startDate.iso8601String)",
+            "recorded_at": sample.startDate.iso8601String,
+            "mood_score": moodScore,
+            "energy_color": energyColor,
+            "tags": sample.labels.map(stateOfMindLabelName),
+            "raw_payload_json": [
+                "valence": sample.valence,
+                "valence_classification": stateOfMindValenceClassificationName(sample.valenceClassification),
+                "kind": stateOfMindKindName(sample.kind),
+                "labels": sample.labels.map(stateOfMindLabelName),
+                "associations": sample.associations.map(stateOfMindAssociationName)
+            ]
+        ]
+    }
+
+    // MARK: - HealthKit query helpers
 
     private func statisticsOptions(for metric: HealthMetric) -> HKStatisticsOptions {
         switch metric {
@@ -307,15 +521,18 @@ final class HealthKitExporter {
         }
     }
 
-    private func statistics(for quantityType: HKQuantityType, predicate: NSPredicate, options: HKStatisticsOptions) async throws -> HKStatistics {
+    private func statistics(for quantityType: HKQuantityType, predicate: NSPredicate, options: HKStatisticsOptions) async throws -> HKStatistics? {
         try await withCheckedThrowingContinuation { continuation in
             let query = HKStatisticsQuery(quantityType: quantityType, quantitySamplePredicate: predicate, options: options) { _, statistics, error in
                 if let error {
-                    continuation.resume(throwing: error)
-                } else if let statistics {
-                    continuation.resume(returning: statistics)
+                    let nsError = error as NSError
+                    if nsError.domain == HKErrorDomain && nsError.code == HKError.Code.errorNoData.rawValue {
+                        continuation.resume(returning: nil)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
                 } else {
-                    continuation.resume(throwing: ExportError.invalidResponse)
+                    continuation.resume(returning: statistics)
                 }
             }
             healthStore.execute(query)
@@ -330,7 +547,6 @@ final class HealthKitExporter {
                     continuation.resume(throwing: error)
                     return
                 }
-
                 let values = (samples as? [HKQuantitySample] ?? []).map { sample in
                     [
                         "start_time": sample.startDate.iso8601String,
@@ -387,19 +603,6 @@ final class HealthKitExporter {
         }
     }
 
-    private func sampleCount(for sampleType: HKSampleType, predicate: NSPredicate) async throws -> Int {
-        try await withCheckedThrowingContinuation { continuation in
-            let query = HKSampleQuery(sampleType: sampleType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(returning: samples?.count ?? 0)
-                }
-            }
-            healthStore.execute(query)
-        }
-    }
-
     private func basePayload(metric: HealthMetric, value: Any, unit: String?) -> [String: Any] {
         [
             "id": metric.id,
@@ -414,16 +617,11 @@ final class HealthKitExporter {
         guard SleepSampleFilter.shouldDropGenericAsleep(from: samples.map(\.value)) else {
             return samples
         }
-
-        return samples.filter { sample in
-            sample.value != HKCategoryValueSleepAnalysis.asleep.rawValue
-        }
+        return samples.filter { $0.value != HKCategoryValueSleepAnalysis.asleep.rawValue }
     }
 
     private func isAsleepSleepStage(rawValue: Int) -> Bool {
-        if rawValue == HKCategoryValueSleepAnalysis.asleep.rawValue {
-            return true
-        }
+        if rawValue == HKCategoryValueSleepAnalysis.asleep.rawValue { return true }
         if #available(iOS 16.0, *) {
             return [
                 HKCategoryValueSleepAnalysis.asleepCore.rawValue,
@@ -436,27 +634,16 @@ final class HealthKitExporter {
     }
 
     private func sleepStageName(rawValue: Int) -> String {
-        if rawValue == HKCategoryValueSleepAnalysis.inBed.rawValue {
-            return "in_bed"
-        }
-        if rawValue == HKCategoryValueSleepAnalysis.awake.rawValue {
-            return "awake"
-        }
-        if rawValue == HKCategoryValueSleepAnalysis.asleep.rawValue {
-            return "asleep"
-        }
+        if rawValue == HKCategoryValueSleepAnalysis.inBed.rawValue  { return "in_bed" }
+        if rawValue == HKCategoryValueSleepAnalysis.awake.rawValue  { return "awake" }
+        if rawValue == HKCategoryValueSleepAnalysis.asleep.rawValue { return "asleep" }
         if #available(iOS 16.0, *) {
             switch rawValue {
-            case HKCategoryValueSleepAnalysis.asleepCore.rawValue:
-                return "asleep_core"
-            case HKCategoryValueSleepAnalysis.asleepDeep.rawValue:
-                return "asleep_deep"
-            case HKCategoryValueSleepAnalysis.asleepREM.rawValue:
-                return "asleep_rem"
-            case HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
-                return "asleep_unspecified"
-            default:
-                break
+            case HKCategoryValueSleepAnalysis.asleepCore.rawValue:        return "asleep_core"
+            case HKCategoryValueSleepAnalysis.asleepDeep.rawValue:        return "asleep_deep"
+            case HKCategoryValueSleepAnalysis.asleepREM.rawValue:         return "asleep_rem"
+            case HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue: return "asleep_unspecified"
+            default: break
             }
         }
         return "unknown"
@@ -502,44 +689,19 @@ final class HealthKitExporter {
     @available(iOS 17.0, *)
     private func stateOfMindLabelName(_ label: HKStateOfMind.Label) -> String {
         switch label.rawValue {
-        case 1: "amazed"
-        case 2: "amused"
-        case 3: "angry"
-        case 4: "anxious"
-        case 5: "ashamed"
-        case 6: "brave"
-        case 7: "calm"
-        case 8: "content"
-        case 9: "disappointed"
-        case 10: "discouraged"
-        case 11: "disgusted"
-        case 12: "embarrassed"
-        case 13: "excited"
-        case 14: "frustrated"
-        case 15: "grateful"
-        case 16: "guilty"
-        case 17: "happy"
-        case 18: "hopeless"
-        case 19: "irritated"
-        case 20: "jealous"
-        case 21: "joyful"
-        case 22: "lonely"
-        case 23: "passionate"
-        case 24: "peaceful"
-        case 25: "proud"
-        case 26: "relieved"
-        case 27: "sad"
-        case 28: "scared"
-        case 29: "stressed"
-        case 30: "surprised"
-        case 31: "worried"
-        case 32: "annoyed"
-        case 33: "confident"
-        case 34: "drained"
-        case 35: "hopeful"
-        case 36: "indifferent"
-        case 37: "overwhelmed"
-        case 38: "satisfied"
+        case 1: "amazed";       case 2: "amused";        case 3: "angry"
+        case 4: "anxious";      case 5: "ashamed";       case 6: "brave"
+        case 7: "calm";         case 8: "content";       case 9: "disappointed"
+        case 10: "discouraged"; case 11: "disgusted";    case 12: "embarrassed"
+        case 13: "excited";     case 14: "frustrated";   case 15: "grateful"
+        case 16: "guilty";      case 17: "happy";        case 18: "hopeless"
+        case 19: "irritated";   case 20: "jealous";      case 21: "joyful"
+        case 22: "lonely";      case 23: "passionate";   case 24: "peaceful"
+        case 25: "proud";       case 26: "relieved";     case 27: "sad"
+        case 28: "scared";      case 29: "stressed";     case 30: "surprised"
+        case 31: "worried";     case 32: "annoyed";      case 33: "confident"
+        case 34: "drained";     case 35: "hopeful";      case 36: "indifferent"
+        case 37: "overwhelmed"; case 38: "satisfied"
         default: "unknown_\(label.rawValue)"
         }
     }
@@ -547,46 +709,54 @@ final class HealthKitExporter {
     @available(iOS 17.0, *)
     private func stateOfMindAssociationName(_ association: HKStateOfMind.Association) -> String {
         switch association.rawValue {
-        case 1: "community"
-        case 2: "current_events"
-        case 3: "dating"
-        case 4: "education"
-        case 5: "family"
-        case 6: "fitness"
-        case 7: "friends"
-        case 8: "health"
-        case 9: "hobbies"
-        case 10: "identity"
-        case 11: "money"
-        case 12: "partner"
-        case 13: "self_care"
-        case 14: "spirituality"
-        case 15: "tasks"
-        case 16: "travel"
-        case 17: "work"
-        case 18: "weather"
+        case 1: "community";   case 2: "current_events"; case 3: "dating"
+        case 4: "education";   case 5: "family";          case 6: "fitness"
+        case 7: "friends";     case 8: "health";          case 9: "hobbies"
+        case 10: "identity";   case 11: "money";          case 12: "partner"
+        case 13: "self_care";  case 14: "spirituality";   case 15: "tasks"
+        case 16: "travel";     case 17: "work";           case 18: "weather"
         default: "unknown_\(association.rawValue)"
         }
     }
-
 }
 
+// MARK: - HKWorkoutActivityType extensions
+
 extension HKWorkoutActivityType {
+    // Name used in the legacy metrics.samples path (kept for backward compat)
     var name: String {
         switch self {
-        case .running: "running"
-        case .walking: "walking"
-        case .cycling: "cycling"
-        case .traditionalStrengthTraining: "strength_training"
-        case .functionalStrengthTraining: "functional_strength_training"
+        case .running:                       "running"
+        case .walking:                       "walking"
+        case .cycling:                       "cycling"
+        case .traditionalStrengthTraining:   "strength_training"
+        case .functionalStrengthTraining:    "functional_strength_training"
         case .highIntensityIntervalTraining: "hiit"
-        case .yoga: "yoga"
-        case .swimming: "swimming"
-        case .mindAndBody: "mind_and_body"
+        case .yoga:                          "yoga"
+        case .swimming:                      "swimming"
+        case .mindAndBody:                   "mind_and_body"
         default: "activity_\(rawValue)"
         }
     }
+
+    // Name used in the direct workouts path — must match backend APPLE_WORKOUT_TYPE_MAP values.
+    var backendTypeName: String {
+        switch self {
+        case .running:                       "running"
+        case .walking:                       "walking"
+        case .cycling:                       "cycling"
+        case .traditionalStrengthTraining:   "traditional_strength_training"
+        case .functionalStrengthTraining:    "functional_strength_training"
+        case .highIntensityIntervalTraining: "hiit"
+        case .yoga:                          "yoga"
+        case .swimming:                      "swimming"
+        case .mindAndBody:                   "mind_and_body"
+        default: "other"
+        }
+    }
 }
+
+// MARK: - Sleep helpers
 
 enum SleepMinuteMath {
     static func roundedMinutes(from startDate: Date, to endDate: Date) -> Int {
@@ -595,15 +765,13 @@ enum SleepMinuteMath {
     }
 
     static func roundedUnionMinutes(from intervals: [(startDate: Date, endDate: Date)]) -> Int {
-        let sortedIntervals = intervals
+        let sorted = intervals
             .filter { $0.endDate > $0.startDate }
             .sorted { $0.startDate < $1.startDate }
-        guard var current = sortedIntervals.first else {
-            return 0
-        }
+        guard var current = sorted.first else { return 0 }
 
         var minutes = 0
-        for interval in sortedIntervals.dropFirst() {
+        for interval in sorted.dropFirst() {
             if interval.startDate <= current.endDate {
                 current.endDate = max(current.endDate, interval.endDate)
             } else {
@@ -611,7 +779,6 @@ enum SleepMinuteMath {
                 current = interval
             }
         }
-
         minutes += roundedMinutes(from: current.startDate, to: current.endDate)
         return minutes
     }
@@ -628,7 +795,6 @@ enum SleepSampleFilter {
             ]
             return values.contains(where: detailedValues.contains)
         }
-
         return false
     }
 }

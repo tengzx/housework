@@ -6,11 +6,13 @@ import SwiftUI
 final class TimeCalendarStore: ObservableObject {
     @Published private(set) var events: [Calendar2Event] = []
     @Published private(set) var categories: [Calendar2Category] = Calendar2Category.fallbackCategories
+    @Published private(set) var mobileAppEvents: [Calendar2Event] = []
     @Published var statusMessage = ""
     @Published var isLoading = false
 
     private var loadedOffsets: Set<Int> = []
     private var hasLoadedRemoteCategories = false
+    private var loadedMobileAppOffsets: Set<Int> = []
 
     func loadVisibleRange(offsets: [Int], force: Bool = false) async {
         guard let minOffset = offsets.min(), let maxOffset = offsets.max() else { return }
@@ -46,10 +48,11 @@ final class TimeCalendarStore: ObservableObject {
                 to: Calendar2Format.day(offset: fetchMax)
             )
             let fetchedOffsets = Set(fetchMin...fetchMax)
-            // 移除本次请求范围内的旧缓存，再合并新数据
-            events.removeAll { fetchedOffsets.contains($0.dayOffset) }
+            // 移除旧缓存，但保留乐观插入的 pending 事件
+            events.removeAll { fetchedOffsets.contains($0.dayOffset) && !$0.isPending }
             events.append(contentsOf: newEvents)
-            loadedOffsets.formUnion(fetchedOffsets)
+            // 今天(0)和昨天(-1)不缓存，保证跨设备新事件随时可见
+            loadedOffsets.formUnion(fetchedOffsets.filter { $0 < -1 })
         } catch {
             guard !Self.isCancellation(error) else { return }
             statusMessage = readableMessage(for: error)
@@ -60,6 +63,34 @@ final class TimeCalendarStore: ObservableObject {
         loadedOffsets = []
         hasLoadedRemoteCategories = false
         await loadVisibleRange(offsets: offsets, force: true)
+    }
+
+    func loadMobileAppEvents(offsets: [Int]) async {
+        guard let minOffset = offsets.min(), let maxOffset = offsets.max() else { return }
+        let requestedOffsets = Set(minOffset...maxOffset)
+        let missingOffsets = requestedOffsets.subtracting(loadedMobileAppOffsets)
+        guard !missingOffsets.isEmpty else { return }
+
+        let fetchMin = missingOffsets.min()!
+        let fetchMax = missingOffsets.max()!
+
+        do {
+            let newEvents = try await TimeCalendarAPI.mobileAppEvents(
+                from: Calendar2Format.day(offset: fetchMin),
+                to: Calendar2Format.day(offset: fetchMax)
+            )
+            let fetchedOffsets = Set(fetchMin...fetchMax)
+            mobileAppEvents.removeAll { fetchedOffsets.contains($0.dayOffset) }
+            mobileAppEvents.append(contentsOf: newEvents)
+            loadedMobileAppOffsets.formUnion(fetchedOffsets)
+        } catch {
+            guard !Self.isCancellation(error) else { return }
+        }
+    }
+
+    func clearMobileAppEvents() {
+        mobileAppEvents = []
+        loadedMobileAppOffsets = []
     }
 
     func category(for id: String) -> Calendar2Category {
@@ -85,13 +116,32 @@ final class TimeCalendarStore: ObservableObject {
         )
     }
 
-    /// 点击“保存”后才真正创建：发送到服务器。
+    /// 点击”保存”后才真正创建：先乐观插入本地，服务器确认后替换，失败则撤销。
     func createEvent(_ event: Calendar2Event) async -> Calendar2Event? {
+        let tempId = "pending_\(UUID().uuidString)"
+        let optimistic = Calendar2Event(
+            id: tempId,
+            sourceEventId: tempId,
+            absoluteStartedAt: event.absoluteStartedAt,
+            absoluteEndedAt: event.absoluteEndedAt,
+            dayOffset: event.dayOffset,
+            start: event.start,
+            end: event.end,
+            name: event.name,
+            category: event.category,
+            typeId: event.typeId,
+            source: event.source,
+            note: event.note,
+            isPending: true
+        )
+        events.append(optimistic)
         do {
             let created = try await TimeCalendarAPI.create(event)
+            events.removeAll { $0.id == tempId }
             upsert(created)
             return preferredSegment(from: created, matching: event)
         } catch {
+            events.removeAll { $0.id == tempId }
             statusMessage = error.localizedDescription
             return nil
         }
@@ -161,24 +211,93 @@ final class TimeCalendarStore: ObservableObject {
         return await update(event)
     }
 
+    func updateEvent(_ event: Calendar2Event) async -> Calendar2Event? {
+        return await update(event)
+    }
+
     func delete(id: String) async -> Bool {
         guard let event = events.first(where: { $0.id == id }) else { return false }
+        // 乐观删除：先从本地移除，失败时恢复
+        let removed = events.filter { $0.sourceEventId == event.sourceEventId }
+        events.removeAll { $0.sourceEventId == event.sourceEventId }
         do {
             try await TimeCalendarAPI.delete(id: event.sourceEventId)
-            events.removeAll { $0.sourceEventId == event.sourceEventId }
             return true
         } catch {
+            events.append(contentsOf: removed)
             statusMessage = error.localizedDescription
             return false
         }
     }
 
+    // MARK: - Category CRUD
+
+    func createCategory(name: String, hexColor: String) async throws -> Calendar2Category {
+        let category = try await TimeCalendarAPI.createCategory(name: name, color: hexColor)
+        categories.append(category)
+        return category
+    }
+
+    func updateCategory(id: String, name: String, hexColor: String) async throws {
+        let updated = try await TimeCalendarAPI.updateCategory(id: id, name: name, color: hexColor)
+        if let idx = categories.firstIndex(where: { $0.id == id }) {
+            categories[idx] = updated
+        }
+    }
+
+    func deleteCategory(id: String) async throws {
+        try await TimeCalendarAPI.deleteCategory(id: id)
+        categories.removeAll { $0.id == id }
+    }
+
+    func createType(categoryId: String, name: String, tracksFocus: Bool = false) async throws -> Calendar2CategoryType {
+        let newType = try await TimeCalendarAPI.createType(categoryId: categoryId, name: name, tracksFocus: tracksFocus)
+        if let idx = categories.firstIndex(where: { $0.id == categoryId }) {
+            let cat = categories[idx]
+            categories[idx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, types: cat.types + [newType])
+        }
+        return newType
+    }
+
+    func updateType(id: String, name: String, tracksFocus: Bool) async throws {
+        let updated = try await TimeCalendarAPI.updateType(id: id, name: name, tracksFocus: tracksFocus)
+        for (catIdx, cat) in categories.enumerated() {
+            if let typeIdx = cat.types.firstIndex(where: { $0.id == id }) {
+                var types = cat.types
+                types[typeIdx] = updated
+                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, types: types)
+                break
+            }
+        }
+    }
+
+    func deleteType(id: String) async throws {
+        try await TimeCalendarAPI.deleteType(id: id)
+        for (catIdx, cat) in categories.enumerated() {
+            if cat.types.contains(where: { $0.id == id }) {
+                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, types: cat.types.filter { $0.id != id })
+                break
+            }
+        }
+    }
+
+    func reloadCategories() async throws {
+        categories = try await TimeCalendarAPI.categories()
+        hasLoadedRemoteCategories = !categories.isEmpty
+    }
+
     private func update(_ event: Calendar2Event) async -> Calendar2Event? {
+        // 乐观更新：先改本地，服务器失败时回滚
+        let original = events.filter { $0.sourceEventId == event.sourceEventId }
+        upsertOptimistic(event)
         do {
             let updated = try await TimeCalendarAPI.update(event)
             upsert(updated)
             return preferredSegment(from: updated, matching: event)
         } catch {
+            // 回滚到修改前的状态
+            events.removeAll { $0.sourceEventId == event.sourceEventId }
+            events.append(contentsOf: original)
             statusMessage = error.localizedDescription
             return nil
         }
@@ -188,6 +307,12 @@ final class TimeCalendarStore: ObservableObject {
         guard let sourceEventId = newEvents.first?.sourceEventId else { return }
         events.removeAll { $0.sourceEventId == sourceEventId }
         events.append(contentsOf: newEvents)
+    }
+
+    private func upsertOptimistic(_ event: Calendar2Event) {
+        // 直接替换同 sourceEventId 的所有段，服务器确认后再修正分段
+        events.removeAll { $0.sourceEventId == event.sourceEventId }
+        events.append(event)
     }
 
     private func preferredSegment(from events: [Calendar2Event], matching reference: Calendar2Event) -> Calendar2Event? {
@@ -214,11 +339,8 @@ final class TimeCalendarStore: ObservableObject {
 }
 
 enum TimeCalendarAPI {
-    #if DEBUG
-    static let baseURL = URL(string: "http://192.168.1.155:8081/api")!
-    #else
+    // 局域网调试（无 VPN 时用）: http://192.168.1.155:8081/api
     static let baseURL = URL(string: "http://100.67.64.11:8081/api")!
-    #endif
 
     static func events(from: Date, to: Date) async throws -> [Calendar2Event] {
         var components = URLComponents(url: baseURL.appendingPathComponent("time-events"), resolvingAgainstBaseURL: false)!
@@ -257,6 +379,80 @@ enum TimeCalendarAPI {
 
     static func delete(id: String) async throws {
         _ = try await send(DeleteTimeEventResponse.self, url: baseURL.appendingPathComponent("time-events").appendingPathComponent(id), method: "DELETE")
+    }
+
+    static func createCategory(name: String, color: String?) async throws -> Calendar2Category {
+        let response = try await send(
+            TimeCategoryEnvelope.self,
+            url: baseURL.appendingPathComponent("time-categories"),
+            method: "POST",
+            body: TimeCategoryRequest(name: name, color: color)
+        )
+        return Calendar2Category(response: response.category)
+    }
+
+    static func updateCategory(id: String, name: String, color: String?) async throws -> Calendar2Category {
+        let response = try await send(
+            TimeCategoryEnvelope.self,
+            url: baseURL.appendingPathComponent("time-categories").appendingPathComponent(id),
+            method: "PATCH",
+            body: TimeCategoryRequest(name: name, color: color)
+        )
+        return Calendar2Category(response: response.category)
+    }
+
+    static func deleteCategory(id: String) async throws {
+        _ = try await send(
+            DeleteTimeEventResponse.self,
+            url: baseURL.appendingPathComponent("time-categories").appendingPathComponent(id),
+            method: "DELETE"
+        )
+    }
+
+    static func createType(categoryId: String, name: String, tracksFocus: Bool = false) async throws -> Calendar2CategoryType {
+        let response = try await send(
+            TimeTypeEnvelope.self,
+            url: baseURL.appendingPathComponent("time-categories").appendingPathComponent(categoryId).appendingPathComponent("types"),
+            method: "POST",
+            body: TimeTypeRequest(name: name, tracksFocus: tracksFocus)
+        )
+        let t = response.eventType
+        return Calendar2CategoryType(id: t.id, label: t.label, color: t.color.map { Color(hex: $0) }, tracksFocus: t.tracksFocus ?? false)
+    }
+
+    static func updateType(id: String, name: String, tracksFocus: Bool) async throws -> Calendar2CategoryType {
+        let response = try await send(
+            TimeTypeEnvelope.self,
+            url: baseURL.appendingPathComponent("time-types").appendingPathComponent(id),
+            method: "PATCH",
+            body: TimeTypeRequest(name: name, tracksFocus: tracksFocus)
+        )
+        let t = response.eventType
+        return Calendar2CategoryType(id: t.id, label: t.label, color: t.color.map { Color(hex: $0) }, tracksFocus: t.tracksFocus ?? false)
+    }
+
+    static func deleteType(id: String) async throws {
+        _ = try await send(
+            DeleteTimeEventResponse.self,
+            url: baseURL.appendingPathComponent("time-types").appendingPathComponent(id),
+            method: "DELETE"
+        )
+    }
+
+    static func mobileAppEvents(from: Date, to: Date) async throws -> [Calendar2Event] {
+        var components = URLComponents(url: baseURL.appendingPathComponent("mobile-app-events"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "from", value: Calendar2Format.apiDate(from)),
+            URLQueryItem(name: "to", value: Calendar2Format.apiDate(to)),
+            URLQueryItem(name: "userId", value: "1")
+        ]
+        let response = try await send(MobileAppEventsResponse.self, url: components.url!, method: "GET")
+        return response.events.flatMap {
+            Calendar2Event.mobileAppSegments(
+                id: $0.id, name: $0.name, categoryId: $0.categoryId, typeId: $0.typeId,
+                startedAt: $0.startedAt, endedAt: $0.endedAt, source: $0.source
+            )
+        }
     }
 
     private static func send<T: Decodable, Body: Encodable>(_ type: T.Type, url: URL, method: String, body: Body? = Optional<String>.none) async throws -> T {
@@ -361,6 +557,27 @@ private struct DeleteTimeEventResponse: Decodable {
     var ok: Bool
 }
 
+private struct TimeCategoryRequest: Encodable {
+    var name: String?
+    var color: String?
+}
+
+private struct TimeTypeRequest: Encodable {
+    var name: String?
+    var tracksFocus: Bool?
+}
+
+private struct TimeCategoryEnvelope: Decodable {
+    var category: TimeCategoryResponse
+}
+
+private struct TimeTypeEnvelope: Decodable {
+    var eventType: TimeCategoryTypeResponse
+    enum CodingKeys: String, CodingKey {
+        case eventType = "type"
+    }
+}
+
 struct TimeCategoryResponse: Decodable {
     var id: String
     var label: String
@@ -396,6 +613,7 @@ struct TimeCategoryTypeResponse: Decodable {
     var id: String
     var label: String
     var color: String?
+    var tracksFocus: Bool?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -403,6 +621,8 @@ struct TimeCategoryTypeResponse: Decodable {
         case name
         case title
         case color
+        case tracksFocus
+        case tracksFocusSnake = "tracks_focus"
     }
 
     init(from decoder: Decoder) throws {
@@ -411,6 +631,7 @@ struct TimeCategoryTypeResponse: Decodable {
             id = value
             label = value
             color = nil
+            tracksFocus = nil
             return
         }
 
@@ -418,6 +639,8 @@ struct TimeCategoryTypeResponse: Decodable {
         id = try container.decodeFlexibleString(for: .id)
         label = try container.decodeFirstString(keys: [.label, .name, .title]) ?? id
         color = try container.decodeFirstString(keys: [.color])
+        tracksFocus = try container.decodeIfPresent(Bool.self, forKey: .tracksFocus)
+            ?? container.decodeIfPresent(Bool.self, forKey: .tracksFocusSnake)
     }
 }
 
@@ -481,6 +704,42 @@ private struct TimeEventRequest: Encodable {
         startedAt = event.absoluteStartedAt
         endedAt = event.absoluteEndedAt ?? Calendar2Format.date(dayOffset: event.dayOffset, minute: event.end)
         note = event.note
+    }
+}
+
+struct MobileAppEventResponse: Decodable {
+    var id: String
+    var name: String
+    var categoryId: String
+    var typeId: String?
+    var startedAt: Date
+    var endedAt: Date?
+    var source: String?
+    var status: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, categoryId, typeId, startedAt, endedAt, source, status
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeFlexibleString(for: .id)
+        name = (try? container.decode(String.self, forKey: .name)) ?? "未命名"
+        categoryId = (try? container.decode(String.self, forKey: .categoryId)) ?? "mobile-app-sessions"
+        typeId = try? container.decode(String.self, forKey: .typeId)
+        startedAt = try container.decodeFirstDate(keys: [.startedAt])
+        endedAt = try container.decodeFirstOptionalDate(keys: [.endedAt])
+        source = try? container.decode(String.self, forKey: .source)
+        status = (try? container.decode(String.self, forKey: .status)) ?? "DONE"
+    }
+}
+
+private struct MobileAppEventsResponse: Decodable {
+    var events: [MobileAppEventResponse]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleEnvelopeKeys.self)
+        events = (try container.decodeIfPresent([MobileAppEventResponse].self, forKey: .events)) ?? []
     }
 }
 

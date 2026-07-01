@@ -14,11 +14,11 @@ struct ExportConfiguration: Codable, Identifiable, Hashable {
     init(
         id: UUID = UUID(),
         name: String = "Life Energy V3",
-        endpointURL: String = "",
+        endpointURL: String = "http://100.67.64.11:8081/api/health/ingest",
         bearerToken: String = "",
         lookbackHours: Int = 24,
         selectedMetricIDs: Set<HealthMetric.ID> = Set(HealthMetric.allCases.filter { $0.priority != .subjective }.map(\.id)),
-        includeSamples: Bool = false,
+        includeSamples: Bool = true,
         lastSentAt: Date? = nil,
         lastStatus: String? = nil
     ) {

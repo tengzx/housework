@@ -1,7 +1,10 @@
 import SwiftUI
 
 struct CalendarTrackerView2: View {
-    @StateObject private var store = TimeCalendarStore()
+    private static let historyLookaheadDays = 7
+    private static let maxFlickDays = 7
+
+    @ObservedObject var store: TimeCalendarStore
     @State private var anchorOffset = -2
     @State private var dragX: CGFloat = 0
     @State private var isHorizontalDrag = false
@@ -9,13 +12,17 @@ struct CalendarTrackerView2: View {
     @State private var timelineWidth: CGFloat = 0
     @State private var selectedEvent: Calendar2Event?
     @State private var draftEvent: Calendar2Event?
+    @State private var isScrollingVertically = false
+    @State private var scrollResetTask: Task<Void, Never>?
+    @State private var showMonthPicker = false
+    @State private var showMobileAppEvents = false
 
     private var visibleOffsets: [Int] {
         [anchorOffset, anchorOffset + 1, anchorOffset + 2]
     }
 
     private var trackOffsets: [Int] {
-        [-1, 0, 1, 2, 3].map { anchorOffset + $0 }
+        (-Self.historyLookaheadDays...(Self.historyLookaheadDays + 2)).map { anchorOffset + $0 }
     }
 
     private var monthText: String {
@@ -32,6 +39,18 @@ struct CalendarTrackerView2: View {
 
             VStack(spacing: 0) {
                 header
+                if showMonthPicker {
+                    Calendar2MonthPickerView(
+                        anchorOffset: anchorOffset,
+                        onSelect: { offset in
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                                anchorOffset = min(-2, offset - 1)
+                                showMonthPicker = false
+                            }
+                        }
+                    )
+                    .transition(.scale(scale: 0.97, anchor: .top).combined(with: .opacity))
+                }
                 dayHeader
                 timeline
             }
@@ -41,8 +60,7 @@ struct CalendarTrackerView2: View {
         .sheet(item: $selectedEvent) { event in
             Calendar2EventFormSheet(
                 mode: .edit(event),
-                categories: store.categories,
-                categoryProvider: store.category(for:),
+                store: store,
                 onSave: saveEditedEvent,
                 onDelete: deleteEvent
             )
@@ -53,8 +71,7 @@ struct CalendarTrackerView2: View {
         .sheet(item: $draftEvent) { draft in
             Calendar2EventFormSheet(
                 mode: .create(draft),
-                categories: store.categories,
-                categoryProvider: store.category(for:),
+                store: store,
                 onSave: createEvent,
                 onDelete: nil
             )
@@ -65,12 +82,12 @@ struct CalendarTrackerView2: View {
         .task {
             await store.loadVisibleRange(offsets: trackOffsets)
         }
-        .refreshable {
-            await store.refresh(offsets: trackOffsets)
-        }
         .onChange(of: anchorOffset) { _, _ in
             Task {
                 await store.loadVisibleRange(offsets: trackOffsets)
+                if showMobileAppEvents {
+                    await store.loadMobileAppEvents(offsets: trackOffsets)
+                }
             }
         }
     }
@@ -78,9 +95,22 @@ struct CalendarTrackerView2: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(monthText)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundStyle(Calendar2Style.text)
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
+                        showMonthPicker.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(monthText)
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .foregroundStyle(Calendar2Style.text)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Calendar2Style.muted)
+                            .rotationEffect(.degrees(showMonthPicker ? 180 : 0))
+                    }
+                }
+                .buttonStyle(.plain)
 
                 Text(historyHint)
                     .font(.system(size: 12, weight: .medium))
@@ -94,6 +124,21 @@ struct CalendarTrackerView2: View {
                 ProgressView()
                     .controlSize(.small)
             }
+
+            Button {
+                showMobileAppEvents.toggle()
+                if showMobileAppEvents {
+                    Task { await store.loadMobileAppEvents(offsets: trackOffsets) }
+                } else {
+                    store.clearMobileAppEvents()
+                }
+            } label: {
+                Image(systemName: "iphone")
+                    .font(.system(size: 15, weight: showMobileAppEvents ? .bold : .regular))
+                    .foregroundStyle(showMobileAppEvents ? Calendar2Style.accent : Calendar2Style.muted)
+                    .padding(4)
+            }
+            .buttonStyle(.plain)
 
             Button {
                 draftEvent = store.makeDraftEvent(dayOffset: min(0, anchorOffset + 2))
@@ -145,7 +190,7 @@ struct CalendarTrackerView2: View {
                             .frame(width: columnWidth)
                     }
                 }
-                .offset(x: -columnWidth + dragX)
+                .offset(x: -CGFloat(Self.historyLookaheadDays) * columnWidth + dragX)
                 .animation(isHorizontalDrag ? nil : .spring(response: 0.3, dampingFraction: 0.88), value: anchorOffset)
                 .onAppear {
                     timelineWidth = geo.size.width
@@ -158,7 +203,7 @@ struct CalendarTrackerView2: View {
         }
         .padding(.bottom, 8)
         .padding(.top, 2)
-        .frame(height: 50)
+        .frame(height: 58)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(Calendar2Style.line)
@@ -175,7 +220,7 @@ struct CalendarTrackerView2: View {
                 .foregroundStyle(Calendar2Style.muted)
 
             Text("\(Calendar.current.component(.day, from: date))")
-                .font(.system(size: 19, weight: .semibold, design: .rounded))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(offset == 0 ? .white : Calendar2Style.text2)
                 .frame(width: 30, height: 30)
                 .background(offset == 0 ? Calendar2Style.accent : .clear, in: Circle())
@@ -190,6 +235,30 @@ struct CalendarTrackerView2: View {
                 daysGrid
             }
             .padding(.bottom, 26)
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: TimelineScrollOffsetKey.self,
+                        value: geo.frame(in: .named("timelineScroll")).minY
+                    )
+                }
+            )
+        }
+        .coordinateSpace(name: "timelineScroll")
+        .onPreferenceChange(TimelineScrollOffsetKey.self) { _ in
+            isScrollingVertically = true
+            scrollResetTask?.cancel()
+            scrollResetTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 180_000_000)
+                isScrollingVertically = false
+            }
+        }
+        .refreshable {
+            await store.refresh(offsets: trackOffsets)
+            if showMobileAppEvents {
+                store.clearMobileAppEvents()
+                await store.loadMobileAppEvents(offsets: trackOffsets)
+            }
         }
     }
 
@@ -201,7 +270,6 @@ struct CalendarTrackerView2: View {
                     guard abs(value.translation.width) > abs(value.translation.height) * 1.8 else { return }
                     isHorizontalDrag = true
                 }
-
                 var translation = value.translation.width
                 if anchorOffset == -2 && translation < 0 {
                     translation *= 0.22
@@ -210,56 +278,57 @@ struct CalendarTrackerView2: View {
             }
             .onEnded { value in
                 guard !isSettlingDrag else { return }
-                defer {
-                    isHorizontalDrag = false
-                }
+                defer { isHorizontalDrag = false }
 
                 guard abs(value.translation.width) > abs(value.translation.height) * 1.8 else {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
-                        dragX = 0
-                    }
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) { dragX = 0 }
                     return
                 }
 
                 let threshold = pagingColumnWidth * 0.3
                 let predicted = value.predictedEndTranslation.width
+                let travel = abs(predicted) > abs(dragX) ? predicted : dragX
+                let dayCount = min(
+                    max(Int((abs(travel) / pagingColumnWidth).rounded()), 1),
+                    Self.maxFlickDays
+                )
                 let shouldMoveOlder = dragX > threshold || predicted > threshold * 1.2
                 let shouldMoveNewer = dragX < -threshold || predicted < -threshold * 1.2
 
                 if shouldMoveOlder {
-                    settleHorizontalMove(delta: -1, finalDragX: pagingColumnWidth)
+                    settleHorizontalMove(delta: -dayCount, currentDragX: dragX)
                 } else if shouldMoveNewer && anchorOffset < -2 {
-                    settleHorizontalMove(delta: 1, finalDragX: -pagingColumnWidth)
+                    let limitedDayCount = min(dayCount, -2 - anchorOffset)
+                    settleHorizontalMove(delta: limitedDayCount, currentDragX: dragX)
                 } else {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
-                        dragX = 0
-                    }
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) { dragX = 0 }
                 }
             }
     }
 
-    private func settleHorizontalMove(delta: Int, finalDragX: CGFloat) {
+    private func settleHorizontalMove(delta: Int, currentDragX: CGFloat) {
         isSettlingDrag = true
-        let duration = 0.2
+        let compensatedDragX = currentDragX + CGFloat(delta) * pagingColumnWidth
+        let duration = min(0.34, 0.16 + Double(abs(delta)) * 0.025)
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            anchorOffset = min(-2, anchorOffset + delta)
+            dragX = compensatedDragX
+        }
+
         withAnimation(.easeOut(duration: duration)) {
-            dragX = finalDragX
+            dragX = 0
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                anchorOffset = min(-2, anchorOffset + delta)
                 dragX = 0
                 isSettlingDrag = false
             }
-        }
-    }
-
-    private func moveWindow(by delta: Int) {
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-            anchorOffset = min(-2, anchorOffset + delta)
-            dragX = 0
         }
     }
 
@@ -297,7 +366,7 @@ struct CalendarTrackerView2: View {
                         calendarDay(offset: offset, width: columnWidth)
                     }
                 }
-                .offset(x: -columnWidth + dragX)
+                .offset(x: -CGFloat(Self.historyLookaheadDays) * columnWidth + dragX)
                 .animation(isHorizontalDrag ? nil : .spring(response: 0.3, dampingFraction: 0.88), value: anchorOffset)
                 .onAppear {
                     timelineWidth = geo.size.width
@@ -314,15 +383,38 @@ struct CalendarTrackerView2: View {
 
     private func calendarDay(offset: Int, width: CGFloat) -> some View {
         TimelineView(.periodic(from: .now, by: 60)) { timeline in
-            let layouts = eventLayouts(for: store.events.filter { $0.dayOffset == offset }, now: timeline.date)
+            let regularLayouts = eventLayouts(
+                for: store.events.filter { $0.dayOffset == offset },
+                now: timeline.date
+            )
+            let mobileLayouts = showMobileAppEvents
+                ? store.mobileAppEvents.filter { $0.dayOffset == offset }
+                    .map { Calendar2EventLayout(event: $0, lane: 0, laneCount: 1) }
+                : []
 
             ZStack(alignment: .topLeading) {
                 if offset == 0 {
                     Calendar2Style.accent.opacity(0.05)
                 }
-
-                ForEach(layouts) { layout in
-                    eventBlock(layout, dayWidth: width, now: timeline.date)
+                ForEach(regularLayouts) { layout in
+                    Calendar2EventBlockView(
+                        layout: layout,
+                        category: store.category(for: layout.event.category),
+                        dayWidth: width,
+                        isInteractive: !isHorizontalDrag && !isSettlingDrag && !isScrollingVertically,
+                        now: timeline.date,
+                        onTap: { selectedEvent = layout.event }
+                    )
+                }
+                ForEach(mobileLayouts) { layout in
+                    Calendar2EventBlockView(
+                        layout: layout,
+                        category: store.category(for: layout.event.category),
+                        dayWidth: width,
+                        isInteractive: false,
+                        now: timeline.date,
+                        onTap: {}
+                    )
                 }
             }
             .frame(width: width, height: Calendar2Layout.gridHeight, alignment: .topLeading)
@@ -332,62 +424,6 @@ struct CalendarTrackerView2: View {
                     .frame(width: 1)
             }
         }
-    }
-
-    private func eventBlock(_ layout: Calendar2EventLayout, dayWidth: CGFloat, now: Date) -> some View {
-        let event = layout.event
-        let category = store.category(for: event.category)
-        let tint = category.color
-        let top = CGFloat(event.start - Calendar2Layout.dayStart * 60) / 60 * Calendar2Layout.hourHeight
-        let end = event.displayEnd(now: now)
-        let height = CGFloat(end - event.start) / 60 * Calendar2Layout.hourHeight
-        let isTiny = height < 28
-        let horizontalPadding: CGFloat = 3
-        let laneGap: CGFloat = 4
-        let availableWidth = max(dayWidth - horizontalPadding * 2, 1)
-        let laneWidth = max((availableWidth - CGFloat(layout.laneCount - 1) * laneGap) / CGFloat(layout.laneCount), 1)
-        let xOffset = horizontalPadding + CGFloat(layout.lane) * (laneWidth + laneGap)
-
-        return Button {
-            selectedEvent = event
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(event.name)
-                    .font(.system(size: isTiny ? 11 : 13, weight: .semibold))
-                    .foregroundStyle(Color(hex: "17191D"))
-                    .lineLimit(1)
-
-                if height > 44 {
-                    Text("\(Calendar2Format.clock(event.start))-\(Calendar2Format.clock(end))")
-                        .font(.system(size: 10, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(Color(hex: "17191D").opacity(0.58))
-                        .lineLimit(1)
-                }
-
-                if event.isRunning && height > 30 {
-                    Text("进行中")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Color(hex: "17191D").opacity(0.66))
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(tint, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(.white.opacity(0.28))
-                    .frame(width: 2)
-                    .padding(.vertical, 5)
-                }
-        }
-        .buttonStyle(Calendar2PressStyle())
-        .allowsHitTesting(!isHorizontalDrag && !isSettlingDrag)
-        .frame(width: laneWidth)
-        .frame(height: max(height - 2, Calendar2Layout.minimumEventHeight))
-        .offset(x: xOffset, y: top)
     }
 
     private func eventLayouts(for events: [Calendar2Event], now: Date) -> [Calendar2EventLayout] {
@@ -408,9 +444,7 @@ struct CalendarTrackerView2: View {
             }
             var lane = 0
             let usedLanes = Set(blockingActive.map(\.lane))
-            while usedLanes.contains(lane) {
-                lane += 1
-            }
+            while usedLanes.contains(lane) { lane += 1 }
             let layoutIndex = layouts.count
             active.append((event, event.layoutEnd(now: now), lane, layoutIndex))
             let laneCount = event.prefersFullWidthMidnightLayout
@@ -421,26 +455,16 @@ struct CalendarTrackerView2: View {
                 layouts[activeItem.layoutIndex].laneCount = laneCount
             }
         }
-
         return layouts
     }
 
     private func createEvent(_ event: Calendar2Event) {
-        Task {
-            _ = await store.createEvent(event)
-        }
+        Task { _ = await store.createEvent(event) }
     }
 
     private func saveEditedEvent(_ event: Calendar2Event) {
         Task {
-            _ = await store.updateAll(
-                id: event.id,
-                name: event.name,
-                categoryId: event.category,
-                typeId: event.typeId,
-                start: event.start,
-                end: event.end
-            )
+            _ = await store.updateEvent(event)
         }
     }
 
@@ -453,675 +477,291 @@ struct CalendarTrackerView2: View {
     }
 }
 
-// MARK: - 编辑 & 新增共用表单
-
-private struct Calendar2EventFormSheet: View {
-    enum Mode {
-        case edit(Calendar2Event)
-        case create(Calendar2Event)
-    }
-
-    let mode: Mode
-    let categories: [Calendar2Category]
-    let categoryProvider: (String) -> Calendar2Category
-    let onSave: (Calendar2Event) -> Void
-    let onDelete: ((String) -> Void)?
-
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var draftName: String
-    @State private var pickedCategory: String
-    @State private var pickedType: String?
-    @State private var pickedDayOffset: Int
-    @State private var start: Int
-    @State private var end: Int
-    @State private var isSaving = false
-
-    init(
-        mode: Mode,
-        categories: [Calendar2Category],
-        categoryProvider: @escaping (String) -> Calendar2Category,
-        onSave: @escaping (Calendar2Event) -> Void,
-        onDelete: ((String) -> Void)?
-    ) {
-        self.mode = mode
-        self.categories = categories
-        self.categoryProvider = categoryProvider
-        self.onSave = onSave
-        self.onDelete = onDelete
-        let source: Calendar2Event
-        switch mode {
-        case .edit(let e), .create(let e): source = e
-        }
-        _draftName = State(initialValue: source.name)
-        _pickedCategory = State(initialValue: source.category)
-        _pickedType = State(initialValue: source.typeId)
-        _pickedDayOffset = State(initialValue: source.dayOffset)
-        _start = State(initialValue: source.start)
-        _end = State(initialValue: source.end)
-    }
-
-    private var isEdit: Bool {
-        if case .edit = mode { return true }
-        return false
-    }
-
-    private var originalEvent: Calendar2Event? {
-        if case .edit(let e) = mode { return e }
-        return nil
-    }
-
-    private var category: Calendar2Category { categoryProvider(pickedCategory) }
-    private var trimmedName: String { draftName.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var canSave: Bool { !trimmedName.isEmpty && end > start && !isSaving }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-
-                // 标题行
-                HStack(spacing: 10) {
-                    Circle().fill(category.color).frame(width: 12, height: 12)
-                    Text(isEdit ? "编辑记录" : "新建记录")
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Calendar2Style.text)
-                    Spacer()
-                    if isEdit, let onDelete, let event = originalEvent {
-                        Button(role: .destructive) {
-                            onDelete(event.id)
-                            dismiss()
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.red.opacity(0.8))
-                                .frame(width: 34, height: 34)
-                                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-                        }
-                        .buttonStyle(Calendar2PressStyle())
-                    }
-                }
-
-                // 名称
-                VStack(alignment: .leading, spacing: 10) {
-                    sectionLabel("名称")
-                    TextField("输入事件名称", text: $draftName)
-                        .textInputAutocapitalization(.never)
-                        .disableAutocorrection(true)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Calendar2Style.text)
-                        .padding(.horizontal, 14)
-                        .frame(height: 46)
-                        .background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Calendar2Style.line2, lineWidth: 1)
-                        )
-                }
-
-                // 时长 & 起止展示
-                HStack(spacing: 0) {
-                    metricView(title: "时长", value: Calendar2Format.duration(max(end - start, 0)), tint: Calendar2Style.accent)
-                    Rectangle().fill(Calendar2Style.surface).frame(width: 1).padding(.horizontal, 16)
-                    VStack(alignment: .leading, spacing: 6) {
-                        sectionLabel("起止")
-                        Text("\(Calendar2Format.clock(start)) - \(Calendar2Format.clock(end))")
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(Calendar2Style.text)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.78)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, 18).padding(.vertical, 16)
-                .background(Calendar2Style.surface2, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                // 时间选择器
-                timeEditors
-                    .padding(.horizontal, 18).padding(.vertical, 14)
-                    .background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Calendar2Style.line, lineWidth: 1)
-                    )
-
-                // 大类
-                VStack(alignment: .leading, spacing: 12) {
-                    sectionLabel("分类")
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                        ForEach(categories) { item in
-                            let isOn = pickedCategory == item.id
-                            Button {
-                                if pickedCategory != item.id {
-                                    pickedCategory = item.id
-                                    pickedType = item.types.first?.id
-                                    draftName = item.types.first?.label ?? item.label
-                                }
-                            } label: {
-                                HStack(spacing: 7) {
-                                    Circle().fill(item.color).frame(width: 9, height: 9)
-                                    Text(item.label)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(isOn ? .white : Calendar2Style.text2)
-                                }
-                                .frame(maxWidth: .infinity).frame(height: 46)
-                                .background(
-                                    isOn ? item.color.opacity(0.18) : Calendar2Style.surface,
-                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(isOn ? item.color : Calendar2Style.line2, lineWidth: 1.5)
-                                )
-                            }
-                            .buttonStyle(Calendar2PressStyle())
-                        }
-                    }
-
-                    // 小类
-                    Text("小类")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1)
-                        .foregroundStyle(Calendar2Style.faint)
-
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
-                        ForEach(categoryProvider(pickedCategory).types) { type in
-                            let isOn = pickedType == type.id
-                            let tint = categoryProvider(pickedCategory).color
-                            Button {
-                                pickedType = type.id
-                                draftName = type.label
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Circle().fill(tint).frame(width: 8, height: 8)
-                                    Text(type.label)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(isOn ? tint : Calendar2Style.text2)
-                                }
-                                .frame(maxWidth: .infinity).frame(height: 40)
-                                .background(isOn ? tint.opacity(0.12) : Calendar2Style.surface, in: Capsule())
-                                .overlay(Capsule().stroke(isOn ? tint : tint.opacity(0.35), lineWidth: 1.5))
-                            }
-                            .buttonStyle(Calendar2PressStyle())
-                        }
-                    }
-                }
-
-                // 保存按钮
-                Button { commit() } label: {
-                    Text("保存")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).frame(height: 50)
-                        .background(
-                            canSave ? Calendar2Style.accent : Calendar2Style.faint,
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        )
-                }
-                .buttonStyle(Calendar2PressStyle())
-                .disabled(!canSave)
-                .padding(.top, 4)
-            }
-            .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 32)
-        }
-        .background(Calendar2Style.sheet)
-    }
-
-    private func commit() {
-        guard canSave else { return }
-        isSaving = true
-        let original = originalEvent
-        let event = Calendar2Event(
-            id: original?.id ?? "",
-            sourceEventId: original?.sourceEventId,
-            absoluteStartedAt: original?.absoluteStartedAt,
-            absoluteEndedAt: original?.absoluteEndedAt,
-            dayOffset: pickedDayOffset,
-            start: start,
-            end: end,
-            name: trimmedName,
-            category: pickedCategory,
-            typeId: pickedType,
-            source: original?.source ?? "manual",
-            note: original?.note
-        )
-        onSave(event)
-        dismiss()
-    }
-
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .tracking(1.5)
-            .foregroundStyle(Calendar2Style.muted)
-    }
-
-    private func metricView(title: String, value: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionLabel(title)
-            Text(value)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .monospacedDigit().foregroundStyle(tint).lineLimit(1).minimumScaleFactor(0.78)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var timeEditors: some View {
-        HStack(spacing: 8) {
-            Text("日期")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Calendar2Style.text2)
-            DatePicker("", selection: dateBinding, displayedComponents: .date)
-                .labelsHidden().datePickerStyle(.compact)
-
-            Spacer()
-
-            DatePicker("", selection: startBinding, displayedComponents: .hourAndMinute)
-                .labelsHidden().datePickerStyle(.compact)
-            Text("–")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Calendar2Style.faint)
-            DatePicker("", selection: endBinding, displayedComponents: .hourAndMinute)
-                .labelsHidden().datePickerStyle(.compact)
-        }
-    }
-
-    private var dateBinding: Binding<Date> {
-        Binding(
-            get: { Calendar2Format.day(offset: pickedDayOffset) },
-            set: { pickedDayOffset = Calendar2Format.dayOffset(for: $0) }
-        )
-    }
-
-    private var startBinding: Binding<Date> {
-        Binding(
-            get: { Calendar2Format.date(fromMinute: start) },
-            set: { newValue in
-                start = Calendar2Format.minute(fromDate: newValue)
-                if end <= start { end = min(start + 5, Calendar2Layout.dayEnd * 60) }
-            }
-        )
-    }
-
-    private var endBinding: Binding<Date> {
-        Binding(
-            get: { Calendar2Format.date(fromMinute: end) },
-            set: { end = max(Calendar2Format.minute(fromDate: $0), start + 5) }
-        )
-    }
-}
-
-
-struct Calendar2Event: Identifiable, Equatable {
-    let id: String
-    let sourceEventId: String
-    let absoluteStartedAt: Date
-    let absoluteEndedAt: Date?
-    var dayOffset: Int
-    var start: Int
-    var end: Int
-    var name: String
-    var category: String
-    var typeId: String?
-    var source: String?
-    var note: String?
-    var isRunning: Bool
-    var spansMultipleDays: Bool
-
-    init(id: String, sourceEventId: String? = nil, absoluteStartedAt: Date? = nil, absoluteEndedAt: Date? = nil, dayOffset: Int, start: Int, end: Int, name: String, category: String, typeId: String? = nil, source: String? = nil, note: String? = nil, isRunning: Bool = false, spansMultipleDays: Bool = false) {
-        self.id = id
-        self.sourceEventId = sourceEventId ?? id
-        self.absoluteStartedAt = absoluteStartedAt ?? Calendar2Format.date(dayOffset: dayOffset, minute: start)
-        self.absoluteEndedAt = absoluteEndedAt ?? Calendar2Format.date(dayOffset: dayOffset, minute: end)
-        self.dayOffset = dayOffset
-        self.start = start
-        self.end = end
-        self.name = name
-        self.category = category
-        self.typeId = typeId
-        self.source = source
-        self.note = note
-        self.isRunning = isRunning
-        self.spansMultipleDays = spansMultipleDays
-    }
-
-    static func segments(response: TimeEventResponse, now: Date = .now) -> [Calendar2Event] {
-        let calendar = Calendar.current
-        let startedAt = response.startedAt
-        let effectiveEnd = response.endedAt ?? now
-        let segmentationEnd = Calendar2Format.segmentationEnd(start: startedAt, end: effectiveEnd)
-        let firstDay = calendar.startOfDay(for: startedAt)
-        let lastDay = calendar.startOfDay(for: segmentationEnd)
-        let segmentCount = max(calendar.dateComponents([.day], from: firstDay, to: lastDay).day ?? 0, 0) + 1
-        let spansMultipleDays = segmentCount > 1
-
-        return (0..<segmentCount).compactMap { index in
-            guard let day = calendar.date(byAdding: .day, value: index, to: firstDay),
-                  let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
-                return nil
-            }
-
-            let segmentStartDate = max(startedAt, day)
-            let segmentEndDate = min(effectiveEnd, nextDay)
-            guard segmentEndDate > segmentStartDate else { return nil }
-
-            let segmentStart = Calendar2Format.minute(fromDate: segmentStartDate)
-            let segmentEnd = segmentEndDate == nextDay ? Calendar2Layout.dayEnd * 60 : Calendar2Format.minute(fromDate: segmentEndDate)
-
-            return Calendar2Event(
-                id: spansMultipleDays ? "\(response.id)::\(Calendar2Format.apiDate(day))" : response.id,
-                sourceEventId: response.id,
-                absoluteStartedAt: startedAt,
-                absoluteEndedAt: response.endedAt,
-                dayOffset: Calendar2Format.dayOffset(for: day),
-                start: segmentStart,
-                end: segmentEnd,
-                name: response.name,
-                category: response.categoryId,
-                typeId: response.typeId,
-                source: response.source,
-                note: response.note,
-                isRunning: response.endedAt == nil && index == segmentCount - 1,
-                spansMultipleDays: spansMultipleDays
-            )
-        }
-    }
-
-    func displayEnd(now: Date) -> Int {
-        guard isRunning else {
-            return max(end, start)
-        }
-        let liveEnd = dayOffset == 0 ? Calendar2Format.minute(fromDate: now) : Calendar2Layout.dayEnd * 60
-        return min(max(liveEnd, start + 5), Calendar2Layout.dayEnd * 60)
-    }
-
-    func layoutEnd(now: Date) -> Int {
-        let minDisplayMinutes = Int((Calendar2Layout.minimumEventHeight / Calendar2Layout.hourHeight * 60).rounded(.up))
-        return max(displayEnd(now: now), start + minDisplayMinutes)
-    }
-
-    var prefersFullWidthMidnightLayout: Bool {
-        let dayStart = Calendar2Layout.dayStart * 60
-        guard start == dayStart && spansMultipleDays else {
-            return false
-        }
-        guard end - start >= Calendar2Layout.fullWidthMidnightSleepMinimumMinutes else {
-            return false
-        }
-        return isSleepLike
-    }
-
-    private var isSleepLike: Bool {
-        name.contains("睡") ||
-        name.localizedCaseInsensitiveContains("sleep") ||
-        (typeId?.localizedCaseInsensitiveContains("sleep") ?? false)
-    }
-
-    static func canIgnoreLaneConflict(between active: Calendar2Event, activeDisplayEnd: Int, and current: Calendar2Event, now: Date) -> Bool {
-        let dayStart = Calendar2Layout.dayStart * 60
-        guard active.start == dayStart && current.start == dayStart else {
-            return false
-        }
-        guard active.spansMultipleDays || current.spansMultipleDays else {
-            return false
-        }
-
-        let overlapEnd = min(activeDisplayEnd, current.layoutEnd(now: now))
-        let overlapMinutes = overlapEnd - current.start
-        return overlapMinutes > 0 && overlapMinutes <= Calendar2Layout.midnightCarryoverLaneToleranceMinutes
-    }
-}
-
 private struct Calendar2EventLayout: Identifiable {
     var event: Calendar2Event
     var lane: Int
     var laneCount: Int
 
-    var id: String {
-        event.id
-    }
+    var id: String { event.id }
 }
 
-struct Calendar2Category: Identifiable {
-    let id: String
-    let label: String
-    let color: Color
-    let types: [Calendar2CategoryType]
+private struct Calendar2EventBlockView: View {
+    let layout: Calendar2EventLayout
+    let category: Calendar2Category
+    let dayWidth: CGFloat
+    let isInteractive: Bool
+    let now: Date
+    let onTap: () -> Void
 
-    init(id: String, label: String, color: Color, types: [Calendar2CategoryType]) {
-        self.id = id
-        self.label = label
-        self.color = color
-        self.types = types
+    private var event: Calendar2Event { layout.event }
+    private var tint: Color {
+        event.isMobileApp ? Self.mobileAppColor(for: event.name) : category.color
     }
 
-    init(response: TimeCategoryResponse) {
-        id = response.id
-        label = response.label
-        color = Color(hex: response.color.replacingOccurrences(of: "#", with: ""))
-        types = response.types.map {
-            Calendar2CategoryType(
-                id: $0.id,
-                label: $0.label,
-                color: $0.color.map { Color(hex: $0) }
-            )
-        }
-    }
-
-    static let fallbackCategories: [Calendar2Category] = [
-        Calendar2Category(id: "work", label: "工作", color: Color(hex: "7B8AF0"), types: ["上班", "写代码", "开会", "写文档"].map { Calendar2CategoryType(id: $0, label: $0) }),
-        Calendar2Category(id: "life", label: "生活", color: Color(hex: "3FA9F5"), types: ["吃早饭", "吃午饭", "煮饭", "购物", "做家务"].map { Calendar2CategoryType(id: $0, label: $0) }),
-        Calendar2Category(id: "health", label: "健康", color: Color(hex: "F08C8C"), types: ["健身训练", "跑步", "洗澡", "冥想"].map { Calendar2CategoryType(id: $0, label: $0) }),
-        Calendar2Category(id: "family", label: "家庭", color: Color(hex: "F2C14E"), types: ["陪娃", "接娃", "跟爸视频", "陪家人"].map { Calendar2CategoryType(id: $0, label: $0) }),
-        Calendar2Category(id: "rest", label: "休息", color: Color(hex: "8A8F9C"), types: ["睡觉", "午睡", "发呆", "聚会"].map { Calendar2CategoryType(id: $0, label: $0) }),
-        Calendar2Category(id: "leisure", label: "娱乐", color: Color(hex: "FF7847"), types: ["玩手机", "看视频", "打游戏", "听音乐"].map { Calendar2CategoryType(id: $0, label: $0) })
+    private static let mobileAppPalette: [Color] = [
+        Color(hex: "E83030"), Color(hex: "E8722A"), Color(hex: "3D8EE8"),
+        Color(hex: "6B4EE8"), Color(hex: "E84EAA"), Color(hex: "2ABD6C"),
+        Color(hex: "E8B830"), Color(hex: "1AADAD"), Color(hex: "E83E7C"),
+        Color(hex: "4E7AE8"), Color(hex: "D4500A"), Color(hex: "1A8A5A"),
     ]
 
-    static func fallback(for id: String) -> Calendar2Category {
-        fallbackCategories.first { $0.id == id } ?? fallbackCategories[4]
-    }
-
-    func color(for typeId: String?, eventName: String? = nil) -> Color {
-        if let matched = resolvedType(for: typeId, eventName: eventName),
-           let typeColor = matched.color {
-            return typeColor
+    private static func mobileAppColor(for name: String) -> Color {
+        var hash = 5381
+        for scalar in name.unicodeScalars {
+            hash = (hash &<< 5) &+ hash &+ Int(scalar.value)
         }
-        return color
+        let index = (hash % mobileAppPalette.count + mobileAppPalette.count) % mobileAppPalette.count
+        return mobileAppPalette[index]
+    }
+    private var top: CGFloat {
+        CGFloat(event.start - Calendar2Layout.dayStart * 60) / 60 * Calendar2Layout.hourHeight
+    }
+    private var displayEnd: Int { event.displayEnd(now: now) }
+    private var height: CGFloat {
+        CGFloat(displayEnd - event.start) / 60 * Calendar2Layout.hourHeight
+    }
+    private var isTiny: Bool { height < 28 }
+    private var laneWidth: CGFloat {
+        let pad: CGFloat = 3
+        let gap: CGFloat = 4
+        let available = max(dayWidth - pad * 2, 1)
+        return max((available - CGFloat(layout.laneCount - 1) * gap) / CGFloat(layout.laneCount), 1)
+    }
+    private var xOffset: CGFloat {
+        3 + CGFloat(layout.lane) * (laneWidth + 4)
     }
 
-    private func resolvedType(for typeId: String?, eventName: String?) -> Calendar2CategoryType? {
-        if let typeId,
-           let matchedById = types.first(where: { $0.id == typeId }) {
-            return matchedById
+    var body: some View {
+        if event.isMobileApp {
+            mobileAppBar
+        } else {
+            regularBlock
         }
+    }
 
-        guard let eventName else {
-            return nil
+    private var mobileAppBar: some View {
+        ZStack(alignment: .topLeading) {
+            tint.opacity(0.70)
+            if height >= 16 {
+                Text(event.name)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 4)
+                    .padding(.top, 2)
+            }
         }
+        .frame(width: laneWidth)
+        .frame(height: max(height, 2))
+        .offset(x: xOffset, y: top)
+    }
 
-        let normalizedEventName = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedEventName.isEmpty else { return nil }
+    private var regularBlock: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(event.name)
+                .font(.system(size: isTiny ? 11 : 13, weight: .semibold))
+                .foregroundStyle(Color(hex: "17191D"))
+                .lineLimit(1)
 
-        return types.first {
-            $0.label == normalizedEventName || $0.id == normalizedEventName
+            if height > 44 {
+                Text("\(Calendar2Format.clock(event.start))-\(Calendar2Format.clock(displayEnd))")
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color(hex: "17191D").opacity(0.58))
+                    .lineLimit(1)
+            }
+
+            if event.isRunning && height > 30 {
+                Text("进行中")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color(hex: "17191D").opacity(0.66))
+                    .lineLimit(1)
+            }
         }
-    }
-}
-
-struct Calendar2CategoryType: Identifiable {
-    let id: String
-    let label: String
-    let color: Color?
-
-    init(id: String, label: String, color: Color? = nil) {
-        self.id = id
-        self.label = label
-        self.color = color
-    }
-}
-
-enum Calendar2Layout {
-    static let dayStart = 0
-    static let dayEnd = 24
-    static let hourHeight: CGFloat = 64
-    static let gutter: CGFloat = 48
-    static let estimatedColumnWidth: CGFloat = 112
-    static let minimumEventHeight: CGFloat = 18
-    static let midnightCarryoverLaneToleranceMinutes = 15
-    static let fullWidthMidnightSleepMinimumMinutes = 180
-    static let hours = Array(dayStart...dayEnd)
-    static var gridHeight: CGFloat { CGFloat(dayEnd - dayStart) * hourHeight }
-}
-
-private enum Calendar2Style {
-    static let bg = Color(hex: "F5F6F8")
-    static let sheet = Color(hex: "FFFFFF")
-    static let surface = Color(hex: "FFFFFF")
-    static let surface2 = Color(hex: "F0F1F4")
-    static let line = Color(hex: "E4E6EB")
-    static let line2 = Color(hex: "E4E6EB")
-    static let gridLine = Color(hex: "E4E6EB")
-    static let accent = Color(hex: "FF7847")
-    static let text = Color(hex: "1A1C20")
-    static let muted = Color(hex: "8A8F9C")
-    static let faint = Color(hex: "A0A5AE")
-    static let text2 = Color(hex: "6F7480")
-}
-
-enum Calendar2Format {
-    static func day(offset: Int) -> Date {
-        let today = Calendar.current.startOfDay(for: Date())
-        return Calendar.current.date(byAdding: .day, value: offset, to: today) ?? today
-    }
-
-    static func dayOffset(for date: Date) -> Int {
-        let today = Calendar.current.startOfDay(for: Date())
-        let target = Calendar.current.startOfDay(for: date)
-        return Calendar.current.dateComponents([.day], from: today, to: target).day ?? 0
-    }
-
-    static func date(dayOffset: Int, minute: Int) -> Date {
-        let base = day(offset: dayOffset)
-        return Calendar.current.date(
-            bySettingHour: minute / 60,
-            minute: minute % 60,
-            second: 0,
-            of: base
-        ) ?? base
-    }
-
-    static func month(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月"
-        return formatter.string(from: date)
-    }
-
-    static func weekday(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "EEE"
-        return formatter.string(from: date)
-    }
-
-    static func shortRange(_ offsets: [Int]) -> String {
-        guard let first = offsets.first, let last = offsets.last else { return "" }
-        let start = day(offset: first)
-        let end = day(offset: last)
-        let startDay = Calendar.current.component(.day, from: start)
-        let endDay = Calendar.current.component(.day, from: end)
-        return "\(month(start))\(startDay)-\(endDay)日"
-    }
-
-    static func clock(_ minuteOfDay: Int) -> String {
-        String(format: "%02d:%02d", minuteOfDay / 60, minuteOfDay % 60)
-    }
-
-    static func date(fromMinute minuteOfDay: Int) -> Date {
-        Calendar.current.date(
-            bySettingHour: minuteOfDay / 60,
-            minute: minuteOfDay % 60,
-            second: 0,
-            of: Date()
-        ) ?? Date()
-    }
-
-    static func minute(fromDate date: Date) -> Int {
-        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
-        return (components.hour ?? 0) * 60 + (components.minute ?? 0)
-    }
-
-    static func segmentationEnd(start: Date, end: Date) -> Date {
-        guard end > start else { return start }
-        let calendar = Calendar.current
-        if calendar.startOfDay(for: end) == end {
-            return end.addingTimeInterval(-1)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(tint.opacity(event.isPending ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(.white.opacity(0.28))
+                .frame(width: 2)
+                .padding(.vertical, 5)
         }
-        return end
-    }
-
-    static func defaultStartMinute(date: Date = Date()) -> Int {
-        let minute = minute(fromDate: date)
-        let rounded = (minute / 15) * 15
-        return min(max(rounded, Calendar2Layout.dayStart * 60), Calendar2Layout.dayEnd * 60 - 30)
-    }
-
-    static func apiDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
-    }
-
-    static func apiDateTime(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.timeZone = .current
-        formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
-        return formatter.string(from: date)
-    }
-
-    static func parseAPIDate(_ value: String) throws -> Date {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractional.date(from: value) {
-            return date
+        .overlay {
+            if event.isPending {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [4]))
+                    .foregroundStyle(tint)
+            }
         }
-
-        let standard = ISO8601DateFormatter()
-        standard.formatOptions = [.withInternetDateTime]
-        if let date = standard.date(from: value) {
-            return date
-        }
-
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        if let date = formatter.date(from: value) {
-            return date
-        }
-
-        throw DecodingError.dataCorrupted(
-            DecodingError.Context(codingPath: [], debugDescription: "Invalid date: \(value)")
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .simultaneousGesture(
+            TapGesture()
+                .onEnded {
+                    guard isInteractive else { return }
+                    onTap()
+                }
         )
-    }
-
-    static func duration(_ minutes: Int) -> String {
-        let hours = minutes / 60
-        let mins = minutes % 60
-        if hours > 0 && mins > 0 { return "\(hours)小时\(mins)分" }
-        if hours > 0 { return "\(hours)小时" }
-        return "\(mins)分钟"
+        .frame(width: laneWidth)
+        .frame(height: max(height - 2, Calendar2Layout.minimumEventHeight))
+        .offset(x: xOffset, y: top)
     }
 }
 
-private struct Calendar2PressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+private struct Calendar2MonthPickerView: View {
+    let anchorOffset: Int
+    let onSelect: (Int) -> Void
+
+    @State private var displayMonth: Date
+
+    private let cal = Calendar.current
+    private let today = Calendar.current.startOfDay(for: Date())
+
+    init(anchorOffset: Int, onSelect: @escaping (Int) -> Void) {
+        self.anchorOffset = anchorOffset
+        self.onSelect = onSelect
+        let center = Calendar2Format.day(offset: anchorOffset + 1)
+        let comps = Calendar.current.dateComponents([.year, .month], from: center)
+        _displayMonth = State(initialValue: Calendar.current.date(from: comps) ?? Date())
     }
+
+    private var visibleOffsets: Set<Int> {
+        Set([anchorOffset, anchorOffset + 1, anchorOffset + 2])
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            monthNav
+            weekdayRow
+            dayGrid
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+        .background(Calendar2Style.bg)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Calendar2Style.line)
+                .frame(height: 1)
+        }
+    }
+
+    private var monthNav: some View {
+        HStack {
+            Button {
+                displayMonth = cal.date(byAdding: .month, value: -1, to: displayMonth) ?? displayMonth
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Calendar2Style.accent)
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Text(monthYearText(displayMonth))
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(Calendar2Style.text)
+
+            Spacer()
+
+            Button {
+                if let next = cal.date(byAdding: .month, value: 1, to: displayMonth) {
+                    displayMonth = next
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Calendar2Style.accent)
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var weekdayRow: some View {
+        HStack(spacing: 0) {
+            ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { label in
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Calendar2Style.muted)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.bottom, 8)
+    }
+
+    private var dayGrid: some View {
+        let cells = monthCells(for: displayMonth)
+        return LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7),
+            spacing: 4
+        ) {
+            ForEach(0..<cells.count, id: \.self) { i in
+                if let date = cells[i] {
+                    dayCellView(date: date)
+                } else {
+                    Color.clear.frame(height: 36)
+                }
+            }
+        }
+    }
+
+    private func dayCellView(date: Date) -> some View {
+        let offset = Calendar2Format.dayOffset(for: date)
+        let isFuture = cal.startOfDay(for: date) > today
+        let isToday = cal.isDate(date, inSameDayAs: today)
+        let isVisible = visibleOffsets.contains(offset)
+        let dayNum = cal.component(.day, from: date)
+
+        return Button {
+            guard !isFuture else { return }
+            onSelect(offset)
+        } label: {
+            Text("\(dayNum)")
+                .font(.system(size: 16, weight: isToday ? .bold : .regular, design: .rounded))
+                .foregroundStyle(
+                    isFuture ? Calendar2Style.faint :
+                    isToday ? .white :
+                    Calendar2Style.text
+                )
+                .frame(width: 36, height: 36)
+                .background {
+                    if isToday {
+                        Circle().fill(Calendar2Style.accent)
+                    } else if isVisible {
+                        Circle().fill(Calendar2Style.accent.opacity(0.15))
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .disabled(isFuture)
+    }
+
+    private func monthCells(for date: Date) -> [Date?] {
+        let first = cal.date(from: cal.dateComponents([.year, .month], from: date))!
+        let weekday = cal.component(.weekday, from: first)
+        let count = cal.range(of: .day, in: .month, for: date)!.count
+        var cells: [Date?] = Array(repeating: nil, count: weekday - 1)
+        for i in 0..<count {
+            cells.append(cal.date(byAdding: .day, value: i, to: first))
+        }
+        while cells.count % 7 != 0 { cells.append(nil) }
+        return cells
+    }
+
+    private func monthYearText(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "yyyy年M月"
+        return fmt.string(from: date)
+    }
+}
+
+private struct TimelineScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
