@@ -114,15 +114,60 @@ enum FitnessAPIClient {
         try await get(FitnessDashboardResponse.self, path: "dashboard")
     }
 
-    static func recentSessions(pageSize: Int = 5) async throws -> [FitnessSessionSummary] {
+    static func strengthVolume(
+        range: String = "30d",
+        startDate: String? = nil,
+        endDate: String? = nil
+    ) async throws -> FitnessStrengthVolumeResponse {
+        var components = URLComponents(url: baseURL.appendingPathComponent("fitness/strength-volume"), resolvingAgainstBaseURL: false)!
+        var queryItems = [URLQueryItem(name: "range", value: range)]
+        if let startDate, !startDate.isEmpty { queryItems.append(URLQueryItem(name: "startDate", value: startDate)) }
+        if let endDate, !endDate.isEmpty { queryItems.append(URLQueryItem(name: "endDate", value: endDate)) }
+        components.queryItems = queryItems
+        let envelope = try await send(FitnessEnvelope<FitnessStrengthVolumeResponse>.self, url: components.url!, method: "GET", body: Optional<String>.none)
+        return envelope.data
+    }
+
+    static func workoutSessions(
+        status: String? = nil,
+        startDate: String? = nil,
+        endDate: String? = nil,
+        trainingTheme: String? = nil,
+        page: Int = 1,
+        pageSize: Int = 20
+    ) async throws -> FitnessSessionsPage {
         var components = URLComponents(url: baseURL.appendingPathComponent("workout-sessions"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [
-            URLQueryItem(name: "status", value: "completed"),
-            URLQueryItem(name: "page", value: "1"),
+        var queryItems = [
+            URLQueryItem(name: "page", value: "\(page)"),
             URLQueryItem(name: "pageSize", value: "\(pageSize)")
         ]
+        if let status, !status.isEmpty { queryItems.append(URLQueryItem(name: "status", value: status)) }
+        if let startDate, !startDate.isEmpty { queryItems.append(URLQueryItem(name: "startDate", value: startDate)) }
+        if let endDate, !endDate.isEmpty { queryItems.append(URLQueryItem(name: "endDate", value: endDate)) }
+        if let trainingTheme, !trainingTheme.isEmpty { queryItems.append(URLQueryItem(name: "trainingTheme", value: trainingTheme)) }
+        components.queryItems = queryItems
         let envelope = try await send(FitnessEnvelope<FitnessSessionsPage>.self, url: components.url!, method: "GET", body: Optional<String>.none)
-        return envelope.data.items
+        return envelope.data
+    }
+
+    static func recentSessions(pageSize: Int = 5) async throws -> [FitnessSessionSummary] {
+        try await workoutSessions(status: "completed", pageSize: pageSize).items
+    }
+
+    static func sessionSummary(id: Int) async throws -> FitnessSessionSummaryResponse {
+        try await get(FitnessSessionSummaryResponse.self, path: "workout-sessions/\(id)/summary")
+    }
+
+    static func sessionBreakdown(id: Int) async throws -> FitnessSessionBreakdownResponse {
+        try await get(FitnessSessionBreakdownResponse.self, path: "workout-sessions/\(id)/breakdown")
+    }
+
+    static func sessionHeartRate(id: Int) async throws -> FitnessSessionHeartRateResponse {
+        try await get(FitnessSessionHeartRateResponse.self, path: "workout-sessions/\(id)/heart-rate")
+    }
+
+    static func sessionAnalysis(id: Int) async throws -> FitnessSessionAnalysisResponse {
+        try await get(FitnessSessionAnalysisResponse.self, path: "workout-sessions/\(id)/analysis")
     }
 
     static func exerciseHistory(exerciseId: Int, pageSize: Int = 20) async throws -> FitnessExerciseHistory {

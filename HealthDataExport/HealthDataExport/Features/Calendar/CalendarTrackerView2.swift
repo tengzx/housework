@@ -110,7 +110,7 @@ struct CalendarTrackerView2: View {
                             .rotationEffect(.degrees(showMonthPicker ? 180 : 0))
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticButtonStyle())
 
                 Text(historyHint)
                     .font(.system(size: 12, weight: .medium))
@@ -138,7 +138,7 @@ struct CalendarTrackerView2: View {
                     .foregroundStyle(showMobileAppEvents ? Calendar2Style.accent : Calendar2Style.muted)
                     .padding(4)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
 
             Button {
                 draftEvent = store.makeDraftEvent(dayOffset: min(0, anchorOffset + 2))
@@ -148,7 +148,7 @@ struct CalendarTrackerView2: View {
                     .foregroundStyle(Calendar2Style.accent)
                     .padding(4)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
 
             if anchorOffset != -2 {
                 Button {
@@ -161,7 +161,7 @@ struct CalendarTrackerView2: View {
                         .foregroundStyle(Calendar2Style.accent)
                         .padding(4)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticButtonStyle())
             }
         }
         .padding(.horizontal, 18)
@@ -600,6 +600,7 @@ private struct Calendar2EventBlockView: View {
             TapGesture()
                 .onEnded {
                     guard isInteractive else { return }
+                    Haptics.tap()
                     onTap()
                 }
         )
@@ -656,7 +657,7 @@ private struct Calendar2MonthPickerView: View {
                     .foregroundStyle(Calendar2Style.accent)
                     .frame(width: 40, height: 40)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
 
             Spacer()
 
@@ -676,7 +677,7 @@ private struct Calendar2MonthPickerView: View {
                     .foregroundStyle(Calendar2Style.accent)
                     .frame(width: 40, height: 40)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
         }
         .padding(.vertical, 8)
     }
@@ -736,7 +737,7 @@ private struct Calendar2MonthPickerView: View {
                     }
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HapticButtonStyle())
         .frame(maxWidth: .infinity)
         .disabled(isFuture)
     }

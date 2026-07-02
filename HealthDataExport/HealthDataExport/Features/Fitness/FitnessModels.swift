@@ -51,6 +51,31 @@ struct StrengthProgressItem: Decodable, Identifiable {
     var id: Int { exerciseId }
 }
 
+struct FitnessStrengthVolumeResponse: Decodable {
+    let periodDays: Int
+    let scope: String
+    let totalVolumeKg: Double
+    let regions: [FitnessStrengthVolumeRegion]
+    let muscles: [FitnessStrengthVolumeMuscle]
+}
+
+struct FitnessStrengthVolumeRegion: Decodable, Identifiable {
+    let regionCode: String
+    let regionName: String
+    let volumeKg: Double
+    var id: String { regionCode }
+}
+
+struct FitnessStrengthVolumeMuscle: Decodable, Identifiable {
+    let muscleGroupId: Int
+    let muscleGroupCode: String
+    let muscleGroupName: String
+    let regionCode: String
+    let regionName: String
+    let volumeKg: Double
+    var id: Int { muscleGroupId }
+}
+
 // MARK: - Template models
 
 struct FitnessTemplateSummary: Decodable, Identifiable {
@@ -226,6 +251,7 @@ struct FitnessSessionSummary: Decodable, Identifiable {
     let totalVolumeKg: Double
     let totalExercises: Int
     let totalSets: Int
+    let hasAnalysis: Bool?
 }
 
 struct FitnessSessionsPage: Decodable {
@@ -364,6 +390,138 @@ struct FitnessSessionStructureResponse: Decodable {
     let totalSets: Int
     let totalReps: Int?
     let updatedAt: Date?
+}
+
+struct FitnessSessionAnalysisResponse: Decodable {
+    let sessionId: Int
+    let trainingTheme: String?
+    let generatedAt: String?
+    let analysisText: String?
+    let analysisJson: String?
+}
+
+struct FitnessSessionSummaryInfo: Decodable {
+    let id: Int
+    let name: String
+    let trainingTheme: String?
+    let status: String
+    let startedAt: String?
+    let endedAt: String?
+    let durationSeconds: Int?
+    let totalVolumeKg: Double?
+    let totalSets: Int?
+    let totalReps: Int?
+    let totalExercises: Int?
+    let activeEnergyKcal: Double?
+    let totalEnergyKcal: Double?
+}
+
+struct FitnessSessionSummaryExerciseItem: Decodable, Identifiable {
+    let sessionExerciseId: Int
+    let exerciseId: Int
+    let name: String
+    let trackingType: String
+    let exerciseType: String?
+    let imageUrl: String?
+    let sortOrder: Int
+    let completedSets: Int
+    let totalVolumeKg: Double?
+    let totalDistanceMeters: Double?
+    let totalDurationSeconds: Int?
+    var id: Int { sessionExerciseId }
+}
+
+struct FitnessSessionSummaryAnalysis: Decodable {
+    let analysisText: String?
+    let analysisJson: String?
+    let generatedAt: String?
+}
+
+struct FitnessSessionSummaryResponse: Decodable {
+    let session: FitnessSessionSummaryInfo
+    let activeEnergyKcal: Double?
+    let totalEnergyKcal: Double?
+    let exercises: [FitnessSessionSummaryExerciseItem]
+    let muscles: [FitnessStrengthVolumeMuscle]
+    let analysis: FitnessSessionSummaryAnalysis?
+}
+
+struct FitnessTrainingSplit: Decodable {
+    let strengthPercent: Double
+    let cardioPercent: Double
+}
+
+struct FitnessBreakdownMuscleItem: Decodable, Identifiable {
+    let muscleCode: String
+    let muscleName: String
+    let percent: Double
+    var id: String { muscleCode }
+}
+
+struct FitnessBreakdownSetItem: Decodable, Identifiable {
+    let sessionSetId: Int
+    let setOrder: Int
+    let setType: String
+    let actualWeightKg: Double?
+    let actualReps: Int?
+    let actualDurationSeconds: Int?
+    let actualDistanceMeters: Double?
+    let restSeconds: Int?
+    let isCompleted: Bool
+    let completedAt: String?
+    var id: Int { sessionSetId }
+}
+
+struct FitnessBreakdownExerciseItem: Decodable, Identifiable {
+    let sessionExerciseId: Int
+    let exerciseId: Int
+    let exerciseName: String
+    let exerciseType: String?
+    let trackingType: String
+    let setCount: Int
+    let sets: [FitnessBreakdownSetItem]
+    var id: Int { sessionExerciseId }
+}
+
+struct FitnessSessionBreakdownResponse: Decodable {
+    let session: FitnessSessionSummaryInfo
+    let trainingSplit: FitnessTrainingSplit
+    let muscleLoadDistribution: [FitnessBreakdownMuscleItem]
+    let exercises: [FitnessBreakdownExerciseItem]
+}
+
+struct FitnessHeartRateSummary: Decodable {
+    let avgBpm: Int?
+    let minBpm: Int?
+    let maxBpm: Int?
+    let currentZone: Int?
+}
+
+struct FitnessHeartRateZoneStat: Decodable, Identifiable {
+    let zone: Int
+    let durationSeconds: Int
+    let percent: Double
+    var id: Int { zone }
+}
+
+struct FitnessHeartRatePoint: Decodable, Identifiable {
+    let time: String
+    let bpm: Int?
+    let zone: Int?
+    var id: String { time }
+}
+
+struct FitnessHeartRateRecovery: Decodable {
+    let available: Bool
+    let hrDropBpm: Int?
+}
+
+struct FitnessSessionHeartRateResponse: Decodable {
+    let session: FitnessSessionSummaryInfo
+    let summary: FitnessHeartRateSummary
+    let zoneStats: [FitnessHeartRateZoneStat]
+    let timeSeries: [FitnessHeartRatePoint]
+    let recovery: FitnessHeartRateRecovery
 }
 
 struct FitnessExerciseHistory: Identifiable {

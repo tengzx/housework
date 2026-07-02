@@ -119,18 +119,20 @@ struct FitnessActiveSessionView: View {
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) {
-            Button("好") { vm.errorMessage = nil }
+            Button("好") { Haptics.tap(); vm.errorMessage = nil }
         } message: {
             Text(vm.errorMessage ?? "")
         }
         .alert("还有未完成的组", isPresented: $showIncompleteAlert) {
-            Button("继续训练", role: .cancel) {}
-            Button("仍然完成", role: .destructive) { showRatingSheet = true }
+            Button("继续训练", role: .cancel) { Haptics.tap() }
+            Button("仍然完成", role: .destructive) { Haptics.tap(); showRatingSheet = true }
         } message: {
             Text("还有 \(vm.incompleteSetCount) 组未完成，确定要结束训练吗？")
         }
-        .confirmationDialog("删除本次训练？", isPresented: $showDiscardConfirm, titleVisibility: .visible) {
+        .alert("删除本次训练？", isPresented: $showDiscardConfirm) {
+            Button("取消", role: .cancel) { Haptics.tap() }
             Button("删除训练", role: .destructive) {
+                Haptics.tap()
                 Task {
                     if await vm.discard() {
                         await onCompleted()
@@ -138,7 +140,6 @@ struct FitnessActiveSessionView: View {
                     }
                 }
             }
-            Button("取消", role: .cancel) {}
         } message: {
             Text("删除后不会保存为完成记录。")
         }
@@ -223,7 +224,7 @@ struct FitnessActiveSessionView: View {
                     )
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HapticButtonStyle())
         .disabled(vm.isAddingExercise)
     }
 
@@ -243,6 +244,7 @@ struct FitnessActiveSessionView: View {
             Spacer()
 
             Button {
+                Haptics.tap()
                 if vm.isCompleting { return }
                 if vm.incompleteSetCount > 0 {
                     showIncompleteAlert = true
@@ -267,6 +269,7 @@ struct FitnessActiveSessionView: View {
 
             Menu {
                 Button {
+                    Haptics.tap()
                     Task {
                         if vm.isSessionPaused {
                             await vm.resumeSession()
@@ -280,6 +283,7 @@ struct FitnessActiveSessionView: View {
                 .disabled(vm.isPausing)
 
                 Button(role: .destructive) {
+                    Haptics.tap()
                     showDiscardConfirm = true
                 } label: {
                     Label("删除训练", systemImage: "trash")
@@ -330,6 +334,7 @@ struct FitnessActiveSessionView: View {
                     .foregroundStyle(Color(hex: "A8A8AD"))
 
                 Button {
+                    Haptics.tap()
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     Task { await vm.handleMiniPlayerAction() }
                 } label: {
@@ -574,7 +579,10 @@ private struct FitnessActiveExerciseCard: View {
             setsSection.padding(.top, 16)
 
             HStack(spacing: 0) {
-                Button(action: onProgress) {
+                Button {
+                    Haptics.tap()
+                    onProgress()
+                } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
                             .font(.system(size: 14, weight: .semibold))
@@ -589,7 +597,10 @@ private struct FitnessActiveExerciseCard: View {
                     .fill(Color(hex: "ECECEF"))
                     .frame(width: 1, height: 20)
 
-                Button(action: onAddSet) {
+                Button {
+                    Haptics.tap()
+                    onAddSet()
+                } label: {
                     HStack(spacing: 8) {
                         if isAddingSet {
                             ProgressView()
@@ -609,15 +620,10 @@ private struct FitnessActiveExerciseCard: View {
             .frame(height: 48)
             .padding(.top, 18)
             .overlay(alignment: .top) {
-                LinearGradient(
-                    colors: [.black.opacity(0.07), .black.opacity(0.025), .clear],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 18)
-                .blur(radius: 4)
-                .offset(y: -12)
-                .allowsHitTesting(false)
+                Rectangle()
+                    .fill(Color(hex: "EEEEF1"))
+                    .frame(height: 1)
+                    .allowsHitTesting(false)
             }
         }
         .padding(16)
@@ -700,7 +706,7 @@ private struct FitnessActiveExerciseCard: View {
                         .stroke(isRestVisible ? Color(hex: "1C1C1E") : Color(hex: "ECECEF"), lineWidth: 1)
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HapticButtonStyle())
     }
 
     private struct RestTimeChip: View {
@@ -803,7 +809,10 @@ private struct FitnessActiveExerciseCard: View {
 
     private var moreMenu: some View {
         Menu {
-            Button(role: .destructive, action: onDeleteExercise) {
+            Button(role: .destructive) {
+                Haptics.tap()
+                onDeleteExercise()
+            } label: {
                 Label("删除动作", systemImage: "trash")
             }
         } label: {
@@ -876,7 +885,7 @@ private struct ActiveSetRow: View {
                             .font(.system(size: 16))
                     )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
 
             HStack(spacing: 10) {
                 Text("\(set.setOrder)")
@@ -899,7 +908,10 @@ private struct ActiveSetRow: View {
                     set: { thirdText = $0 }
                 ))
 
-                Button(action: onToggle) {
+                Button {
+                    Haptics.tap()
+                    onToggle()
+                } label: {
                     Circle()
                         .fill(set.isCompleted ? completedGreen : .clear)
                         .overlay(Circle().stroke(set.isCompleted ? completedGreen : Color(hex: "D8D8DE"), lineWidth: 1.5))
@@ -1001,7 +1013,7 @@ private struct ActiveSetRow: View {
                     Button { focused = field } label: {
                         Color.clear.contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(HapticButtonStyle())
                 }
             }
     }

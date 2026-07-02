@@ -69,7 +69,7 @@ struct WorkoutRatingSheet: View {
                     .frame(height: 56)
                     .background(Color(hex: "1C1C1E"), in: Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
             .padding(.horizontal, 20)
             .padding(.bottom, 40)
         }

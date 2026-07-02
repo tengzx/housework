@@ -366,7 +366,7 @@ struct Calendar2EventFormSheet: View {
             .font(.system(size: 12.5, weight: .semibold))
             .foregroundStyle(Calendar2Style.accent)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HapticButtonStyle())
     }
 
     private func sectionLabel(_ title: String) -> some View {

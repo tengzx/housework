@@ -1,8 +1,5 @@
 import SwiftUI
 import Combine
-import UIKit
-import AudioToolbox
-
 
 // MARK: - Template Detail View
 
@@ -133,12 +130,14 @@ struct FitnessTemplateDetailView: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .task { await vm.load() }
+        .task {
+            await vm.load()
+        }
         .alert("提示", isPresented: Binding(
             get: { vm.startMessage != nil },
             set: { if !$0 { vm.startMessage = nil } }
         )) {
-            Button("好") { vm.startMessage = nil }
+            Button("好") { Haptics.tap(); vm.startMessage = nil }
         } message: {
             Text(vm.startMessage ?? "")
         }
@@ -146,7 +145,7 @@ struct FitnessTemplateDetailView: View {
 
     private var topBar: some View {
         HStack {
-            Button { dismiss() } label: {
+            Button { Haptics.tap(); dismiss() } label: {
                 Circle()
                     .fill(Color(hex: "F1F1F4"))
                     .frame(width: 42, height: 42)
@@ -180,17 +179,15 @@ struct FitnessTemplateDetailView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 66)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color(hex: "EEEEF1"), lineWidth: 1)
-        )
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: Color(hex: "5A5078").opacity(0.07), radius: 20, y: 6)
         .shadow(color: .black.opacity(0.04), radius: 16, y: 8)
     }
 
     private var bottomActions: some View {
         HStack(spacing: 12) {
             Button {
+                Haptics.tap()
                 onEdit(FitnessTemplateEditorPayload(id: payload.id, name: vm.title))
             } label: {
                 HStack(spacing: 8) {
@@ -206,6 +203,7 @@ struct FitnessTemplateDetailView: View {
             }
 
             Button {
+                Haptics.tap()
                 Task {
                     if let sessionPayload = await vm.startWorkout() {
                         onStart(sessionPayload)
@@ -275,78 +273,5 @@ private struct TemplateDetailExerciseRow: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(Color(hex: "EEEEF1"), lineWidth: 1)
         )
-    }
-}
-
-// MARK: - Template Info Sheet (新建 & 修改 复用)
-
-struct TemplateInfoSheet: View {
-    let title: String
-    let confirmLabel: String
-    let initialName: String
-    let initialTheme: String
-    let onSave: (String, String?) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var name: String
-    @State private var trainingTheme: String
-    @FocusState private var nameFocused: Bool
-
-    init(title: String, confirmLabel: String, initialName: String, initialTheme: String,
-         onSave: @escaping (String, String?) -> Void) {
-        self.title = title
-        self.confirmLabel = confirmLabel
-        self.initialName = initialName
-        self.initialTheme = initialTheme
-        self.onSave = onSave
-        _name = State(initialValue: initialName)
-        _trainingTheme = State(initialValue: initialTheme)
-    }
-
-    private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("模板名称（必填）", text: $name)
-                        .focused($nameFocused)
-                    TextField("训练主题，如：下半身、推胸", text: $trainingTheme)
-                } footer: {
-                    if title == "新建模板" {
-                        Text("保存后可在模板详情中添加锻炼动作。")
-                    }
-                }
-            }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        save()
-                    } label: {
-                        Text(confirmLabel).fontWeight(.semibold)
-                    }
-                    .disabled(!canSave)
-                }
-            }
-            .onAppear { nameFocused = true }
-        }
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
-    }
-
-    private func save() {
-        let trimName = name.trimmingCharacters(in: .whitespaces)
-        guard !trimName.isEmpty else { return }
-        let theme: String? = trainingTheme.trimmingCharacters(in: .whitespaces).isEmpty
-            ? nil : trainingTheme.trimmingCharacters(in: .whitespaces)
-        onSave(trimName, theme)
-        dismiss()
     }
 }

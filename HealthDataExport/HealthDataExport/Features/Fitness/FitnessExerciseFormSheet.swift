@@ -71,10 +71,11 @@ struct FitnessExerciseFormSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("取消") { Haptics.tap(); dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
+                        Haptics.tap()
                         Task { await save() }
                     } label: {
                         if isSaving {

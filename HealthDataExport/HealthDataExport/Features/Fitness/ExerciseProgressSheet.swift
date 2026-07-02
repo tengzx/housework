@@ -89,7 +89,7 @@ struct ExerciseProgressSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
+                    Button("关闭") { Haptics.tap(); dismiss() }
                 }
             }
         }
@@ -116,7 +116,7 @@ struct ExerciseProgressSheet: View {
                             in: Capsule()
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticButtonStyle())
             }
             Spacer()
         }

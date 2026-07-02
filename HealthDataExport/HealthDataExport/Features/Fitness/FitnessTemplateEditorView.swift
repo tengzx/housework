@@ -4,7 +4,7 @@ import Combine
 // MARK: - Navigation payload
 
 struct FitnessTemplateEditorPayload: Hashable {
-    let id: Int
+    let id: Int?          // nil → 新建，尚未在服务端创建，保存时才创建
     let name: String
 }
 
@@ -46,7 +46,7 @@ struct DraftSet: Identifiable {
 
 @MainActor
 final class TemplateEditorViewModel: ObservableObject {
-    let templateId: Int
+    private(set) var templateId: Int?
     @Published var templateName: String
     @Published var exercises: [DraftExercise] = []
     @Published private(set) var isSaving = false
@@ -63,14 +63,14 @@ final class TemplateEditorViewModel: ObservableObject {
 
     var canSave: Bool { !trimmedTemplateName.isEmpty && !isSaving && !isDeleting }
 
-    init(id: Int, name: String) {
+    init(id: Int?, name: String) {
         self.templateId = id
         self.templateName = name
         self.originalTemplateName = name
     }
 
     func loadDetail() async {
-        guard exercises.isEmpty else { return }
+        guard let templateId, exercises.isEmpty else { return }
         do {
             let detail = try await FitnessAPIClient.templateDetail(id: templateId)
             templateName = detail.name
@@ -222,17 +222,28 @@ final class TemplateEditorViewModel: ObservableObject {
             deletedTemplateSetIds: deletedSetIds
         )
         do {
-            if nameToSave != originalTemplateName {
-                _ = try await FitnessAPIClient.updateTemplate(
-                    id: templateId,
-                    name: nameToSave,
-                    trainingTheme: nil,
-                    description: nil
-                )
+            let id: Int
+            if let existingId = templateId {
+                id = existingId
+                if nameToSave != originalTemplateName {
+                    _ = try await FitnessAPIClient.updateTemplate(
+                        id: id,
+                        name: nameToSave,
+                        trainingTheme: nil,
+                        description: nil
+                    )
+                    templateName = nameToSave
+                    originalTemplateName = nameToSave
+                }
+            } else {
+                // 新建模板：此时才真正在服务端创建
+                let resp = try await FitnessAPIClient.createTemplate(name: nameToSave, description: nil, trainingTheme: nil)
+                id = resp.id
+                templateId = resp.id
                 templateName = nameToSave
                 originalTemplateName = nameToSave
             }
-            _ = try await FitnessAPIClient.saveTemplateStructure(id: templateId, request: req)
+            _ = try await FitnessAPIClient.saveTemplateStructure(id: id, request: req)
             // Clear deletion tracking after successful save
             deletedExerciseIds = []
             deletedSetIds = []
@@ -245,6 +256,8 @@ final class TemplateEditorViewModel: ObservableObject {
     }
 
     func deleteTemplate() async -> Bool {
+        // 尚未创建的新模板：无需请求服务端，直接视为可关闭
+        guard let templateId else { return true }
         guard !isDeleting else { return false }
         isDeleting = true
         errorMessage = nil
@@ -292,6 +305,7 @@ struct FitnessTemplateEditorView: View {
                 // Nav row
                 HStack {
                     Button {
+                        Haptics.tap()
                         dismiss()
                     } label: {
                         Circle()
@@ -306,6 +320,7 @@ struct FitnessTemplateEditorView: View {
                     Spacer()
                     Menu {
                         Button(role: .destructive) {
+                            Haptics.tap()
                             showDeleteConfirm = true
                         } label: {
                             Label("删除模板", systemImage: "trash")
@@ -404,23 +419,23 @@ struct FitnessTemplateEditorView: View {
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) {
-            Button("好") { vm.errorMessage = nil }
+            Button("好") { Haptics.tap(); vm.errorMessage = nil }
         } message: {
             Text(vm.errorMessage ?? "")
         }
-        .confirmationDialog(
+        .alert(
             "删除「\(vm.templateName)」？",
-            isPresented: $showDeleteConfirm,
-            titleVisibility: .visible
+            isPresented: $showDeleteConfirm
         ) {
-            Button("删除模板", role: .destructive) {
+            Button("取消", role: .cancel) { Haptics.tap() }
+            Button("删除", role: .destructive) {
+                Haptics.tap()
                 Task {
                     if await vm.deleteTemplate() {
                         await onDeleted()
                     }
                 }
             }
-            Button("取消", role: .cancel) {}
         } message: {
             Text("此操作不可撤销，模板将被归档。")
         }
@@ -445,7 +460,7 @@ struct FitnessTemplateEditorView: View {
                     .foregroundStyle(Color(hex: "7C7C82"))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 30)
-                Button { showLibrary = true } label: {
+                Button { Haptics.tap(); showLibrary = true } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "plus")
                             .font(.system(size: 14, weight: .semibold))
@@ -466,7 +481,7 @@ struct FitnessTemplateEditorView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 12) {
-            Button { showLibrary = true } label: {
+            Button { Haptics.tap(); showLibrary = true } label: {
                 Text("添加锻炼")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
@@ -476,6 +491,7 @@ struct FitnessTemplateEditorView: View {
             }
 
             Button {
+                Haptics.tap()
                 Task {
                     await vm.save()
                     if vm.errorMessage == nil {
@@ -558,11 +574,12 @@ private struct ExerciseCard: View {
                                 .stroke(showRestInputs ? Color(hex: "1C1C1E") : Color(hex: "EAEAEE"), lineWidth: 1)
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticButtonStyle())
 
                 // Remove exercise
                 Menu {
                     Button(role: .destructive) {
+                        Haptics.tap()
                         vm.removeExercise(id: exercise.id)
                     } label: {
                         Label("删除动作", systemImage: "trash")
@@ -582,12 +599,13 @@ private struct ExerciseCard: View {
 
             // Set column headers
             HStack(spacing: 10) {
-                Text("组").frame(width: 64)
+                Text("组").frame(width: 44)
                 if exercise.showSecondColumn { Text(exercise.secondColumnLabel).frame(maxWidth: .infinity) }
                 Text(exercise.thirdLabel).frame(maxWidth: .infinity)
             }
-            .font(.system(size: 14))
-            .foregroundStyle(Color(hex: "9A9AA0"))
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Color(hex: "8E8E93"))
+            .multilineTextAlignment(.center)
             .padding(.top, 16)
             .padding(.bottom, 4)
 
@@ -612,7 +630,10 @@ private struct ExerciseCard: View {
 
             // Footer: progress | add set
             HStack(spacing: 0) {
-                Button(action: onProgress) {
+                Button {
+                    Haptics.tap()
+                    onProgress()
+                } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
                             .font(.system(size: 14, weight: .semibold))
@@ -628,6 +649,7 @@ private struct ExerciseCard: View {
                     .frame(width: 1, height: 20)
 
                 Button {
+                    Haptics.tap()
                     vm.addSet(to: exercise.id)
                 } label: {
                     HStack(spacing: 8) {
@@ -643,21 +665,11 @@ private struct ExerciseCard: View {
             .frame(height: 44)
             .padding(.top, 16)
             .overlay(alignment: .top) {
-                LinearGradient(
-                    colors: [
-                        .black.opacity(0.07),
-                        .black.opacity(0.025),
-                        .clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 18)
-                .blur(radius: 4)
-                .offset(y: -12)
-                .allowsHitTesting(false)
+                Rectangle()
+                    .fill(Color(hex: "EEEEF1"))
+                    .frame(height: 1)
+                    .allowsHitTesting(false)
             }
-            .padding(.top, 0)
         }
         .padding(16)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -700,57 +712,37 @@ private struct SetRow: View {
                     withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { dragOffset = 0 }
                     onDelete()
                 }) {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(Color(hex: "F05B5B"))
-                        .frame(width: 64, height: 48)
+                        .frame(width: 64, height: 40)
                         .overlay(
                             Image(systemName: "trash.fill")
                                 .foregroundStyle(.white)
-                                .font(.system(size: 17))
+                                .font(.system(size: 16))
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticButtonStyle())
 
                 HStack(spacing: 10) {
                     Text("\(set.setOrder)")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color(hex: "1C1C1E"))
-                        .frame(width: 64, height: 48)
+                        .frame(width: 44, height: 40)
                         .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(Color(hex: "EEEEF1"), lineWidth: 1)
+                            Circle()
+                                .fill(.clear)
+                                .frame(width: 34, height: 34)
+                                .overlay(Circle().stroke(Color(hex: "D8D8DE"), lineWidth: 1.5))
                         )
 
                     if showSecondColumn {
-                        TextField(secondPlaceholder, text: $set.weightKgText)
-                            .keyboardType(.decimalPad)
-                            .focused($focused, equals: .second)
-                            .multilineTextAlignment(.center)
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(Color(hex: "1C1C1E"))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 48)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(Color(hex: "EEEEF1"), lineWidth: 1)
-                            )
+                        valueField(field: .second, keyboard: .decimalPad, placeholder: secondPlaceholder, text: $set.weightKgText)
                     }
 
-                    TextField("--", text: Binding(
+                    valueField(field: .third, keyboard: .numberPad, placeholder: "--", text: Binding(
                         get: { (isTimeBased && focused != .third) ? thirdDisplayText : set.repsText },
                         set: { set.repsText = $0 }
                     ))
-                    .keyboardType(.numberPad)
-                    .focused($focused, equals: .third)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Color(hex: "1C1C1E"))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color(hex: "EEEEF1"), lineWidth: 1)
-                    )
                 }
                 .background(Color.white)
                 .offset(x: dragOffset)
@@ -798,7 +790,7 @@ private struct SetRow: View {
                         .foregroundStyle(Color(hex: "6F6F76"))
                     Spacer()
                 }
-                .padding(.leading, 74)
+                .padding(.leading, 54)
             }
         }
         .onChange(of: focused) { _, new in
@@ -809,5 +801,34 @@ private struct SetRow: View {
                 textField.selectAll(nil)
             }
         }
+    }
+
+    @ViewBuilder
+    private func valueField(
+        field: TemplateSetField,
+        keyboard: UIKeyboardType,
+        placeholder: String,
+        text: Binding<String>
+    ) -> some View {
+        TextField(placeholder, text: text)
+            .keyboardType(keyboard)
+            .focused($focused, equals: field)
+            .multilineTextAlignment(.center)
+            .font(.system(size: 16, weight: .bold))
+            .foregroundStyle(Color(hex: "1C1C1E"))
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(fieldBackground(isFocused: focused == field))
+    }
+
+    // 输入框背景样式
+    @ViewBuilder
+    private func fieldBackground(isFocused: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(isFocused ? Color(hex: "FFEDE3") : Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isFocused ? Color(hex: "FF7847") : Color(hex: "D8D8DE"), lineWidth: isFocused ? 2 : 1.5)
+            )
     }
 }

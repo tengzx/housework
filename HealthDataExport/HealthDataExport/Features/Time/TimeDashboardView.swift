@@ -419,7 +419,7 @@ struct TimeDashboardView: View {
                     ) {
                         ForEach(overview.cards) { card in
                             LoadCardView(card: card)
-                                .onTapGesture { viewModel.selectedCard = card }
+                                .onTapGesture { Haptics.tap(); viewModel.selectedCard = card }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -513,7 +513,7 @@ struct TimeDashboardView: View {
                         )
                         .animation(.spring(response: 0.22, dampingFraction: 0.8), value: viewModel.granularity)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticButtonStyle())
             }
         }
         .padding(4)
@@ -530,7 +530,7 @@ struct TimeDashboardView: View {
                     .background(Color.white, in: Circle())
                     .overlay(Circle().stroke(Color(hex: "E4E4E9"), lineWidth: 1))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
 
             Spacer()
 
@@ -548,7 +548,7 @@ struct TimeDashboardView: View {
                     .background(Color.white, in: Circle())
                     .overlay(Circle().stroke(Color(hex: "E4E4E9"), lineWidth: 1))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
         }
     }
 }

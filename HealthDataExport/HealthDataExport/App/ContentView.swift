@@ -120,7 +120,7 @@ private struct RecordWorkspaceSwitcher: View {
             .background(isOn ? Color(hex: "FF7847") : .clear, in: Capsule())
             .animation(.spring(response: 0.28, dampingFraction: 0.82), value: isOn)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HapticButtonStyle())
     }
 }
 
@@ -163,6 +163,7 @@ struct HealthExportView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        Haptics.tap()
                         let config = viewModel.store.addConfiguration()
                         viewModel.select(config)
                     } label: {
@@ -209,6 +210,7 @@ struct HealthExportView: View {
             Toggle("包含最近样本明细", isOn: $viewModel.draft.includeSamples)
 
             Button(role: .destructive) {
+                Haptics.tap()
                 let removed = viewModel.draft
                 viewModel.store.delete(removed)
                 viewModel.select(viewModel.store.configurations.first ?? viewModel.store.addConfiguration())
@@ -260,6 +262,7 @@ struct HealthExportView: View {
     private var sendSection: some View {
         Section("发送") {
             Button {
+                Haptics.tap()
                 Task { await viewModel.generatePreview() }
             } label: {
                 Label(viewModel.isGeneratingPreview ? "生成中" : "生成数据预览", systemImage: "doc.text.magnifyingglass")
@@ -267,6 +270,7 @@ struct HealthExportView: View {
             .disabled(viewModel.isGeneratingPreview || viewModel.isSending || !viewModel.draft.isReadyToPreview)
 
             Button {
+                Haptics.tap()
                 Task { await viewModel.sendNow() }
             } label: {
                 Label(viewModel.isSending ? "发送中" : "发送当前预览", systemImage: "paperplane.fill")
@@ -370,6 +374,7 @@ struct HealthExportView: View {
                     .foregroundStyle(.secondary)
 
                 Button {
+                    Haptics.tap()
                     Task { await observerSyncManager.refreshObservers(force: true) }
                 } label: {
                     Label("重新注册 Observer", systemImage: "arrow.clockwise")

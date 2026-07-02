@@ -119,7 +119,7 @@ struct FitnessOverviewView: View {
                 .padding(.vertical, 8)
                 .background(Color(hex: "FF7847"), in: Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
         }
     }
 

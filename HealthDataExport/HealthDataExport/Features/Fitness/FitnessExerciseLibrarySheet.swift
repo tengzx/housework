@@ -115,7 +115,7 @@ struct FitnessExerciseLibrarySheet: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Button("取消") { dismiss() }
+                Button("取消") { Haptics.tap(); dismiss() }
                     .foregroundStyle(Color(hex: "1C1C1E"))
                     .font(.system(size: 17))
                 Spacer()
@@ -124,6 +124,7 @@ struct FitnessExerciseLibrarySheet: View {
                     .foregroundStyle(Color(hex: "1C1C1E"))
                 Spacer()
                 Button {
+                    Haptics.tap()
                     onConfirm(vm.confirmedExercises())
                     dismiss()
                 } label: {
@@ -147,7 +148,7 @@ struct FitnessExerciseLibrarySheet: View {
                     .font(.system(size: 16))
                     .foregroundStyle(Color(hex: "1C1C1E"))
                 if !vm.searchText.isEmpty {
-                    Button { vm.searchText = "" } label: {
+                    Button { Haptics.tap(); vm.searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(Color(hex: "9A9AA0"))
                     }
@@ -191,11 +192,13 @@ struct FitnessExerciseLibrarySheet: View {
                                     .contextMenu(menuItems: {
                                         if !exercise.isSystem {
                                             Button {
+                                                Haptics.tap()
                                                 formTarget = .edit(exercise)
                                             } label: {
                                                 Label("编辑", systemImage: "pencil")
                                             }
                                             Button(role: .destructive) {
+                                                Haptics.tap()
                                                 deleteTarget = exercise
                                             } label: {
                                                 Label("删除", systemImage: "trash")
@@ -236,17 +239,17 @@ struct FitnessExerciseLibrarySheet: View {
             }
         }
         // 删除确认
-        .confirmationDialog(
+        .alert(
             "删除「\(deleteTarget?.name ?? "")」？",
-            isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
-            titleVisibility: .visible
+            isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
         ) {
+            Button("取消", role: .cancel) { Haptics.tap(); deleteTarget = nil }
             Button("删除", role: .destructive) {
+                Haptics.tap()
                 guard let t = deleteTarget else { return }
                 deleteTarget = nil
                 Task { await vm.deleteExercise(id: t.id) }
             }
-            Button("取消", role: .cancel) { deleteTarget = nil }
         } message: {
             Text("此操作不可撤销。")
         }
@@ -254,7 +257,7 @@ struct FitnessExerciseLibrarySheet: View {
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) {
-            Button("好") { vm.errorMessage = nil }
+            Button("好") { Haptics.tap(); vm.errorMessage = nil }
         } message: {
             Text(vm.errorMessage ?? "")
         }
@@ -336,12 +339,12 @@ private struct ExerciseLibraryRow: View {
                     }
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
             .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isSelected)
         }
         .padding(.vertical, 12)
         .contentShape(Rectangle())
-        .onTapGesture { onToggle() }
+        .onTapGesture { Haptics.tap(); onToggle() }
     }
 }
 
@@ -371,7 +374,7 @@ private struct CustomExerciseRow: View {
             }
             .padding(.vertical, 16)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HapticButtonStyle())
 
         Divider()
     }

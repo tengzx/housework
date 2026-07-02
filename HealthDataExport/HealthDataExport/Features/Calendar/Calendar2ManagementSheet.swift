@@ -64,6 +64,7 @@ struct Calendar2ManagementSheet: View {
                         .padding(.trailing, 4)
                 }
                 Button("完成") {
+                    Haptics.tap()
                     Task { await saveAll() }
                 }
                 .font(.system(size: 15, weight: .semibold))
@@ -99,7 +100,7 @@ struct Calendar2ManagementSheet: View {
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button("好") { errorMessage = nil }
+            Button("好") { Haptics.tap(); errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
         }
@@ -128,7 +129,7 @@ struct Calendar2ManagementSheet: View {
                 )
                 .shadow(color: tab == value ? .black.opacity(0.12) : .clear, radius: 3, x: 0, y: 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HapticButtonStyle())
     }
 
     // MARK: - Category List
@@ -147,7 +148,7 @@ struct Calendar2ManagementSheet: View {
                                 .fill(cat.color)
                                 .frame(width: 30, height: 30)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(HapticButtonStyle())
 
                         TextField("分类名称", text: $cat.name)
                             .font(.system(size: 16))
@@ -164,7 +165,7 @@ struct Calendar2ManagementSheet: View {
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 4)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(HapticButtonStyle())
 
                         let catId = cat.id
                         Button {
@@ -179,7 +180,7 @@ struct Calendar2ManagementSheet: View {
                                 .foregroundStyle(Color(hex: "C6C6CC"))
                                 .frame(width: 30, height: 30)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(HapticButtonStyle())
                     }
                     .padding(.vertical, 14)
 
@@ -197,7 +198,7 @@ struct Calendar2ManagementSheet: View {
                                             .frame(width: 28, height: 28)
                                             .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(HapticButtonStyle())
                                 }
                             }
                             .padding(.leading, 42)
@@ -222,7 +223,7 @@ struct Calendar2ManagementSheet: View {
             } label: {
                 addRowLabel("＋ 新建分类")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
             .padding(.horizontal, 20)
             .padding(.top, 16)
             .padding(.bottom, 30)
@@ -301,7 +302,7 @@ struct Calendar2ManagementSheet: View {
             } label: {
                 addRowLabel("＋ 新建「\(addCatName)」的小类")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
             .padding(.horizontal, 20)
             .padding(.top, 16)
             .padding(.bottom, 30)
@@ -333,7 +334,7 @@ struct Calendar2ManagementSheet: View {
                     .foregroundStyle(subs[idx].tracksFocus ? Calendar2Style.accent : Color(hex: "C6C6CC"))
                     .frame(width: 34, height: 30)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticButtonStyle())
 
                 let subId = subs[idx].id
                 Button {
@@ -347,7 +348,7 @@ struct Calendar2ManagementSheet: View {
                         .foregroundStyle(Color(hex: "C6C6CC"))
                         .frame(width: 30, height: 30)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HapticButtonStyle())
             }
             .padding(.vertical, 14)
             .padding(.horizontal, 20)

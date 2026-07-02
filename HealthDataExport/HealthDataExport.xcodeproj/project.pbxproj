@@ -8,10 +8,12 @@
 
 /* Begin PBXBuildFile section */
 		2A0000012FE0000000000001 /* HealthDataExportWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000022FE0000000000002 /* HealthDataExportWatchApp.swift */; };
-		2A0000032FE0000000000003 /* HealthDataExport/WatchTimeTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000042FE0000000000004 /* HealthDataExport/WatchTimeTrackerView.swift */; };
-		2A0000052FE0000000000005 /* HealthDataExport/ShortcutRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000062FE0000000000006 /* HealthDataExport/ShortcutRecord.swift */; };
+		2A0000032FE0000000000003 /* WatchTimeTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000042FE0000000000004 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift */; };
+		2A0000052FE0000000000005 /* ShortcutRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000062FE0000000000006 /* HealthDataExport/Features/Record/ShortcutRecord.swift */; };
 		2A0000102FE0000000000010 /* HealthDataExport Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2A0000072FE0000000000007 /* HealthDataExport Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2A0000142FE0000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2A0000152FE0000000000015 /* Assets.xcassets */; };
+		2A0000172FE0000000000017 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000182FE0000000000018 /* HealthDataExport/Shared/Haptics.swift */; };
+		2A00001F2FE000000000001F /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,10 +59,12 @@
 		1B38A3592FD6D715008783FC /* HealthDataExportTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HealthDataExportTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B38A3632FD6D716008783FC /* HealthDataExportUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HealthDataExportUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A0000022FE0000000000002 /* HealthDataExportWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExportWatchApp.swift; sourceTree = "<group>"; };
-		2A0000042FE0000000000004 /* HealthDataExport/WatchTimeTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/WatchTimeTrackerView.swift; sourceTree = SOURCE_ROOT; };
-		2A0000062FE0000000000006 /* HealthDataExport/ShortcutRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/ShortcutRecord.swift; sourceTree = SOURCE_ROOT; };
+		2A0000042FE0000000000004 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Features/Time/WatchTimeTrackerView.swift; sourceTree = SOURCE_ROOT; };
+		2A0000062FE0000000000006 /* HealthDataExport/Features/Record/ShortcutRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Features/Record/ShortcutRecord.swift; sourceTree = SOURCE_ROOT; };
 		2A0000072FE0000000000007 /* HealthDataExport Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "HealthDataExport Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A0000152FE0000000000015 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		2A0000182FE0000000000018 /* HealthDataExport/Shared/Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Shared/Haptics.swift; sourceTree = SOURCE_ROOT; };
+		2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthDataExport/Shared/Color+Hex.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -134,6 +138,7 @@
 				1B38A35C2FD6D715008783FC /* HealthDataExportTests */,
 				1B38A3662FD6D716008783FC /* HealthDataExportUITests */,
 				1B38A34D2FD6D714008783FC /* Products */,
+				1B38A6542FF6A23F008783FC /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -148,13 +153,22 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		1B38A6542FF6A23F008783FC /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		2A0000092FE0000000000009 /* HealthDataExportWatchApp */ = {
 			isa = PBXGroup;
 			children = (
 				2A0000022FE0000000000002 /* HealthDataExportWatchApp.swift */,
 				2A0000152FE0000000000015 /* Assets.xcassets */,
-				2A0000042FE0000000000004 /* HealthDataExport/WatchTimeTrackerView.swift */,
-				2A0000062FE0000000000006 /* HealthDataExport/ShortcutRecord.swift */,
+				2A0000042FE0000000000004 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift */,
+				2A0000062FE0000000000006 /* HealthDataExport/Features/Record/ShortcutRecord.swift */,
+				2A0000182FE0000000000018 /* HealthDataExport/Shared/Haptics.swift */,
+				2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */,
 			);
 			path = HealthDataExportWatchApp;
 			sourceTree = "<group>";
@@ -358,8 +372,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				2A0000012FE0000000000001 /* HealthDataExportWatchApp.swift in Sources */,
-				2A0000032FE0000000000003 /* HealthDataExport/WatchTimeTrackerView.swift in Sources */,
-				2A0000052FE0000000000005 /* HealthDataExport/ShortcutRecord.swift in Sources */,
+				2A0000032FE0000000000003 /* WatchTimeTrackerView.swift in Sources */,
+				2A0000052FE0000000000005 /* ShortcutRecord.swift in Sources */,
+				2A0000172FE0000000000017 /* Haptics.swift in Sources */,
+				2A00001F2FE000000000001F /* Color+Hex.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -685,7 +701,7 @@
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = FLOW;
+				INFOPLIST_KEY_CFBundleDisplayName = "知行";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tengzx.HealthDataExport;
@@ -721,7 +737,7 @@
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = FLOW;
+				INFOPLIST_KEY_CFBundleDisplayName = "知行";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tengzx.HealthDataExport;
