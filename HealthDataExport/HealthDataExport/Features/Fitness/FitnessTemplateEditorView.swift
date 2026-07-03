@@ -17,6 +17,7 @@ struct DraftExercise: Identifiable {
     let exerciseName: String
     let categoryName: String
     let trackingType: String
+    let imageUrl: String?
     var sortOrder: Int
     var sets: [DraftSet]
 
@@ -49,6 +50,7 @@ final class TemplateEditorViewModel: ObservableObject {
     private(set) var templateId: Int?
     @Published var templateName: String
     @Published var exercises: [DraftExercise] = []
+    @Published private(set) var isLoadingDetail = false
     @Published private(set) var isSaving = false
     @Published private(set) var isDeleting = false
     @Published var errorMessage: String?
@@ -71,6 +73,8 @@ final class TemplateEditorViewModel: ObservableObject {
 
     func loadDetail() async {
         guard let templateId, exercises.isEmpty else { return }
+        isLoadingDetail = true
+        defer { isLoadingDetail = false }
         do {
             let detail = try await FitnessAPIClient.templateDetail(id: templateId)
             templateName = detail.name
@@ -82,6 +86,7 @@ final class TemplateEditorViewModel: ObservableObject {
                     exerciseName: ex.name,
                     categoryName: ex.categoryName ?? "",
                     trackingType: ex.trackingType,
+                    imageUrl: ex.imageUrl,
                     sortOrder: ex.sortOrder,
                     sets: ex.sets.map { s in
                         let isDistanceType = ExerciseTrackingDisplay.isDistanceBased(ex.trackingType)
@@ -136,6 +141,7 @@ final class TemplateEditorViewModel: ObservableObject {
                     exerciseName: ex.name,
                     categoryName: ex.category?.name ?? "",
                     trackingType: ex.trackingType,
+                    imageUrl: ex.imageUrl,
                     sortOrder: kept.count + 1,
                     sets: [defaultSet]
                 )
@@ -183,6 +189,11 @@ final class TemplateEditorViewModel: ObservableObject {
             exercises.remove(at: idx)
             for i in exercises.indices { exercises[i].sortOrder = i + 1 }
         }
+    }
+
+    func moveExercise(from source: IndexSet, to destination: Int) {
+        exercises.move(fromOffsets: source, toOffset: destination)
+        for i in exercises.indices { exercises[i].sortOrder = i + 1 }
     }
 
     func save() async {
@@ -297,117 +308,117 @@ struct FitnessTemplateEditorView: View {
         _vm = StateObject(wrappedValue: TemplateEditorViewModel(id: payload.id, name: payload.name))
     }
 
+    private var subText: String {
+        vm.exercises.isEmpty
+            ? "暂无锻炼"
+            : "\(vm.exercises.count) 种锻炼, \(vm.exercises.reduce(0) { $0 + $1.sets.count }) 组"
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.white.ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
 
             VStack(spacing: 0) {
-                // Nav row
-                HStack {
-                    Button {
-                        Haptics.tap()
-                        dismiss()
-                    } label: {
-                        Circle()
-                            .fill(Color(hex: "F1F1F4"))
-                            .frame(width: 42, height: 42)
-                            .overlay(
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(Color(hex: "1C1C1E"))
-                            )
-                    }
-                    Spacer()
-                    Menu {
-                        Button(role: .destructive) {
-                            Haptics.tap()
-                            showDeleteConfirm = true
-                        } label: {
-                            Label("删除模板", systemImage: "trash")
-                        }
-                    } label: {
-                        Circle()
-                            .fill(Color(hex: "F1F1F4"))
-                            .frame(width: 42, height: 42)
-                            .overlay(
-                                Image(systemName: "ellipsis")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundStyle(Color(hex: "1C1C1E"))
-                            )
-                    }
-                    .disabled(vm.isDeleting)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
+                navRow
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
 
                 ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        TextField("模板名称", text: $vm.templateName)
-                            .font(.system(size: 28, weight: .heavy))
-                            .foregroundStyle(Color(hex: "1C1C1E"))
-                            .padding(.horizontal, 16)
-                            .padding(.top, 14)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
+                    List {
+                        // Title + subtitle (no card)
+                        Section {
+                            VStack(alignment: .leading, spacing: 6) {
+                                TextField("模板名称", text: $vm.templateName)
+                                    .font(.system(size: 28, weight: .heavy))
+                                    .foregroundStyle(Color(hex: "1C1C1E"))
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                Text(subText)
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(Color(hex: "9A9AA0"))
+                            }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 2, trailing: 20))
+                        }
 
-                        let subText = vm.exercises.isEmpty
-                            ? "暂无锻炼"
-                            : "\(vm.exercises.count) 种锻炼, \(vm.exercises.reduce(0) { $0 + $1.sets.count }) 组"
-                        Text(subText)
-                            .font(.system(size: 15))
-                            .foregroundStyle(Color(hex: "9A9AA0"))
-                            .padding(.horizontal, 16)
-                            .padding(.top, 6)
-
-                        if vm.exercises.isEmpty {
-                            emptyState
-                                .padding(.top, 24)
+                        if vm.exercises.isEmpty && !vm.isLoadingDetail {
+                            Section {
+                                emptyState
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 16, leading: 0, bottom: 16, trailing: 0))
+                            }
                         } else {
-                            ForEach($vm.exercises) { $ex in
-                                ExerciseCard(
-                                    exercise: $ex,
-                                    vm: vm,
-                                    onProgress: {
-                                        progressTarget = ExerciseProgressTarget(
-                                            exerciseId: ex.exerciseId,
-                                            name: ex.exerciseName,
-                                            trackingType: ex.trackingType
-                                        )
-                                    },
-                                    onEditSet: { editingSetId = $0 }
-                                )
-                                    .padding(.horizontal, 16)
-                                    .padding(.top, 18)
+                            Section {
+                                ForEach($vm.exercises) { $ex in
+                                    ExerciseCard(
+                                        exercise: $ex,
+                                        vm: vm,
+                                        onProgress: {
+                                            progressTarget = ExerciseProgressTarget(
+                                                exerciseId: ex.exerciseId,
+                                                name: ex.exerciseName,
+                                                trackingType: ex.trackingType
+                                            )
+                                        },
+                                        onEditSet: { editingSetId = $0 }
+                                    )
+                                    .listRowInsets(EdgeInsets(top: 10, leading: 8, bottom: 10, trailing: 8))
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
+                                }
+                                .onMove { source, destination in
+                                    Haptics.tap()
+                                    vm.moveExercise(from: source, to: destination)
+                                }
                             }
                         }
+
+                        // Bottom spacer so the fixed bottom bar never covers content
+                        Section {
+                            Color.clear
+                                .frame(height: 90)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets())
+                        }
                     }
-                    .padding(.bottom, 120)
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .onChange(of: editingSetId) { _, setId in
-                    guard let setId else { return }
-                    // Lift the tapped field to a comfortable middle-slightly-above
-                    // position (not jammed against the top) so the keyboard doesn't
-                    // cover it — same behaviour as the active training view.
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        proxy.scrollTo("set-\(setId)", anchor: UnitPoint(x: 0.5, y: 0.35))
+                    .listStyle(.insetGrouped)
+                    .listSectionSpacing(12)
+                    .contentMargins(.top, 4, for: .scrollContent)
+                    .scrollContentBackground(.hidden)
+                    .scrollDismissesKeyboard(.interactively)
+                    .onChange(of: editingSetId) { _, setId in
+                        guard let setId else { return }
+                        // Lift the tapped field to a comfortable middle-slightly-above
+                        // position so the keyboard doesn't cover it.
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            proxy.scrollTo("set-\(setId)", anchor: UnitPoint(x: 0.5, y: 0.35))
+                        }
                     }
-                }
                 }
             }
 
             // Bottom bar
             bottomBar
         }
-        .simultaneousGesture(TapGesture().onEnded {
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        })
         .navigationBarHidden(true)
         .sheet(isPresented: $showLibrary) {
             FitnessExerciseLibrarySheet(
-                preselectedIds: Set(vm.exercises.map { $0.exerciseId })
+                preselected: vm.exercises.map {
+                    FitnessExercise.lightweight(
+                        id: $0.exerciseId,
+                        name: $0.exerciseName,
+                        categoryName: $0.categoryName,
+                        trackingType: $0.trackingType
+                    )
+                }
             ) { selected in
                 vm.applyLibrarySelection(selected)
             }
@@ -440,6 +451,45 @@ struct FitnessTemplateEditorView: View {
             Text("此操作不可撤销，模板将被归档。")
         }
         .task { await vm.loadDetail() }
+    }
+
+    // MARK: Nav row
+
+    private var navRow: some View {
+        HStack {
+            Button {
+                Haptics.tap()
+                dismiss()
+            } label: {
+                Circle()
+                    .fill(Color(hex: "F1F1F4"))
+                    .frame(width: 42, height: 42)
+                    .overlay(
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color(hex: "1C1C1E"))
+                    )
+            }
+            Spacer()
+            Menu {
+                Button(role: .destructive) {
+                    Haptics.tap()
+                    showDeleteConfirm = true
+                } label: {
+                    Label("删除模板", systemImage: "trash")
+                }
+            } label: {
+                Circle()
+                    .fill(Color(hex: "F1F1F4"))
+                    .frame(width: 42, height: 42)
+                    .overlay(
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(Color(hex: "1C1C1E"))
+                    )
+            }
+            .disabled(vm.isDeleting)
+        }
     }
 
     // MARK: Empty state
@@ -529,7 +579,7 @@ struct FitnessTemplateEditorView: View {
     }
 }
 
-// MARK: - Exercise Card
+// MARK: - Exercise Card (one draggable list row per exercise)
 
 private struct ExerciseCard: View {
     @Binding var exercise: DraftExercise
@@ -540,76 +590,15 @@ private struct ExerciseCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Exercise header
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(hex: "F2F2F5"))
-                    .frame(width: 54, height: 54)
-                    .overlay(BarbellIcon())
+            headerRow
+                .padding(.horizontal, 12)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(exercise.exerciseName)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color(hex: "1C1C1E"))
-                    Text(exercise.categoryName.isEmpty ? "——" : exercise.categoryName)
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "9A9AA0"))
-                }
+            columnHeaderRow
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
 
-                Spacer()
-
-                Button {
-                    showRestInputs.toggle()
-                } label: {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(showRestInputs ? Color(hex: "1C1C1E") : Color.white)
-                        .frame(width: 40, height: 40)
-                        .overlay(
-                            Image(systemName: "timer")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(showRestInputs ? .white : Color(hex: "6F6F76"))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(showRestInputs ? Color(hex: "1C1C1E") : Color(hex: "EAEAEE"), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(HapticButtonStyle())
-
-                // Remove exercise
-                Menu {
-                    Button(role: .destructive) {
-                        Haptics.tap()
-                        vm.removeExercise(id: exercise.id)
-                    } label: {
-                        Label("删除动作", systemImage: "trash")
-                    }
-                } label: {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color(hex: "EAEAEE"), lineWidth: 1)
-                        .frame(width: 40, height: 40)
-                        .overlay(
-                            Text("···")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(Color(hex: "1C1C1E"))
-                                .offset(y: -3)
-                        )
-                }
-            }
-
-            // Set column headers
-            HStack(spacing: 10) {
-                Text("组").frame(width: 44)
-                if exercise.showSecondColumn { Text(exercise.secondColumnLabel).frame(maxWidth: .infinity) }
-                Text(exercise.thirdLabel).frame(maxWidth: .infinity)
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Color(hex: "8E8E93"))
-            .multilineTextAlignment(.center)
-            .padding(.top, 16)
-            .padding(.bottom, 4)
-
-            // Set rows
             ForEach($exercise.sets) { $set in
                 SetRow(
                     set: $set,
@@ -617,68 +606,147 @@ private struct ExerciseCard: View {
                     showSecondColumn: exercise.showSecondColumn,
                     secondPlaceholder: exercise.showDistanceColumn ? "米" : "kg",
                     showRestInput: showRestInputs,
-                    onDelete: {
-                        vm.deleteSet(exerciseId: exercise.id, setId: set.id)
-                    },
-                    onFocusChange: { isEditing in
-                        onEditSet(isEditing ? set.id : nil)
-                    }
+                    onFocusChange: { isEditing in onEditSet(isEditing ? set.id : nil) },
+                    onDelete: { vm.deleteSet(exerciseId: exercise.id, setId: set.id) }
                 )
                 .id("set-\(set.id)")
-                .padding(.top, 10)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
             }
 
-            // Footer: progress | add set
-            HStack(spacing: 0) {
-                Button {
-                    Haptics.tap()
-                    onProgress()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("进度")
-                            .font(.system(size: 15, weight: .semibold))
-                    }
-                    .foregroundStyle(Color(hex: "1C1C1E"))
-                    .frame(maxWidth: .infinity)
-                }
+            footerRow
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+        }
+        .exerciseCardBackground()
+    }
 
-                Rectangle()
-                    .fill(Color(hex: "ECECEF"))
-                    .frame(width: 1, height: 20)
+    private var headerRow: some View {
+        HStack(spacing: 12) {
+            ExerciseThumbnail(urlString: exercise.imageUrl, size: 54, cornerRadius: 14)
 
-                Button {
-                    Haptics.tap()
-                    vm.addSet(to: exercise.id)
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("添加组")
-                            .font(.system(size: 15, weight: .semibold))
-                    }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(exercise.exerciseName)
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
-                    .frame(maxWidth: .infinity)
-                }
+                Text(exercise.categoryName.isEmpty ? "——" : exercise.categoryName)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(hex: "9A9AA0"))
             }
-            .frame(height: 44)
-            .padding(.top, 16)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(Color(hex: "EEEEF1"))
-                    .frame(height: 1)
-                    .allowsHitTesting(false)
+
+            Spacer()
+
+            Button {
+                showRestInputs.toggle()
+            } label: {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(showRestInputs ? Color(hex: "1C1C1E") : Color.white)
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Image(systemName: "timer")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(showRestInputs ? .white : Color(hex: "6F6F76"))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(showRestInputs ? Color(hex: "1C1C1E") : Color(hex: "EAEAEE"), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(HapticButtonStyle())
+
+            Menu {
+                Button(role: .destructive) {
+                    Haptics.tap()
+                    vm.removeExercise(id: exercise.id)
+                } label: {
+                    Label("删除动作", systemImage: "trash")
+                }
+            } label: {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color(hex: "EAEAEE"), lineWidth: 1)
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Text("···")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(Color(hex: "1C1C1E"))
+                            .offset(y: -3)
+                    )
             }
         }
-        .padding(16)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color(hex: "EEEEF1"), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.04), radius: 3, y: 1)
     }
+
+    private var columnHeaderRow: some View {
+        HStack(spacing: 10) {
+            Text("组").frame(width: 44)
+            if exercise.showSecondColumn { Text(exercise.secondColumnLabel).frame(maxWidth: .infinity) }
+            Text(exercise.thirdLabel).frame(maxWidth: .infinity)
+            Spacer().frame(width: 30)
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(Color(hex: "8E8E93"))
+        .multilineTextAlignment(.center)
+    }
+
+    private var footerRow: some View {
+        HStack(spacing: 0) {
+            Button {
+                Haptics.tap()
+                onProgress()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("进度")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundStyle(Color(hex: "1C1C1E"))
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderless)
+
+            Rectangle()
+                .fill(Color(hex: "ECECEF"))
+                .frame(width: 1, height: 20)
+
+            Button {
+                Haptics.tap()
+                vm.addSet(to: exercise.id)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("添加组")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundStyle(Color(hex: "1C1C1E"))
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderless)
+        }
+        .frame(height: 44)
+    }
+}
+
+// MARK: - Exercise card background
+
+/// Wraps a whole exercise card (a single list row) in the rounded white fill and
+/// soft drop shadow. Each exercise is now one reorderable list row, so the card
+/// is drawn once around the row's content rather than pieced together across
+/// several row backgrounds.
+private struct ExerciseCardBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        content.background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+        )
+    }
+}
+
+extension View {
+    /// Draws the rounded white card fill + shadow behind an exercise card row.
+    func exerciseCardBackground() -> some View { modifier(ExerciseCardBackground()) }
 }
 
 // MARK: - Set Row
@@ -691,14 +759,10 @@ private struct SetRow: View {
     let showSecondColumn: Bool
     let secondPlaceholder: String
     let showRestInput: Bool
-    let onDelete: () -> Void
     let onFocusChange: (Bool) -> Void
+    let onDelete: () -> Void
 
     @FocusState private var focused: TemplateSetField?
-    @State private var dragOffset: CGFloat = 0
-    @State private var dragStartOffset: CGFloat = 0
-    @State private var isTrackingDrag = false
-    private let revealWidth: CGFloat = 72
 
     private var thirdDisplayText: String {
         guard isTimeBased, !set.repsText.isEmpty, let secs = Int(set.repsText) else { return set.repsText }
@@ -707,65 +771,38 @@ private struct SetRow: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ZStack(alignment: .trailing) {
-                Button(action: {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { dragOffset = 0 }
+            HStack(spacing: 10) {
+                Text("\(set.setOrder)")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color(hex: "1C1C1E"))
+                    .frame(width: 44, height: 40)
+                    .background(
+                        Circle()
+                            .fill(.clear)
+                            .frame(width: 34, height: 34)
+                            .overlay(Circle().stroke(Color(hex: "D8D8DE"), lineWidth: 1.5))
+                    )
+
+                if showSecondColumn {
+                    valueField(field: .second, keyboard: .decimalPad, placeholder: secondPlaceholder, text: $set.weightKgText)
+                }
+
+                valueField(field: .third, keyboard: .numberPad, placeholder: "--", text: Binding(
+                    get: { (isTimeBased && focused != .third) ? thirdDisplayText : set.repsText },
+                    set: { set.repsText = $0 }
+                ))
+
+                Button {
+                    Haptics.tap()
                     onDelete()
-                }) {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(hex: "F05B5B"))
-                        .frame(width: 64, height: 40)
-                        .overlay(
-                            Image(systemName: "trash.fill")
-                                .foregroundStyle(.white)
-                                .font(.system(size: 16))
-                        )
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Color(hex: "F05B5B"))
+                        .frame(width: 30, height: 40)
                 }
-                .buttonStyle(HapticButtonStyle())
-
-                HStack(spacing: 10) {
-                    Text("\(set.setOrder)")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color(hex: "1C1C1E"))
-                        .frame(width: 44, height: 40)
-                        .background(
-                            Circle()
-                                .fill(.clear)
-                                .frame(width: 34, height: 34)
-                                .overlay(Circle().stroke(Color(hex: "D8D8DE"), lineWidth: 1.5))
-                        )
-
-                    if showSecondColumn {
-                        valueField(field: .second, keyboard: .decimalPad, placeholder: secondPlaceholder, text: $set.weightKgText)
-                    }
-
-                    valueField(field: .third, keyboard: .numberPad, placeholder: "--", text: Binding(
-                        get: { (isTimeBased && focused != .third) ? thirdDisplayText : set.repsText },
-                        set: { set.repsText = $0 }
-                    ))
-                }
-                .background(Color.white)
-                .offset(x: dragOffset)
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 15)
-                        .onChanged { value in
-                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                            if !isTrackingDrag {
-                                isTrackingDrag = true
-                                dragStartOffset = dragOffset
-                            }
-                            dragOffset = min(0, max(-revealWidth, dragStartOffset + value.translation.width))
-                        }
-                        .onEnded { value in
-                            isTrackingDrag = false
-                            let projected = dragStartOffset + value.predictedEndTranslation.width
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                dragOffset = projected < -revealWidth / 2 ? -revealWidth : 0
-                            }
-                        }
-                )
+                .buttonStyle(.borderless)
             }
-            .clipped()
 
             if showRestInput {
                 HStack(spacing: 8) {

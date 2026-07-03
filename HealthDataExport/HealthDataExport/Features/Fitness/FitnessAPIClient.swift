@@ -13,6 +13,23 @@ private struct FitnessNullData: Decodable {}
 
 enum FitnessAPIClient {
     static let baseURL = URL(string: "http://100.67.64.11:8081/api/v1")!
+
+    /// Server origin (scheme + host + port), without the "/api/v1" path — media
+    /// (thumbnails / GIFs) are served here, e.g. `${mediaOrigin}/exercise-media/...`.
+    static let mediaOrigin = "http://100.67.64.11:8081"
+
+    /// Resolve a media path (thumbnail / GIF) to an absolute URL. Absolute URLs
+    /// pass through unchanged; relative paths are prefixed with `mediaOrigin`.
+    static func mediaURL(_ raw: String?) -> URL? {
+        guard let s = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+        if s.hasPrefix("http://") || s.hasPrefix("https://") {
+            return URL(string: s)
+        }
+        let path = s.hasPrefix("/") ? s : "/" + s
+        // Percent-encode the path in case names contain spaces / non-ASCII.
+        let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+        return URL(string: mediaOrigin + encoded)
+    }
     private static let isoDateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
@@ -70,6 +87,12 @@ enum FitnessAPIClient {
         if let mid = muscleGroupId { items.append(URLQueryItem(name: "muscleGroupId", value: "\(mid)")) }
         components.queryItems = items
         let envelope = try await send(FitnessEnvelope<FitnessExercisesPage>.self, url: components.url!, method: "GET", body: Optional<String>.none)
+        return envelope.data
+    }
+
+    static func exerciseDetail(id: Int) async throws -> FitnessExerciseDetail {
+        let url = baseURL.appendingPathComponent("exercises/\(id)")
+        let envelope = try await send(FitnessEnvelope<FitnessExerciseDetail>.self, url: url, method: "GET", body: Optional<String>.none)
         return envelope.data
     }
 

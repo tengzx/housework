@@ -3,6 +3,21 @@ import Combine
 import UIKit
 import AudioToolbox
 
+/// Snapshot of what the mini player should show. Shared by the full workout
+/// screen's bottom bar and the collapsed tab-bar accessory so they stay in sync.
+struct WorkoutMiniPlayerState {
+    let title: String
+    let prefix: String
+    let timeText: String
+    let tint: Color
+    let actionSymbol: String
+    let actionFill: Color
+    let actionForeground: Color
+    let actionDisabled: Bool
+    let restDueSetId: Int?
+    var isFinishAction: Bool = false
+}
+
 
 // MARK: - Active Session View
 
@@ -47,6 +62,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
     @Published private(set) var isPausing = false
     @Published private(set) var isDiscarding = false
     @Published private(set) var isAddingExercise = false
+    @Published private(set) var isReorderingExercises = false
     @Published private(set) var isSessionPaused = false
     @Published private(set) var savingSetIds: Set<Int> = []
     @Published private(set) var updatingSetIds: Set<Int> = []
@@ -380,6 +396,46 @@ final class FitnessActiveSessionViewModel: ObservableObject {
         }
     }
 
+    /// Reorder exercises via long-press drag. The list is updated optimistically
+    /// (so it doesn't snap back while the save round-trips), sort orders are
+    /// renumbered to match the new arrangement, then the full structure is saved.
+    func moveExercise(from source: IndexSet, to destination: Int) async {
+        guard let detail, !isReorderingExercises else { return }
+        var reordered = detail.exercises
+        reordered.move(fromOffsets: source, toOffset: destination)
+        let renumbered = reordered.enumerated().map { index, exercise in
+            exercise.reordered(sortOrder: index + 1)
+        }
+        // Optimistic update so the rows stay in the dropped position.
+        self.detail = detail.replacingExercises(renumbered)
+
+        isReorderingExercises = true
+        errorMessage = nil
+        defer { isReorderingExercises = false }
+        do {
+            let exerciseRequests = renumbered.map { exercise in
+                FitnessSessionExerciseRequest(
+                    sessionExerciseId: exercise.sessionExerciseId,
+                    exerciseId: exercise.exerciseId,
+                    sortOrder: exercise.sortOrder,
+                    restSeconds: exercise.restSeconds,
+                    note: exercise.note,
+                    sets: exercise.sets.map { sessionSetRequest(from: $0, exercise: exercise) }
+                )
+            }
+            let request = FitnessSessionStructureRequest(
+                exercises: exerciseRequests,
+                deletedSessionExerciseIds: [],
+                deletedSessionSetIds: []
+            )
+            _ = try await FitnessAPIClient.saveSessionStructure(id: payload.sessionId, request: request)
+            await load()
+        } catch {
+            errorMessage = "调整顺序失败，请检查网络"
+            await load()
+        }
+    }
+
     func startNextSet() async {
         guard let target = nextStartTarget() else { return }
         await toggleSetCompletion(exerciseId: target.exerciseId, setId: target.setId)
@@ -483,6 +539,77 @@ final class FitnessActiveSessionViewModel: ObservableObject {
         }
     }
 
+    /// Save the template to match what was actually performed this session, then
+    /// complete the session. Only meaningful when the session came from a
+    /// template (`detail.templateId != nil`).
+    func completeAndUpdateTemplate(rpe: Double? = nil) async -> Bool {
+        guard !isCompleting else { return false }
+        isCompleting = true
+        errorMessage = nil
+        defer { isCompleting = false }
+        do {
+            // Update the template first so a failure here doesn't leave a
+            // completed session with a stale template; completion follows only
+            // once the template is saved.
+            if let detail, let templateId = detail.templateId {
+                let existing = try await FitnessAPIClient.templateDetail(id: templateId)
+                let request = Self.templateStructureRequest(from: detail, existing: existing)
+                _ = try await FitnessAPIClient.saveTemplateStructure(id: templateId, request: request)
+            }
+            _ = try await FitnessAPIClient.completeSession(id: payload.sessionId, rpe: rpe)
+            return true
+        } catch {
+            errorMessage = "保存并更新模板失败，请检查网络"
+            return false
+        }
+    }
+
+    /// Rebuild the template structure from a finished session: the exercises and
+    /// sets performed become the new template, using each set's actual values
+    /// (falling back to planned) as the new targets. Existing template exercises
+    /// are deleted so the template ends up mirroring the session exactly.
+    private static func templateStructureRequest(
+        from detail: FitnessSessionDetail,
+        existing: FitnessTemplateDetail
+    ) -> SaveTemplateStructureRequest {
+        let exercises = detail.exercises
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .enumerated()
+            .map { index, ex -> SaveExerciseItem in
+                let timeBased = ExerciseTrackingDisplay.isTimeBased(ex.trackingType)
+                let distanceBased = ExerciseTrackingDisplay.isDistanceBased(ex.trackingType)
+                let sets = ex.sets
+                    .sorted { $0.setOrder < $1.setOrder }
+                    .enumerated()
+                    .map { setIndex, set -> SaveSetItem in
+                        SaveSetItem(
+                            templateSetId: nil,
+                            setOrder: setIndex + 1,
+                            setType: set.setType,
+                            targetWeightKg: timeBased ? nil : (set.actualWeightKg ?? set.plannedWeightKg),
+                            targetReps: timeBased ? nil : (set.actualReps ?? set.plannedReps),
+                            targetDurationSeconds: timeBased ? (set.actualDurationSeconds ?? set.plannedDurationSeconds) : nil,
+                            targetDistanceMeters: distanceBased ? (set.actualDistanceMeters ?? set.plannedDistanceMeters) : nil,
+                            restSeconds: set.restSeconds ?? ex.restSeconds,
+                            note: set.note ?? ""
+                        )
+                    }
+                return SaveExerciseItem(
+                    templateExerciseId: nil,
+                    exerciseId: ex.exerciseId,
+                    sortOrder: index + 1,
+                    restSeconds: ex.restSeconds,
+                    note: ex.note ?? "",
+                    sets: sets
+                )
+            }
+        return SaveTemplateStructureRequest(
+            exercises: exercises,
+            deletedTemplateExerciseIds: existing.exercises.map { $0.templateExerciseId },
+            deletedTemplateSetIds: []
+        )
+    }
+
     func discard() async -> Bool {
         guard !isDiscarding else { return false }
         isDiscarding = true
@@ -515,6 +642,111 @@ final class FitnessActiveSessionViewModel: ObservableObject {
                     .sorted { $0.setOrder < $1.setOrder }
                     .map { (exercise: exercise, set: $0) }
             }
+    }
+
+    // MARK: Mini player state
+
+    /// The state driving the mini player — shown both at the bottom of the full
+    /// workout screen and in the collapsed tab-bar accessory, so they stay in sync.
+    func miniPlayerState(now: Date) -> WorkoutMiniPlayerState {
+        guard let detail else {
+            return WorkoutMiniPlayerState(
+                title: title, prefix: "----", timeText: "00:00",
+                tint: Color(hex: "4B8CFF"), actionSymbol: "play.fill",
+                actionFill: .white, actionForeground: Color(hex: "1C1C1E"),
+                actionDisabled: true, restDueSetId: nil
+            )
+        }
+
+        let contexts = orderedSetContexts(from: detail)
+        if isSessionPaused {
+            let paused = contexts.first { $0.set.timerStatus == "paused" && !$0.set.isCompleted }
+            return WorkoutMiniPlayerState(
+                title: paused?.exercise.name ?? detail.name,
+                prefix: "训练暂停",
+                timeText: paused.map { Self.clockText($0.set.timerAccumulatedSeconds ?? 0) } ?? Self.clockText(elapsedSeconds(at: now)),
+                tint: Color(hex: "8E8E93"), actionSymbol: "play.fill",
+                actionFill: .white, actionForeground: Color(hex: "1C1C1E"),
+                actionDisabled: isPausing, restDueSetId: nil
+            )
+        }
+
+        if let running = contexts.first(where: { $0.set.timerStatus == "running" }) {
+            let base = running.set.timerAccumulatedSeconds ?? 0
+            let live = running.set.timerStartedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
+            return WorkoutMiniPlayerState(
+                title: running.exercise.name, prefix: "运动",
+                timeText: Self.clockText(base + live),
+                tint: Color(hex: "FF7847"), actionSymbol: "checkmark",
+                actionFill: Color(hex: "34C982"), actionForeground: .white,
+                actionDisabled: savingSetIds.contains(running.set.sessionSetId), restDueSetId: nil
+            )
+        }
+
+        if let paused = contexts.first(where: { $0.set.timerStatus == "paused" && !$0.set.isCompleted }) {
+            return WorkoutMiniPlayerState(
+                title: paused.exercise.name, prefix: "暂停",
+                timeText: Self.clockText(paused.set.timerAccumulatedSeconds ?? 0),
+                tint: Color(hex: "8E8E93"), actionSymbol: "play.fill",
+                actionFill: .white, actionForeground: Color(hex: "1C1C1E"),
+                actionDisabled: savingSetIds.contains(paused.set.sessionSetId), restDueSetId: nil
+            )
+        }
+
+        let lastCompleted = contexts
+            .filter { $0.set.isCompleted }
+            .max { ($0.set.completedAt ?? .distantPast) < ($1.set.completedAt ?? .distantPast) }
+        if let lastCompleted,
+           let completedAt = lastCompleted.set.completedAt,
+           let next = fitnessNextTargetContext(in: contexts),
+           !Self.hasSetStarted(next.set) {
+            let restSeconds = lastCompleted.set.restSeconds ?? lastCompleted.exercise.restSeconds
+            let elapsed = max(0, Int(now.timeIntervalSince(completedAt)))
+            let remaining = max(0, restSeconds - elapsed)
+            return WorkoutMiniPlayerState(
+                title: next.exercise.name,
+                prefix: remaining == 0 ? "休息完成" : "休息",
+                timeText: Self.clockText(remaining),
+                tint: remaining == 0 ? Color(hex: "34C982") : Color(hex: "4B8CFF"),
+                actionSymbol: "play.fill",
+                // Start button stays white (green is only for the complete action);
+                // the "休息完成" cue is conveyed by the green prefix text above.
+                actionFill: .white,
+                actionForeground: Color(hex: "1C1C1E"),
+                actionDisabled: false,
+                restDueSetId: remaining == 0 ? lastCompleted.set.sessionSetId : nil
+            )
+        }
+
+        let next = contexts.first { !$0.set.isCompleted && $0.set.timerStatus != "running" }
+        if next == nil && !contexts.isEmpty {
+            return WorkoutMiniPlayerState(
+                title: detail.name, prefix: "完成",
+                timeText: Self.clockText(elapsedSeconds(at: now)),
+                tint: Color(hex: "34C982"), actionSymbol: "flag.checkered",
+                actionFill: Color(hex: "34C982"), actionForeground: .white,
+                actionDisabled: isCompleting, restDueSetId: nil, isFinishAction: true
+            )
+        }
+
+        return WorkoutMiniPlayerState(
+            title: next?.exercise.name ?? detail.name, prefix: "准备",
+            timeText: "00:00", tint: Color(hex: "4B8CFF"), actionSymbol: "play.fill",
+            actionFill: .white, actionForeground: Color(hex: "1C1C1E"),
+            actionDisabled: next == nil, restDueSetId: nil
+        )
+    }
+
+    static func clockText(_ seconds: Int) -> String {
+        String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+
+    static func hasSetStarted(_ set: FitnessSessionSet) -> Bool {
+        set.timerStartedAt != nil
+            || (set.timerAccumulatedSeconds ?? 0) > 0
+            || set.timerStatus == "running"
+            || set.timerStatus == "paused"
+            || set.isCompleted
     }
 
     private func makeStructureRequest(
@@ -608,6 +840,49 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             completedAt: nil,
             restSeconds: 120,
             note: nil
+        )
+    }
+}
+
+// MARK: - Reorder copy helpers
+
+private extension FitnessSessionExercise {
+    /// A copy of the exercise with a new `sortOrder`, used when reordering.
+    func reordered(sortOrder newOrder: Int) -> FitnessSessionExercise {
+        FitnessSessionExercise(
+            sessionExerciseId: sessionExerciseId,
+            exerciseId: exerciseId,
+            name: name,
+            trackingType: trackingType,
+            exerciseType: exerciseType,
+            imageUrl: imageUrl,
+            sortOrder: newOrder,
+            restSeconds: restSeconds,
+            note: note,
+            sets: sets
+        )
+    }
+}
+
+private extension FitnessSessionDetail {
+    /// A copy of the session detail with its exercises replaced, used to reflect
+    /// a reorder optimistically before the server round-trip completes.
+    func replacingExercises(_ exercises: [FitnessSessionExercise]) -> FitnessSessionDetail {
+        FitnessSessionDetail(
+            id: id,
+            templateId: templateId,
+            trainingTheme: trainingTheme,
+            name: name,
+            status: status,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: durationSeconds,
+            totalVolumeKg: totalVolumeKg,
+            totalSets: totalSets,
+            totalReps: totalReps,
+            totalExercises: totalExercises,
+            analysisText: analysisText,
+            exercises: exercises
         )
     }
 }

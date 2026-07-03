@@ -2,28 +2,29 @@ import SwiftUI
 import Combine
 import UIKit
 import AudioToolbox
+import UserNotifications
 
 
 struct FitnessActiveSessionView: View {
-    let payload: FitnessWorkoutSessionPayload
     let onCompleted: () async -> Void
 
-    @StateObject private var vm: FitnessActiveSessionViewModel
-    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var vm: FitnessActiveSessionViewModel
+    @EnvironmentObject private var workout: ActiveWorkoutStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var restVisibleExerciseIds: Set<Int> = []
     @State private var remindedRestSetIds: Set<Int> = []
     @State private var showDiscardConfirm = false
     @State private var showExerciseLibrary = false
     @State private var progressTarget: ExerciseProgressTarget?
+    @State private var detailTarget: FitnessExercise?
     @State private var showRatingSheet = false
     @State private var ratingValue: Double = 5
     @State private var showIncompleteAlert = false
     @State private var editingSetId: Int?
 
-    init(payload: FitnessWorkoutSessionPayload, onCompleted: @escaping () async -> Void) {
-        self.payload = payload
+    init(vm: FitnessActiveSessionViewModel, onCompleted: @escaping () async -> Void) {
         self.onCompleted = onCompleted
-        _vm = StateObject(wrappedValue: FitnessActiveSessionViewModel(payload: payload))
+        self.vm = vm
     }
 
     var body: some View {
@@ -31,38 +32,76 @@ struct FitnessActiveSessionView: View {
             Color.white.ignoresSafeArea()
 
             ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 18) {
+                List {
+                    Section {
                         activeHeader
-                            .padding(.horizontal, 20)
-                            .padding(.top, 18)
-                            .padding(.bottom, 18)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 2, trailing: 20))
+                    }
 
-                        if vm.isLoading && vm.detail == nil {
+                    if vm.isLoading && vm.detail == nil {
+                        Section {
                             ProgressView()
-                                .padding(.top, 48)
-                        } else if let detail = vm.detail {
-                            let contexts = orderedSetContexts(from: detail)
-                            let latestCompletedSetId = contexts
-                                .filter { $0.set.isCompleted }
-                                .max { ($0.set.completedAt ?? .distantPast) < ($1.set.completedAt ?? .distantPast) }?
-                                .set.sessionSetId
-                            ForEach(Array(detail.exercises.enumerated()), id: \.element.id) { index, exercise in
-                                exerciseCard(exercise, contexts: contexts, latestCompletedSetId: latestCompletedSetId, totalCount: detail.exercises.count, index: index)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 32)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                        }
+                    } else if let detail = vm.detail {
+                        let contexts = orderedSetContexts(from: detail)
+                        let latestCompletedSetId = contexts
+                            .filter { $0.set.isCompleted }
+                            .max { ($0.set.completedAt ?? .distantPast) < ($1.set.completedAt ?? .distantPast) }?
+                            .set.sessionSetId
+                        Section {
+                            ForEach(detail.exercises, id: \.id) { exercise in
+                                exerciseSection(
+                                    exercise: exercise,
+                                    latestCompletedSetId: latestCompletedSetId,
+                                    contexts: contexts
+                                )
+                                .listRowInsets(EdgeInsets(top: 10, leading: 8, bottom: 10, trailing: 8))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
                             }
+                            .onMove { source, destination in
+                                Haptics.tap()
+                                Task { await vm.moveExercise(from: source, to: destination) }
+                            }
+                        }
 
+                        Section {
                             addExerciseButton
-                                .padding(.horizontal, 16)
-                                .padding(.top, 6)
-                        } else if let errorMessage = vm.errorMessage {
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 0, trailing: 16))
+                        }
+                    } else if let errorMessage = vm.errorMessage {
+                        Section {
                             Text(errorMessage)
                                 .font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(Color(hex: "F05B5B"))
-                                .padding(.top, 48)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 32)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
                         }
                     }
-                    .padding(.bottom, 118)
+
+                    // Bottom spacer so the floating mini player never covers content
+                    Section {
+                        Color.clear
+                            .frame(height: 118)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets())
+                    }
                 }
+                .listStyle(.insetGrouped)
+                .listSectionSpacing(12)
+                .contentMargins(.top, 4, for: .scrollContent)
+                .scrollContentBackground(.hidden)
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: editingSetId) { _, setId in
                     guard let setId else { return }
@@ -73,13 +112,24 @@ struct FitnessActiveSessionView: View {
                         proxy.scrollTo("set-\(setId)", anchor: UnitPoint(x: 0.5, y: 0.35))
                     }
                 }
-            }
-            // Select all text when a field begins editing so the user can type a
-            // new value straight away instead of clearing the old one first.
-            .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { notification in
-                guard let textField = notification.object as? UITextField else { return }
-                DispatchQueue.main.async {
-                    textField.selectAll(nil)
+                // Select all text when a field begins editing so the user can type a
+                // new value straight away instead of clearing the old one first.
+                .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { notification in
+                    guard let textField = notification.object as? UITextField else { return }
+                    DispatchQueue.main.async {
+                        textField.selectAll(nil)
+                    }
+                }
+                // Pull the list past its top and keep dragging down to collapse the
+                // workout into the floating bar (sheet-style overscroll dismiss).
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    // How far the content is pulled below its top; positive on overscroll.
+                    -(geometry.contentOffset.y + geometry.contentInsets.top)
+                } action: { _, overscroll in
+                    if overscroll > 90 && !workout.isMinimized {
+                        Haptics.tap()
+                        workout.minimize()
+                    }
                 }
             }
 
@@ -94,9 +144,34 @@ struct FitnessActiveSessionView: View {
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .task { await vm.load() }
+        .task { await RestReminderNotifier.requestAuthorization() }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                // Back in the app — the in-app countdown/sound takes over, so
+                // clear any pending or already-delivered rest notification.
+                RestReminderNotifier.cancel()
+            case .background, .inactive:
+                // Leaving the app mid-rest: schedule a local notification for the
+                // moment rest ends so the alert/sound fires while backgrounded.
+                if let rest = currentRestEnd(now: Date()), rest.date > Date() {
+                    RestReminderNotifier.schedule(at: rest.date, exerciseName: rest.exerciseName)
+                } else {
+                    RestReminderNotifier.cancel()
+                }
+            @unknown default:
+                break
+            }
+        }
         .sheet(isPresented: $showExerciseLibrary) {
             FitnessExerciseLibrarySheet(
-                preselectedIds: Set(vm.detail?.exercises.map { $0.exerciseId } ?? [])
+                preselected: (vm.detail?.exercises ?? []).map {
+                    FitnessExercise.lightweight(
+                        id: $0.exerciseId,
+                        name: $0.name,
+                        trackingType: $0.trackingType
+                    )
+                }
             ) { selected in
                 Task { await vm.addExercisesToSession(selected) }
             }
@@ -104,16 +179,38 @@ struct FitnessActiveSessionView: View {
         .sheet(item: $progressTarget) { target in
             ExerciseProgressSheet(target: target)
         }
+        .sheet(item: $detailTarget) { exercise in
+            FitnessExerciseDetailSheet(exercise: exercise)
+        }
         .fullScreenCover(isPresented: $showRatingSheet) {
-            WorkoutRatingSheet(rpe: $ratingValue) {
-                showRatingSheet = false
-                Task {
-                    if await vm.complete(rpe: ratingValue) {
-                        await onCompleted()
-                        dismiss()
+            WorkoutRatingSheet(
+                rpe: $ratingValue,
+                canUpdateTemplate: vm.detail?.templateId != nil,
+                onSave: {
+                    // Keep the rating cover up during the save. On success, pop the
+                    // active session directly (the cover tears down with it) so we go
+                    // straight to home without flashing the training screen. Only
+                    // close the cover on failure, to reveal the error alert.
+                    Task {
+                        if await vm.complete(rpe: ratingValue) {
+                            await onCompleted()
+                            workout.end()
+                        } else {
+                            showRatingSheet = false
+                        }
+                    }
+                },
+                onSaveAndUpdateTemplate: {
+                    Task {
+                        if await vm.completeAndUpdateTemplate(rpe: ratingValue) {
+                            await onCompleted()
+                            workout.end()
+                        } else {
+                            showRatingSheet = false
+                        }
                     }
                 }
-            }
+            )
         }
         .alert("错误", isPresented: Binding(
             get: { vm.errorMessage != nil },
@@ -136,7 +233,7 @@ struct FitnessActiveSessionView: View {
                 Task {
                     if await vm.discard() {
                         await onCompleted()
-                        dismiss()
+                        workout.end()
                     }
                 }
             }
@@ -145,16 +242,13 @@ struct FitnessActiveSessionView: View {
         }
     }
 
-    @ViewBuilder
-    private func exerciseCard(
-        _ exercise: FitnessSessionExercise,
-        contexts: [(exercise: FitnessSessionExercise, set: FitnessSessionSet)],
+    private func exerciseSection(
+        exercise: FitnessSessionExercise,
         latestCompletedSetId: Int?,
-        totalCount: Int,
-        index: Int
+        contexts: [(exercise: FitnessSessionExercise, set: FitnessSessionSet)]
     ) -> some View {
         let exId = exercise.sessionExerciseId
-        FitnessActiveExerciseCard(
+        return ActiveExerciseCard(
             exercise: exercise,
             savingSetIds: vm.savingSetIds,
             isAddingSet: vm.savingExerciseIds.contains(exId),
@@ -168,22 +262,21 @@ struct FitnessActiveSessionView: View {
             onProgress: {
                 progressTarget = ExerciseProgressTarget(exerciseId: exercise.exerciseId, name: exercise.name, trackingType: exercise.trackingType)
             },
+            onOpenDetail: {
+                detailTarget = FitnessExercise.lightweight(
+                    id: exercise.exerciseId,
+                    name: exercise.name,
+                    trackingType: exercise.trackingType
+                )
+            },
             onToggleSet: { setId in Task { await vm.toggleSetCompletion(exerciseId: exId, setId: setId) } },
-            onPauseSet: { setId in Task { await vm.pauseSet(setId: setId) } },
             onAddSet: { Task { await vm.addSet(to: exId) } },
             onDeleteExercise: { Task { await vm.deleteExerciseFromSession(exerciseId: exId) } },
             onDeleteSet: { setId in Task { await vm.deleteSetFromSession(exerciseId: exId, setId: setId) } },
             onUpdateSet: { setId, w, r, d, dist in Task { await vm.updateSetValues(exerciseId: exId, setId: setId, actualWeightKg: w, actualReps: r, actualDurationSeconds: d, actualDistanceMeters: dist) } },
-            onRestDue: { set in
-                playRestReminder(for: set.sessionSetId)
-            },
+            onRestDue: { set in playRestReminder(for: set.sessionSetId) },
             onEditSet: { setId in editingSetId = setId }
         )
-        .padding(.horizontal, 16)
-
-        if index < totalCount - 1 {
-            ActiveExerciseConnector().padding(.vertical, 2)
-        }
     }
 
     private var addExerciseButton: some View {
@@ -265,6 +358,7 @@ struct FitnessActiveSessionView: View {
                 .frame(width: 82, height: 52)
                 .background(Color(hex: "FFE3DC"), in: Capsule())
             }
+            .buttonStyle(.borderless)
             .disabled(vm.isCompleting)
 
             Menu {
@@ -305,7 +399,7 @@ struct FitnessActiveSessionView: View {
 
     private var miniPlayer: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            let state = miniPlayerState(now: context.date)
+            let state = vm.miniPlayerState(now: context.date)
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
@@ -325,9 +419,16 @@ struct FitnessActiveSessionView: View {
 
                 Spacer()
 
-                Image(systemName: "minus")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color(hex: "8E8E93"))
+                Button {
+                    Haptics.tap()
+                    workout.minimize()
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Color(hex: "8E8E93"))
+                        .frame(width: 30, height: 44)
+                }
+                .buttonStyle(.borderless)
 
                 Image(systemName: "heart.fill")
                     .font(.system(size: 18, weight: .bold))
@@ -336,7 +437,17 @@ struct FitnessActiveSessionView: View {
                 Button {
                     Haptics.tap()
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    Task { await vm.handleMiniPlayerAction() }
+                    if state.isFinishAction {
+                        // All sets done: finish the workout straight from here.
+                        if vm.isCompleting { return }
+                        if vm.incompleteSetCount > 0 {
+                            showIncompleteAlert = true
+                        } else {
+                            showRatingSheet = true
+                        }
+                    } else {
+                        Task { await vm.handleMiniPlayerAction() }
+                    }
                 } label: {
                     Circle()
                         .fill(state.actionFill)
@@ -378,108 +489,23 @@ struct FitnessActiveSessionView: View {
         return String(format: "%02d:%02d", minutes, secs)
     }
 
-    private func miniPlayerState(now: Date) -> MiniPlayerState {
-        guard let detail = vm.detail else {
-            return MiniPlayerState(
-                title: vm.title,
-                prefix: "----",
-                timeText: "00:00",
-                tint: Color(hex: "4B8CFF"),
-                actionSymbol: "play.fill",
-                actionFill: .white,
-                actionForeground: Color(hex: "1C1C1E"),
-                actionDisabled: true,
-                restDueSetId: nil
-            )
-        }
-
+    /// The wall-clock moment the currently-running rest countdown ends, plus the
+    /// name of the exercise whose set is up next. Nil when no rest is pending
+    /// (session paused, a set is actively running, everything done, or the next
+    /// set already started). Mirrors the rest branch of `miniPlayerState`.
+    private func currentRestEnd(now: Date) -> (date: Date, exerciseName: String)? {
+        guard let detail = vm.detail, !vm.isSessionPaused else { return nil }
         let contexts = orderedSetContexts(from: detail)
-        if vm.isSessionPaused {
-            let paused = contexts.first { $0.set.timerStatus == "paused" && !$0.set.isCompleted }
-            let title = paused?.exercise.name ?? detail.name
-            return MiniPlayerState(
-                title: title,
-                prefix: "训练暂停",
-                timeText: paused.map { Self.clockText($0.set.timerAccumulatedSeconds ?? 0) } ?? Self.clockText(vm.elapsedSeconds(at: now)),
-                tint: Color(hex: "8E8E93"),
-                actionSymbol: "play.fill",
-                actionFill: .white,
-                actionForeground: Color(hex: "1C1C1E"),
-                actionDisabled: vm.isPausing,
-                restDueSetId: nil
-            )
-        }
-
-        if let running = contexts.first(where: { $0.set.timerStatus == "running" }) {
-            let base = running.set.timerAccumulatedSeconds ?? 0
-            let live = running.set.timerStartedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
-            return MiniPlayerState(
-                title: running.exercise.name,
-                prefix: "运动",
-                timeText: Self.clockText(base + live),
-                tint: Color(hex: "FF7847"),
-                actionSymbol: "checkmark",
-                actionFill: Color(hex: "34C982"),
-                actionForeground: .white,
-                actionDisabled: vm.savingSetIds.contains(running.set.sessionSetId),
-                restDueSetId: nil
-            )
-        }
-
-        if let paused = contexts.first(where: { $0.set.timerStatus == "paused" && !$0.set.isCompleted }) {
-            return MiniPlayerState(
-                title: paused.exercise.name,
-                prefix: "暂停",
-                timeText: Self.clockText(paused.set.timerAccumulatedSeconds ?? 0),
-                tint: Color(hex: "8E8E93"),
-                actionSymbol: "play.fill",
-                actionFill: .white,
-                actionForeground: Color(hex: "1C1C1E"),
-                actionDisabled: vm.savingSetIds.contains(paused.set.sessionSetId),
-                restDueSetId: nil
-            )
-        }
-
-        // Rest countdown is driven by the set completed most recently (by timestamp),
-        // not by list position, so it works even when the user trains out of order.
-        // This runs regardless of whether the per-set rest timer is expanded, so the
-        // reminder counts down and fires in the background without the user tapping.
+        if contexts.contains(where: { $0.set.timerStatus == "running" }) { return nil }
         let lastCompleted = contexts
             .filter { $0.set.isCompleted }
             .max { ($0.set.completedAt ?? .distantPast) < ($1.set.completedAt ?? .distantPast) }
-        if let lastCompleted,
-           let completedAt = lastCompleted.set.completedAt,
-           let next = fitnessNextTargetContext(in: contexts) {
-            if !hasSetStarted(next.set) {
-                let restSeconds = lastCompleted.set.restSeconds ?? lastCompleted.exercise.restSeconds
-                let elapsed = max(0, Int(now.timeIntervalSince(completedAt)))
-                let remaining = max(0, restSeconds - elapsed)
-                return MiniPlayerState(
-                    title: next.exercise.name,
-                    prefix: remaining == 0 ? "休息完成" : "休息",
-                    timeText: Self.clockText(remaining),
-                    tint: remaining == 0 ? Color(hex: "34C982") : Color(hex: "4B8CFF"),
-                    actionSymbol: "play.fill",
-                    actionFill: remaining == 0 ? Color(hex: "34C982") : .white,
-                    actionForeground: remaining == 0 ? .white : Color(hex: "1C1C1E"),
-                    actionDisabled: false,
-                    restDueSetId: remaining == 0 ? lastCompleted.set.sessionSetId : nil
-                )
-            }
-        }
-
-        let next = contexts.first { !$0.set.isCompleted && $0.set.timerStatus != "running" }
-        return MiniPlayerState(
-            title: next?.exercise.name ?? detail.name,
-            prefix: "准备",
-            timeText: "00:00",
-            tint: Color(hex: "4B8CFF"),
-            actionSymbol: "play.fill",
-            actionFill: .white,
-            actionForeground: Color(hex: "1C1C1E"),
-            actionDisabled: next == nil,
-            restDueSetId: nil
-        )
+        guard let lastCompleted,
+              let completedAt = lastCompleted.set.completedAt,
+              let next = fitnessNextTargetContext(in: contexts),
+              !hasSetStarted(next.set) else { return nil }
+        let restSeconds = lastCompleted.set.restSeconds ?? lastCompleted.exercise.restSeconds
+        return (completedAt.addingTimeInterval(TimeInterval(restSeconds)), next.exercise.name)
     }
 
     private func playRestReminder(for setId: Int) {
@@ -515,26 +541,9 @@ struct FitnessActiveSessionView: View {
         return contexts.dropFirst(index + 1).first?.set
     }
 
-    private static func clockText(_ seconds: Int) -> String {
-        let minutes = seconds / 60
-        let secs = seconds % 60
-        return String(format: "%02d:%02d", minutes, secs)
-    }
-
-    private struct MiniPlayerState {
-        let title: String
-        let prefix: String
-        let timeText: String
-        let tint: Color
-        let actionSymbol: String
-        let actionFill: Color
-        let actionForeground: Color
-        let actionDisabled: Bool
-        let restDueSetId: Int?
-    }
 }
 
-private struct FitnessActiveExerciseCard: View {
+private struct ActiveExerciseCard: View {
     let exercise: FitnessSessionExercise
     let savingSetIds: Set<Int>
     let isAddingSet: Bool
@@ -543,8 +552,8 @@ private struct FitnessActiveExerciseCard: View {
     let nextSetForRest: (Int) -> FitnessSessionSet?
     let onToggleRest: () -> Void
     let onProgress: () -> Void
+    let onOpenDetail: () -> Void
     let onToggleSet: (Int) -> Void
-    let onPauseSet: (Int) -> Void
     let onAddSet: () -> Void
     let onDeleteExercise: () -> Void
     let onDeleteSet: (Int) -> Void
@@ -552,117 +561,31 @@ private struct FitnessActiveExerciseCard: View {
     let onRestDue: (FitnessSessionSet) -> Void
     let onEditSet: (Int?) -> Void
 
+    @State private var isDeletingSets = false
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(hex: "F6F6F8"))
-                    .frame(width: 58, height: 58)
-                    .overlay(BarbellIcon())
+            headerRow
+                .padding(.horizontal, 12)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(exercise.name)
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundStyle(Color(hex: "1C1C1E"))
-                        .lineLimit(1)
-                    Text("\(trackingLabel) · \(exercise.sets.count) 组")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color(hex: "6F6F76"))
-                }
+            columnHeaderRow
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
 
-                Spacer()
-
-                timerButton
-                moreMenu
-            }
-
-            setsSection.padding(.top, 16)
-
-            HStack(spacing: 0) {
-                Button {
-                    Haptics.tap()
-                    onProgress()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("进度")
-                            .font(.system(size: 15, weight: .semibold))
-                    }
-                    .foregroundStyle(Color(hex: "1C1C1E"))
-                    .frame(maxWidth: .infinity)
-                }
-
-                Rectangle()
-                    .fill(Color(hex: "ECECEF"))
-                    .frame(width: 1, height: 20)
-
-                Button {
-                    Haptics.tap()
-                    onAddSet()
-                } label: {
-                    HStack(spacing: 8) {
-                        if isAddingSet {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "plus")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text("添加组")
-                                .font(.system(size: 15, weight: .semibold))
-                        }
-                    }
-                    .foregroundStyle(Color(hex: "1C1C1E"))
-                    .frame(maxWidth: .infinity)
-                }
-                .disabled(isAddingSet)
-            }
-            .frame(height: 48)
-            .padding(.top, 18)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(Color(hex: "EEEEF1"))
-                    .frame(height: 1)
-                    .allowsHitTesting(false)
-            }
-        }
-        .padding(16)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color(hex: "EEEEF1"), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.04), radius: 3, y: 1)
-    }
-
-    @ViewBuilder
-    private var setsSection: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Text("组").frame(width: 44)
-                if exercise.showSecondColumn {
-                    Text(ExerciseTrackingDisplay.secondColumnLabel(exercise.trackingType)).frame(maxWidth: .infinity)
-                }
-                Text(ExerciseTrackingDisplay.thirdColumnLabel(exercise.trackingType)).frame(maxWidth: .infinity)
-                Spacer().frame(width: 44)
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Color(hex: "8E8E93"))
-            .multilineTextAlignment(.center)
-            .padding(.bottom, 8)
-
-            ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
+            ForEach(exercise.sets, id: \.id) { set in
                 VStack(spacing: 0) {
                     ActiveSetRow(
                         exercise: exercise,
                         set: set,
                         isSaving: savingSetIds.contains(set.sessionSetId),
                         onToggle: { onToggleSet(set.sessionSetId) },
-                        onDelete: { onDeleteSet(set.sessionSetId) },
                         onUpdate: { w, r, d, dist in onUpdateSet(set.sessionSetId, w, r, d, dist) },
-                        onFocusChange: { isEditing in onEditSet(isEditing ? set.sessionSetId : nil) }
+                        onFocusChange: { isEditing in onEditSet(isEditing ? set.sessionSetId : nil) },
+                        showDelete: isDeletingSets,
+                        onDelete: { onDeleteSet(set.sessionSetId) }
                     )
-                    .id("set-\(set.sessionSetId)")
                     if isRestVisible {
                         RestTimeChip(
                             set: set,
@@ -674,11 +597,99 @@ private struct FitnessActiveExerciseCard: View {
                         .padding(.top, 10)
                     }
                 }
-                if index < exercise.sets.count - 1 {
-                    Spacer().frame(height: isRestVisible ? 10 : 9)
-                }
+                .id("set-\(set.sessionSetId)")
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
             }
+
+            footerRow
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
         }
+        .exerciseCardBackground()
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: 12) {
+            ExerciseThumbnail(urlString: exercise.imageUrl, size: 54, cornerRadius: 14)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(exercise.name)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Color(hex: "1C1C1E"))
+                    .lineLimit(1)
+                    .contentShape(Rectangle())
+                    .onTapGesture { Haptics.tap(); onOpenDetail() }
+                Text("\(trackingLabel) · \(exercise.sets.count) 组")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(hex: "9A9AA0"))
+            }
+
+            Spacer()
+
+            timerButton
+            moreMenu
+        }
+    }
+
+    private var columnHeaderRow: some View {
+        HStack(spacing: 10) {
+            Text("组").frame(width: 44)
+            if exercise.showSecondColumn {
+                Text(ExerciseTrackingDisplay.secondColumnLabel(exercise.trackingType)).frame(maxWidth: .infinity)
+            }
+            Text(ExerciseTrackingDisplay.thirdColumnLabel(exercise.trackingType)).frame(maxWidth: .infinity)
+            Spacer().frame(width: isDeletingSets ? 84 : 44)
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(Color(hex: "8E8E93"))
+        .multilineTextAlignment(.center)
+    }
+
+    private var footerRow: some View {
+        HStack(spacing: 0) {
+            Button {
+                Haptics.tap()
+                onProgress()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("进度")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundStyle(Color(hex: "1C1C1E"))
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderless)
+
+            Rectangle()
+                .fill(Color(hex: "ECECEF"))
+                .frame(width: 1, height: 20)
+
+            Button {
+                Haptics.tap()
+                onAddSet()
+            } label: {
+                HStack(spacing: 8) {
+                    if isAddingSet {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("添加组")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                }
+                .foregroundStyle(Color(hex: "1C1C1E"))
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderless)
+            .disabled(isAddingSet)
+        }
+        .frame(height: 44)
     }
 
     private var trackingLabel: String {
@@ -815,6 +826,14 @@ private struct FitnessActiveExerciseCard: View {
             } label: {
                 Label("删除动作", systemImage: "trash")
             }
+
+            Button {
+                Haptics.tap()
+                withAnimation(.easeInOut(duration: 0.2)) { isDeletingSets.toggle() }
+            } label: {
+                Label(isDeletingSets ? "完成删除组" : "删除组",
+                      systemImage: isDeletingSets ? "checkmark" : "minus.circle")
+            }
         } label: {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white)
@@ -838,130 +857,98 @@ private struct ActiveSetRow: View {
     let set: FitnessSessionSet
     let isSaving: Bool
     let onToggle: () -> Void
-    let onDelete: () -> Void
     let onUpdate: (Double?, Int?, Int?, Double?) -> Void
     let onFocusChange: (Bool) -> Void
+    let showDelete: Bool
+    let onDelete: () -> Void
 
     @State private var secondText: String
     @State private var thirdText: String
     @FocusState private var focused: ActiveSetField?
-    @State private var dragOffset: CGFloat = 0
-    @State private var dragStartOffset: CGFloat = 0
-    @State private var isTrackingDrag = false
-    private let revealWidth: CGFloat = 72
 
     init(
         exercise: FitnessSessionExercise,
         set: FitnessSessionSet,
         isSaving: Bool,
         onToggle: @escaping () -> Void,
-        onDelete: @escaping () -> Void,
         onUpdate: @escaping (Double?, Int?, Int?, Double?) -> Void,
-        onFocusChange: @escaping (Bool) -> Void
+        onFocusChange: @escaping (Bool) -> Void,
+        showDelete: Bool,
+        onDelete: @escaping () -> Void
     ) {
         self.exercise = exercise
         self.set = set
         self.isSaving = isSaving
         self.onToggle = onToggle
-        self.onDelete = onDelete
         self.onUpdate = onUpdate
         self.onFocusChange = onFocusChange
+        self.showDelete = showDelete
+        self.onDelete = onDelete
         _secondText = State(initialValue: Self.initSecond(exercise: exercise, set: set))
         _thirdText = State(initialValue: Self.initThird(exercise: exercise, set: set))
     }
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            Button(action: {
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { dragOffset = 0 }
-                onDelete()
-            }) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(hex: "F05B5B"))
-                    .frame(width: 64, height: 40)
+        HStack(spacing: 10) {
+            Text("\(set.setOrder)")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(set.isCompleted ? .white : Color(hex: "1C1C1E"))
+                .frame(width: 44, height: 40)
+                .background(
+                    Circle()
+                        .fill(set.isCompleted ? setNumberFill : .clear)
+                        .frame(width: 34, height: 34)
+                        .overlay(Circle().stroke(setNumberBorderColor, lineWidth: 1.5))
+                )
+
+            if exercise.showSecondColumn {
+                setValueField(field: .second, keyboard: .decimalPad, text: $secondText)
+            }
+
+            setValueField(field: .third, keyboard: .numberPad, text: Binding(
+                get: { (exercise.isTimeBased && focused != .third) ? thirdDisplayText : thirdText },
+                set: { thirdText = $0 }
+            ))
+
+            Button {
+                Haptics.tap()
+                onToggle()
+            } label: {
+                Circle()
+                    .fill(set.isCompleted ? completedGreen : .clear)
+                    .overlay(Circle().stroke(set.isCompleted ? completedGreen : Color(hex: "D8D8DE"), lineWidth: 1.5))
+                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 40)
                     .overlay(
-                        Image(systemName: "trash.fill")
-                            .foregroundStyle(.white)
-                            .font(.system(size: 16))
+                        Group {
+                            if isSaving {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: statusSymbol)
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(statusSymbolColor)
+                                    .offset(x: statusSymbol == "play.fill" ? 2 : 0)
+                            }
+                        }
                     )
             }
-            .buttonStyle(HapticButtonStyle())
+            .buttonStyle(.borderless)
+            .disabled(isSaving)
 
-            HStack(spacing: 10) {
-                Text("\(set.setOrder)")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(set.isCompleted ? .white : Color(hex: "1C1C1E"))
-                    .frame(width: 44, height: 40)
-                    .background(
-                        Circle()
-                            .fill(set.isCompleted ? setNumberFill : .clear)
-                            .frame(width: 34, height: 34)
-                            .overlay(Circle().stroke(setNumberBorderColor, lineWidth: 1.5))
-                    )
-
-                if exercise.showSecondColumn {
-                    setValueField(field: .second, keyboard: .decimalPad, text: $secondText)
-                }
-
-                setValueField(field: .third, keyboard: .numberPad, text: Binding(
-                    get: { (exercise.isTimeBased && focused != .third) ? thirdDisplayText : thirdText },
-                    set: { thirdText = $0 }
-                ))
-
+            if showDelete {
                 Button {
                     Haptics.tap()
-                    onToggle()
+                    onDelete()
                 } label: {
-                    Circle()
-                        .fill(set.isCompleted ? completedGreen : .clear)
-                        .overlay(Circle().stroke(set.isCompleted ? completedGreen : Color(hex: "D8D8DE"), lineWidth: 1.5))
-                        .frame(width: 34, height: 34)
-                        .frame(width: 44, height: 40)
-                        .overlay(
-                            Group {
-                                if isSaving {
-                                    ProgressView().controlSize(.small)
-                                } else {
-                                    Image(systemName: statusSymbol)
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundStyle(statusSymbolColor)
-                                        .offset(x: statusSymbol == "play.fill" ? 2 : 0)
-                                }
-                            }
-                        )
+                    Image(systemName: "minus.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Color(hex: "F05B5B"))
+                        .frame(width: 30, height: 40)
                 }
-                .disabled(isSaving)
+                .buttonStyle(.borderless)
+                .transition(.scale.combined(with: .opacity))
             }
-            .background(Color.white)
-            .offset(x: dragOffset)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 15)
-                    .onChanged { value in
-                        let horizontal = abs(value.translation.width)
-                        let vertical = abs(value.translation.height)
-                        guard horizontal > 28, horizontal > vertical * 1.7 else { return }
-                        if !isTrackingDrag {
-                            isTrackingDrag = true
-                            dragStartOffset = dragOffset
-                        }
-                        dragOffset = min(0, max(-revealWidth, dragStartOffset + value.translation.width))
-                    }
-                    .onEnded { value in
-                        isTrackingDrag = false
-                        let horizontal = abs(value.translation.width)
-                        let vertical = abs(value.translation.height)
-                        guard horizontal > 28, horizontal > vertical * 1.7 else {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { dragOffset = 0 }
-                            return
-                        }
-                        let projected = dragStartOffset + value.predictedEndTranslation.width
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            dragOffset = projected < -revealWidth / 2 ? -revealWidth : 0
-                        }
-                    }
-            )
         }
-        .clipped()
         .onChange(of: focused) { old, new in
             if old != nil && new == nil { commitUpdate() }
             onFocusChange(new != nil)
@@ -1081,22 +1068,42 @@ private struct ActiveSetRow: View {
 
 private enum ActiveSetField: Hashable { case second, third }
 
-private struct ActiveExerciseConnector: View {
-    var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(Color(hex: "E7E7EC"))
-                .frame(height: 1)
-            Circle()
-                .fill(Color.white)
-                .frame(width: 52, height: 52)
-                .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-                .overlay(
-                    Image(systemName: "link")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(Color(hex: "8E8E93"))
-                )
-        }
-        .padding(.horizontal, 32)
+/// Schedules a single local notification so the "rest finished" alert and sound
+/// fire even when the app is backgrounded (the in-app timer/sound only runs while
+/// the app is active).
+private enum RestReminderNotifier {
+    private static let identifier = "fitness.rest.reminder"
+
+    /// Ask for alert + sound permission. Safe to call repeatedly; the system only
+    /// prompts once and returns the stored decision afterwards.
+    static func requestAuthorization() async {
+        _ = try? await UNUserNotificationCenter.current()
+            .requestAuthorization(options: [.alert, .sound])
+    }
+
+    /// Schedule the reminder to fire at `date`. Replaces any previously scheduled
+    /// one so only the latest rest period is pending.
+    static func schedule(at date: Date, exerciseName: String?) {
+        let interval = date.timeIntervalSinceNow
+        guard interval > 0 else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "休息结束"
+        content.body = exerciseName.map { "开始下一组：\($0)" } ?? "开始下一组"
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        center.add(request)
+    }
+
+    /// Remove any pending and already-delivered rest reminder.
+    static func cancel() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        center.removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 }

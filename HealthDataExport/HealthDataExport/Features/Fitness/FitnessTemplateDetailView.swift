@@ -65,6 +65,7 @@ struct FitnessTemplateDetailView: View {
 
     @StateObject private var vm: FitnessTemplateDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var detailTarget: FitnessExercise?
 
     init(
         payload: FitnessTemplateDetailPayload,
@@ -106,6 +107,16 @@ struct FitnessTemplateDetailView: View {
                             VStack(spacing: 12) {
                                 ForEach(detail.exercises) { exercise in
                                     TemplateDetailExerciseRow(exercise: exercise)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            Haptics.tap()
+                                            detailTarget = FitnessExercise.lightweight(
+                                                id: exercise.exerciseId,
+                                                name: exercise.name,
+                                                categoryName: exercise.categoryName,
+                                                trackingType: exercise.trackingType
+                                            )
+                                        }
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -140,6 +151,9 @@ struct FitnessTemplateDetailView: View {
             Button("好") { Haptics.tap(); vm.startMessage = nil }
         } message: {
             Text(vm.startMessage ?? "")
+        }
+        .sheet(item: $detailTarget) { exercise in
+            FitnessExerciseDetailSheet(exercise: exercise)
         }
     }
 
@@ -248,10 +262,7 @@ private struct TemplateDetailExerciseRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(hex: "F6F6F8"))
-                .frame(width: 58, height: 58)
-                .overlay(BarbellIcon())
+            ExerciseThumbnail(urlString: exercise.imageUrl, size: 58, cornerRadius: 12)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(exercise.name)

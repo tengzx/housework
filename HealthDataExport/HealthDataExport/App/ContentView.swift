@@ -1,29 +1,170 @@
 import SwiftUI
+import Combine
+
+/// App-level state for a running workout. Holding it above the `TabView` lets the
+/// active-session screen live at the app root, so it survives tab switches: it can
+/// be collapsed into a floating bar (`isMinimized`) while the workout keeps running,
+/// and re-opened later.
+@MainActor
+final class ActiveWorkoutStore: ObservableObject {
+    /// The running workout's view-model. Owned here (not by the screen) so it
+    /// survives collapsing the workout into the tab-bar accessory: re-opening the
+    /// full screen reuses the same model, so its data isn't reloaded.
+    @Published private(set) var vm: FitnessActiveSessionViewModel?
+    @Published var isMinimized = false
+
+    func start(_ payload: FitnessWorkoutSessionPayload) {
+        vm = FitnessActiveSessionViewModel(payload: payload)
+        isMinimized = false
+    }
+    func minimize() { isMinimized = true }
+    func restore() { isMinimized = false }
+    func end() {
+        vm = nil
+        isMinimized = false
+    }
+}
+
+extension Notification.Name {
+    /// Posted when a workout session finishes (completed or discarded) so screens
+    /// can refresh their records without a direct reference to the session view.
+    static let fitnessSessionDidComplete = Notification.Name("fitnessSessionDidComplete")
+}
 
 struct ContentView: View {
+    @StateObject private var workout = ActiveWorkoutStore()
+    // Persist the selected tab so collapsing the workout (which toggles the tab-bar
+    // accessory) keeps the user on the tab they were on, not resetting to 记录.
+    @State private var selectedTab = 0
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             RecordWorkspaceView()
                 .tabItem {
                     Label("记录", systemImage: "list.bullet.rectangle.portrait.fill")
                 }
+                .tag(0)
 
             FitnessTemplateListView()
                 .tabItem {
                     Label("健身", systemImage: "figure.strengthtraining.traditional")
                 }
+                .tag(1)
 
             HealthExportView()
                 .tabItem {
                     Label("数据", systemImage: "house")
                 }
+                .tag(2)
 
             PlaceholderTabView(title: "我的", symbolName: "person")
                 .tabItem {
                     Label("我的", systemImage: "person")
                 }
+                .tag(3)
         }
         .tint(Color(hex: "FF7847"))
+        .environmentObject(workout)
+        // Attach the collapsed-workout accessory to the tab bar ONLY while a workout
+        // is minimized — otherwise the accessory chrome would show as an empty bar.
+        // Applied as a conditional modifier on the same TabView so tab state is kept.
+        .modifier(CollapsedWorkoutAccessory(workout: workout))
+        // The full-screen workout is hosted above the tabs; re-opening reuses the
+        // stored view-model, so no reload happens when expanding from the accessory.
+        .overlay {
+            if let vm = workout.vm, !workout.isMinimized {
+                FitnessActiveSessionView(vm: vm) {
+                    NotificationCenter.default.post(name: .fitnessSessionDidComplete, object: nil)
+                }
+                .environmentObject(workout)
+                .transition(.move(edge: .bottom))
+            }
+        }
+        .animation(.spring(response: 0.38, dampingFraction: 0.92), value: workout.isMinimized)
+        .animation(.spring(response: 0.38, dampingFraction: 0.92), value: workout.vm == nil)
+    }
+}
+
+/// Applies the tab-bar bottom accessory (the collapsed workout bar) only while a
+/// workout is minimized. Applying `tabViewBottomAccessory` unconditionally would
+/// leave an empty accessory bar visible even with no workout, so it's gated here.
+private struct CollapsedWorkoutAccessory: ViewModifier {
+    @ObservedObject var workout: ActiveWorkoutStore
+
+    func body(content: Content) -> some View {
+        if let vm = workout.vm, workout.isMinimized {
+            content
+                .tabViewBottomAccessory {
+                    WorkoutAccessoryBar(vm: vm) { workout.restore() }
+                }
+                .tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            content
+        }
+    }
+}
+
+/// Bar shown in the tab-bar accessory while a workout is collapsed. It mirrors the
+/// in-workout mini player (state prefix, current exercise, time) via the shared
+/// `miniPlayerState`. Tapping the info area re-opens the full screen; the trailing
+/// button advances the workout (or expands to finish).
+private struct WorkoutAccessoryBar: View {
+    @ObservedObject var vm: FitnessActiveSessionViewModel
+    let onExpand: () -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let state = vm.miniPlayerState(now: context.date)
+            HStack(spacing: 10) {
+                Button(action: onExpand) {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 6) {
+                                Text(state.prefix)
+                                    .font(.system(size: 13, weight: .heavy))
+                                    .foregroundStyle(state.tint)
+                                Text(state.title)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                            }
+                            Text(state.timeText)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    Haptics.tap()
+                    if state.isFinishAction {
+                        onExpand()
+                    } else {
+                        Task { await vm.handleMiniPlayerAction() }
+                    }
+                } label: {
+                    Circle()
+                        .fill(state.actionFill)
+                        .frame(width: 38, height: 38)
+                        .shadow(color: .black.opacity(0.12), radius: 5, y: 1)
+                        .overlay(
+                            Image(systemName: state.actionSymbol)
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(state.actionForeground)
+                                .offset(x: state.actionSymbol == "play.fill" ? 1.5 : 0)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(state.actionDisabled)
+            }
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Slight gray tint so the white "开始" button stays visible on the bar.
+            .background(Color(hex: "1C1C1E").opacity(0.07))
+        }
     }
 }
 

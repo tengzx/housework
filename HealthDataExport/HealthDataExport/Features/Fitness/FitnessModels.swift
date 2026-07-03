@@ -119,6 +119,7 @@ struct TemplateDetailExercise: Decodable, Identifiable {
     let name: String
     let categoryName: String?
     let trackingType: String
+    let imageUrl: String?
     let sortOrder: Int
     let restSeconds: Int?
     let note: String?
@@ -208,11 +209,56 @@ struct FitnessExercise: Decodable, Identifiable {
     let isSystem: Bool
 }
 
+extension FitnessExercise {
+    /// Reconstruct a lightweight exercise from cached fields. Used to seed the
+    /// library picker with already-selected exercises that may not be in the
+    /// currently loaded page, so they stay visible (pre-checked) and are never
+    /// dropped on confirm.
+    static func lightweight(id: Int, name: String, categoryName: String? = nil, trackingType: String) -> FitnessExercise {
+        let trimmed = categoryName?.trimmingCharacters(in: .whitespaces) ?? ""
+        return FitnessExercise(
+            id: id,
+            name: name,
+            category: trimmed.isEmpty ? nil : ExerciseCategory(id: 0, name: trimmed),
+            trackingType: trackingType,
+            isTimeBased: ExerciseTrackingDisplay.isTimeBased(trackingType),
+            supportsDistance: ExerciseTrackingDisplay.isDistanceBased(trackingType),
+            imageUrl: nil,
+            primaryMuscles: [],
+            secondaryMuscles: [],
+            isSystem: true
+        )
+    }
+}
+
 struct FitnessExercisesPage: Decodable {
     let items: [FitnessExercise]
     let page: Int
     let pageSize: Int
     let total: Int
+}
+
+struct FitnessExerciseDetail: Decodable, Identifiable {
+    let id: Int
+    let name: String
+    let category: ExerciseCategory?
+    let trackingType: String
+    let isTimeBased: Bool
+    let supportsDistance: Bool
+    let imageUrl: String?
+    let animationUrl: String?
+    let videoUrl: String?
+    let description: String?
+    let instructions: String?
+    let tips: String?
+    let primaryMuscles: [ExerciseMuscle]
+    let secondaryMuscles: [ExerciseMuscle]
+    let isSystem: Bool
+
+    /// True when there is guidance text to show.
+    var hasGuidance: Bool {
+        instructions?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
 }
 
 struct ExerciseCreateRequest: Encodable {

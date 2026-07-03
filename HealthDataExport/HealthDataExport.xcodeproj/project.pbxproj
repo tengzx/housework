@@ -8,12 +8,12 @@
 
 /* Begin PBXBuildFile section */
 		2A0000012FE0000000000001 /* HealthDataExportWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000022FE0000000000002 /* HealthDataExportWatchApp.swift */; };
-		2A0000032FE0000000000003 /* WatchTimeTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000042FE0000000000004 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift */; };
-		2A0000052FE0000000000005 /* ShortcutRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000062FE0000000000006 /* HealthDataExport/Features/Record/ShortcutRecord.swift */; };
+		2A0000032FE0000000000003 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000042FE0000000000004 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift */; };
+		2A0000052FE0000000000005 /* HealthDataExport/Features/Record/ShortcutRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000062FE0000000000006 /* HealthDataExport/Features/Record/ShortcutRecord.swift */; };
 		2A0000102FE0000000000010 /* HealthDataExport Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2A0000072FE0000000000007 /* HealthDataExport Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2A0000142FE0000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2A0000152FE0000000000015 /* Assets.xcassets */; };
-		2A0000172FE0000000000017 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000182FE0000000000018 /* HealthDataExport/Shared/Haptics.swift */; };
-		2A00001F2FE000000000001F /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */; };
+		2A0000172FE0000000000017 /* HealthDataExport/Shared/Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000182FE0000000000018 /* HealthDataExport/Shared/Haptics.swift */; };
+		2A00001F2FE000000000001F /* HealthDataExport/Shared/Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -372,10 +372,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				2A0000012FE0000000000001 /* HealthDataExportWatchApp.swift in Sources */,
-				2A0000032FE0000000000003 /* WatchTimeTrackerView.swift in Sources */,
-				2A0000052FE0000000000005 /* ShortcutRecord.swift in Sources */,
-				2A0000172FE0000000000017 /* Haptics.swift in Sources */,
-				2A00001F2FE000000000001F /* Color+Hex.swift in Sources */,
+				2A0000032FE0000000000003 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift in Sources */,
+				2A0000052FE0000000000005 /* HealthDataExport/Features/Record/ShortcutRecord.swift in Sources */,
+				2A0000172FE0000000000017 /* HealthDataExport/Shared/Haptics.swift in Sources */,
+				2A00001F2FE000000000001F /* HealthDataExport/Shared/Color+Hex.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

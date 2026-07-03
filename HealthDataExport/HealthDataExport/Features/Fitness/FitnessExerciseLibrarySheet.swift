@@ -5,47 +5,164 @@ import Combine
 
 @MainActor
 final class ExerciseLibraryViewModel: ObservableObject {
-    @Published var allExercises: [FitnessExercise] = []
+    /// Exercises loaded from the server for the current query, accumulated across pages.
+    @Published private(set) var loaded: [FitnessExercise] = []
     @Published var searchText = ""
     @Published var selectedIds: Set<Int> = []
     @Published private(set) var isLoading = false
+    @Published private(set) var isLoadingMore = false
     @Published var errorMessage: String?
+
+    // Filters
+    @Published private(set) var categories: [ExerciseCategory] = []
+    @Published private(set) var muscleGroups: [MuscleGroup] = []   // top-level body parts only
+    @Published private(set) var selectedCategoryId: Int?
+    @Published private(set) var selectedMuscleGroupId: Int?
+
+    var hasActiveFilter: Bool { selectedCategoryId != nil || selectedMuscleGroupId != nil }
+
+    private let pageSize = 25
+    private var currentPage = 0
+    private var total = 0
+    private var canLoadMore = true
+    private var searchTask: Task<Void, Never>?
+
+    /// Already-selected exercises passed in by the caller. Kept as full objects
+    /// (reconstructed if needed) so they remain visible and are never dropped on
+    /// confirm even when they fall outside the currently loaded page(s).
+    private var preselected: [FitnessExercise] = []
+    /// Every exercise we've ever resolved, keyed by id — the source of truth for
+    /// building the confirmed selection.
+    private var knownById: [Int: FitnessExercise] = [:]
+
+    // The list actually shown. In browse mode (empty search) we surface any
+    // preselected exercises that the server pages haven't returned yet, so the
+    // user can see what's already added. In search mode we show server matches only.
+    private var visibleExercises: [FitnessExercise] {
+        // Only surface preselected-but-not-loaded exercises in plain browse mode
+        // (no search text, no active filter) — otherwise honor the query as-is.
+        if searchText.trimmingCharacters(in: .whitespaces).isEmpty && !hasActiveFilter {
+            let loadedIds = Set(loaded.map { $0.id })
+            let missing = preselected.filter { !loadedIds.contains($0.id) }
+            return (missing + loaded).sorted { $0.name < $1.name }
+        }
+        return loaded
+    }
+
+    /// Ids of the last few visible rows — used to prefetch the next page before
+    /// the user reaches the very bottom.
+    private var prefetchTriggerIds: Set<Int> {
+        Set(visibleExercises.suffix(prefetchDistance).map { $0.id })
+    }
+    private let prefetchDistance = 5
 
     // Grouped by first character for default view
     var grouped: [(letter: String, items: [FitnessExercise])] {
-        let list = filtered
-        let dict = Dictionary(grouping: list) { ex -> String in
-            let first = ex.name.prefix(1)
-            return String(first).uppercased()
+        let dict = Dictionary(grouping: visibleExercises) { ex -> String in
+            String(ex.name.prefix(1)).uppercased()
         }
         return dict.keys.sorted().map { k in (k, dict[k]!.sorted { $0.name < $1.name }) }
-    }
-
-    private var filtered: [FitnessExercise] {
-        guard !searchText.isEmpty else { return allExercises }
-        return allExercises.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
     var hasSelection: Bool { !selectedIds.isEmpty }
     var selectionCount: Int { selectedIds.count }
 
-    func load() async {
-        guard allExercises.isEmpty else { return }
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            let page = try await FitnessAPIClient.exercises(pageSize: 200)
-            allExercises = page.items.sorted { $0.name < $1.name }
-        } catch {}
+    func setPreselected(_ exercises: [FitnessExercise]) {
+        preselected = exercises
+        selectedIds = Set(exercises.map { $0.id })
+        for ex in exercises { knownById[ex.id] = ex }
     }
 
-    func reload() async {
-        isLoading = true
-        defer { isLoading = false }
+    func loadInitial() async {
+        guard loaded.isEmpty else { return }
+        // Load filter options in the background so the exercise list can render
+        // immediately instead of waiting on the category/muscle endpoints.
+        Task { await loadFilters() }
+        await fetch(reset: true)
+    }
+
+    private func loadFilters() async {
+        guard categories.isEmpty && muscleGroups.isEmpty else { return }
+        async let cats = try? FitnessAPIClient.exerciseCategories()
+        async let muscles = try? FitnessAPIClient.muscleGroups()
+        categories = await cats ?? []
+        // Top-level body parts only (no parent).
+        muscleGroups = (await muscles ?? []).filter { $0.parentId == nil }
+    }
+
+    func setCategory(_ id: Int?) {
+        guard selectedCategoryId != id else { return }
+        selectedCategoryId = id
+        Task { await fetch(reset: true) }
+    }
+
+    func setMuscleGroup(_ id: Int?) {
+        guard selectedMuscleGroupId != id else { return }
+        selectedMuscleGroupId = id
+        Task { await fetch(reset: true) }
+    }
+
+    var selectedCategoryName: String {
+        categories.first { $0.id == selectedCategoryId }?.name ?? "所有器械"
+    }
+
+    var selectedMuscleGroupName: String {
+        muscleGroups.first { $0.id == selectedMuscleGroupId }?.name ?? "所有肌群"
+    }
+
+    func onSearchChanged() {
+        searchTask?.cancel()
+        searchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            if Task.isCancelled { return }
+            await self?.fetch(reset: true)
+        }
+    }
+
+    func loadMoreIfNeeded(currentItem: FitnessExercise) {
+        guard canLoadMore, !isLoading, !isLoadingMore else { return }
+        guard prefetchTriggerIds.contains(currentItem.id) else { return }
+        Task { await fetch(reset: false) }
+    }
+
+    private func fetch(reset: Bool) async {
+        if reset {
+            currentPage = 0
+            canLoadMore = true
+            isLoading = true
+        } else {
+            guard canLoadMore else { return }
+            isLoadingMore = true
+        }
+        defer {
+            isLoading = false
+            isLoadingMore = false
+        }
+
+        let nextPage = currentPage + 1
+        let kw = searchText.trimmingCharacters(in: .whitespaces)
         do {
-            let page = try await FitnessAPIClient.exercises(pageSize: 200)
-            allExercises = page.items.sorted { $0.name < $1.name }
-        } catch {}
+            let page = try await FitnessAPIClient.exercises(
+                keyword: kw.isEmpty ? nil : kw,
+                categoryId: selectedCategoryId,
+                muscleGroupId: selectedMuscleGroupId,
+                page: nextPage,
+                pageSize: pageSize
+            )
+            if reset { loaded = [] }
+            // Backend returns exercises already sorted by name, so we just
+            // append in order (dedup guards against overlap between pages).
+            var seen = Set(loaded.map { $0.id })
+            for ex in page.items where seen.insert(ex.id).inserted {
+                loaded.append(ex)
+                knownById[ex.id] = ex
+            }
+            currentPage = nextPage
+            total = page.total
+            canLoadMore = loaded.count < total && !page.items.isEmpty
+        } catch {
+            canLoadMore = false
+        }
     }
 
     func toggle(_ id: Int) {
@@ -57,26 +174,32 @@ final class ExerciseLibraryViewModel: ObservableObject {
     }
 
     func confirmedExercises() -> [FitnessExercise] {
-        allExercises.filter { selectedIds.contains($0.id) }
+        selectedIds.compactMap { knownById[$0] }
     }
 
     // MARK: CRUD
 
     func addExercise(_ exercise: FitnessExercise) {
-        allExercises.append(exercise)
-        allExercises.sort { $0.name < $1.name }
+        knownById[exercise.id] = exercise
+        if !loaded.contains(where: { $0.id == exercise.id }) {
+            loaded.append(exercise)
+            loaded.sort { $0.name < $1.name }
+        }
     }
 
     func updateExercise(_ exercise: FitnessExercise) {
-        if let idx = allExercises.firstIndex(where: { $0.id == exercise.id }) {
-            allExercises[idx] = exercise
+        knownById[exercise.id] = exercise
+        if let idx = loaded.firstIndex(where: { $0.id == exercise.id }) {
+            loaded[idx] = exercise
         }
     }
 
     func deleteExercise(id: Int) async {
         do {
             try await FitnessAPIClient.deleteExercise(id: id)
-            allExercises.removeAll { $0.id == id }
+            loaded.removeAll { $0.id == id }
+            knownById[id] = nil
+            preselected.removeAll { $0.id == id }
             selectedIds.remove(id)
         } catch {
             errorMessage = "删除失败，请检查网络"
@@ -101,7 +224,7 @@ private enum LibraryFormTarget: Identifiable {
 // MARK: - Sheet
 
 struct FitnessExerciseLibrarySheet: View {
-    let preselectedIds: Set<Int>
+    let preselected: [FitnessExercise]
     let onConfirm: ([FitnessExercise]) -> Void
 
     @StateObject private var vm = ExerciseLibraryViewModel()
@@ -110,6 +233,9 @@ struct FitnessExerciseLibrarySheet: View {
 
     @State private var formTarget: LibraryFormTarget?
     @State private var deleteTarget: FitnessExercise?
+    @State private var detailTarget: FitnessExercise?
+    @State private var showMuscleFilter = false
+    @State private var showCategoryFilter = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -147,6 +273,8 @@ struct FitnessExerciseLibrarySheet: View {
                     .focused($searchFocused)
                     .font(.system(size: 16))
                     .foregroundStyle(Color(hex: "1C1C1E"))
+                    .autocorrectionDisabled()
+                    .onChange(of: vm.searchText) { _ in vm.onSearchChanged() }
                 if !vm.searchText.isEmpty {
                     Button { Haptics.tap(); vm.searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -159,6 +287,9 @@ struct FitnessExerciseLibrarySheet: View {
             .background(Color(hex: "E7E7EB"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+
+            // Filters
+            filterBar
 
             // Content
             if vm.isLoading {
@@ -184,11 +315,12 @@ struct FitnessExerciseLibrarySheet: View {
                                 ForEach(group.items) { exercise in
                                     ExerciseLibraryRow(
                                         exercise: exercise,
-                                        isSelected: vm.selectedIds.contains(exercise.id)
-                                    ) {
-                                        vm.toggle(exercise.id)
-                                    }
+                                        isSelected: vm.selectedIds.contains(exercise.id),
+                                        onToggle: { vm.toggle(exercise.id) },
+                                        onOpenDetail: { detailTarget = exercise }
+                                    )
                                     .padding(.horizontal, 16)
+                                    .onAppear { vm.loadMoreIfNeeded(currentItem: exercise) }
                                     .contextMenu(menuItems: {
                                         if !exercise.isSystem {
                                             Button {
@@ -215,6 +347,12 @@ struct FitnessExerciseLibrarySheet: View {
                                 SectionLetterHeader(letter: group.letter)
                             }
                         }
+
+                        if vm.isLoadingMore {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                        }
                     }
                     .padding(.bottom, 30)
                 }
@@ -222,8 +360,32 @@ struct FitnessExerciseLibrarySheet: View {
         }
         .background(Color(hex: "F4F4F6").ignoresSafeArea())
         .task {
-            vm.selectedIds = preselectedIds
-            await vm.load()
+            vm.setPreselected(preselected)
+            await vm.loadInitial()
+        }
+        // 动作详情 + 动作指导（点击行弹出；加号才添加到模版）
+        .sheet(item: $detailTarget) { exercise in
+            FitnessExerciseDetailSheet(exercise: exercise)
+        }
+        // 肌群筛选
+        .sheet(isPresented: $showMuscleFilter) {
+            FilterPickerSheet(
+                title: "肌群",
+                allLabel: "所有肌群",
+                options: vm.muscleGroups.map { ($0.id, $0.name) },
+                selectedId: vm.selectedMuscleGroupId,
+                onApply: { vm.setMuscleGroup($0) }
+            )
+        }
+        // 分类筛选
+        .sheet(isPresented: $showCategoryFilter) {
+            FilterPickerSheet(
+                title: "器械",
+                allLabel: "所有器械",
+                options: vm.categories.map { ($0.id, $0.name) },
+                selectedId: vm.selectedCategoryId,
+                onApply: { vm.setCategory($0) }
+            )
         }
         // 新建 / 编辑动作（合并为单一 sheet，避免多 sheet modifier 导致闪退）
         .sheet(item: $formTarget) { target in
@@ -262,6 +424,153 @@ struct FitnessExerciseLibrarySheet: View {
             Text(vm.errorMessage ?? "")
         }
     }
+
+    // MARK: - Filter bar
+
+    @ViewBuilder
+    private var filterBar: some View {
+        if !vm.categories.isEmpty || !vm.muscleGroups.isEmpty {
+            HStack(spacing: 10) {
+                if !vm.muscleGroups.isEmpty {
+                    FilterButton(
+                        title: vm.selectedMuscleGroupName,
+                        isActive: vm.selectedMuscleGroupId != nil
+                    ) { Haptics.tap(); showMuscleFilter = true }
+                }
+                if !vm.categories.isEmpty {
+                    FilterButton(
+                        title: vm.selectedCategoryName,
+                        isActive: vm.selectedCategoryId != nil
+                    ) { Haptics.tap(); showCategoryFilter = true }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
+        }
+    }
+}
+
+// MARK: - Filter summary button
+
+private struct FilterButton: View {
+    let title: String
+    let isActive: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(isActive ? .white : Color(hex: "1C1C1E"))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(
+                isActive ? Color(hex: "1C1C1E") : Color(hex: "E7E7EB"),
+                in: Capsule()
+            )
+        }
+        .buttonStyle(HapticButtonStyle())
+    }
+}
+
+// MARK: - Filter picker sheet (single-select)
+
+struct FilterPickerSheet: View {
+    let title: String
+    let allLabel: String
+    let options: [(id: Int, name: String)]
+    let selectedId: Int?
+    let onApply: (Int?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var choice: Int?
+
+    init(title: String, allLabel: String, options: [(id: Int, name: String)], selectedId: Int?, onApply: @escaping (Int?) -> Void) {
+        self.title = title
+        self.allLabel = allLabel
+        self.options = options
+        self.selectedId = selectedId
+        self.onApply = onApply
+        _choice = State(initialValue: selectedId)
+    }
+
+    private var chosenName: String {
+        options.first { $0.id == choice }?.name ?? allLabel
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("筛选条件 · \(title)")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Color(hex: "1C1C1E"))
+                .padding(.top, 18)
+                .padding(.bottom, 12)
+
+            ScrollView {
+                VStack(spacing: 10) {
+                    row(id: nil, name: allLabel)
+                    ForEach(options, id: \.id) { opt in
+                        row(id: opt.id, name: opt.name)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+            }
+
+            Button {
+                Haptics.tap()
+                onApply(choice)
+                dismiss()
+            } label: {
+                Text("按“\(chosenName)”筛选")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color(hex: "1C1C1E"), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(HapticButtonStyle())
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 20)
+        }
+        .background(Color(hex: "F4F4F6").ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+    }
+
+    private func row(id: Int?, name: String) -> some View {
+        let isSelected = choice == id
+        return Button {
+            Haptics.tap()
+            choice = id
+        } label: {
+            HStack {
+                Text(name)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color(hex: "1C1C1E"))
+                Spacer()
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 20))
+                    .foregroundStyle(isSelected ? Color(hex: "1C1C1E") : Color(hex: "C4C4C9"))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 18)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? Color(hex: "1C1C1E") : Color.clear, lineWidth: 2)
+            )
+        }
+        .buttonStyle(HapticButtonStyle())
+    }
 }
 
 // MARK: - Section header
@@ -285,13 +594,11 @@ private struct ExerciseLibraryRow: View {
     let exercise: FitnessExercise
     let isSelected: Bool
     let onToggle: () -> Void
+    let onOpenDetail: () -> Void
 
     var body: some View {
         HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(hex: "F2F2F5"))
-                .frame(width: 48, height: 48)
-                .overlay(BarbellIcon())
+            ExerciseThumbnail(urlString: exercise.imageUrl, size: 48, cornerRadius: 12)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(exercise.name)
@@ -344,7 +651,7 @@ private struct ExerciseLibraryRow: View {
         }
         .padding(.vertical, 12)
         .contentShape(Rectangle())
-        .onTapGesture { Haptics.tap(); onToggle() }
+        .onTapGesture { Haptics.tap(); onOpenDetail() }
     }
 }
 

@@ -56,8 +56,46 @@ final class FitnessTemplateListViewModel: ObservableObject {
 
     func loadAll() async {
         await load()
-        await loadStrengthVolume()
-        await loadRecentSessions()
+        await loadStats()
+    }
+
+    /// Load volume stats and recent sessions concurrently and commit both results
+    /// in a single state update, so the stats card's height changes once instead
+    /// of several times (which caused the scroll view to jitter on load / period
+    /// switch).
+    func loadStats() async {
+        guard !isStatsLoading else { return }
+        isStatsLoading = true
+        isSessionsLoading = true
+        statsErrorMessage = nil
+        sessionsErrorMessage = nil
+
+        let period = self.period
+        async let volumeTask = FitnessAPIClient.strengthVolume(
+            range: selectedStrengthRange.rawValue,
+            startDate: period.startDateString,
+            endDate: period.endDateString
+        )
+        async let sessionsTask = FitnessAPIClient.workoutSessions(
+            status: "completed",
+            startDate: period.startDateString,
+            endDate: period.endDateString,
+            page: 1,
+            pageSize: selectedStrengthRange.sessionPageSize
+        )
+
+        do {
+            let volume = try await volumeTask
+            let sessions = try await sessionsTask
+            strengthVolume = volume
+            sessionsInRange = sessions.items
+        } catch {
+            statsErrorMessage = "统计分析加载失败"
+            sessionsErrorMessage = "训练记录加载失败"
+        }
+
+        isStatsLoading = false
+        isSessionsLoading = false
     }
 
     func loadStrengthVolume() async {
@@ -133,9 +171,9 @@ final class FitnessTemplateListViewModel: ObservableObject {
 
 struct FitnessTemplateListView: View {
     @StateObject private var vm = FitnessTemplateListViewModel()
+    @EnvironmentObject private var workout: ActiveWorkoutStore
     @State private var navigateToDetail: FitnessTemplateDetailPayload?
     @State private var navigateToEditor: FitnessTemplateEditorPayload?
-    @State private var navigateToSession: FitnessWorkoutSessionPayload?
     @State private var selectedStatsSession: FitnessSessionSummary?
     @State private var templateToDelete: FitnessTemplateSummary?
 
@@ -213,24 +251,15 @@ struct FitnessTemplateListView: View {
                                 sessionsErrorMessage: vm.sessionsErrorMessage,
                                 onSelectRange: { range in
                                     vm.selectStrengthRange(range)
-                                    Task {
-                                        await vm.loadStrengthVolume()
-                                        await vm.loadRecentSessions()
-                                    }
+                                    Task { await vm.loadStats() }
                                 },
                                 onPreviousPeriod: {
                                     vm.goToPreviousPeriod()
-                                    Task {
-                                        await vm.loadStrengthVolume()
-                                        await vm.loadRecentSessions()
-                                    }
+                                    Task { await vm.loadStats() }
                                 },
                                 onNextPeriod: {
                                     vm.goToNextPeriod()
-                                    Task {
-                                        await vm.loadStrengthVolume()
-                                        await vm.loadRecentSessions()
-                                    }
+                                    Task { await vm.loadStats() }
                                 },
                                 onRetry: {
                                     Task { await vm.loadStrengthVolume() }
@@ -266,14 +295,20 @@ struct FitnessTemplateListView: View {
                         }
                     }
                 }
-                .refreshable { await vm.loadAll() }
+                // Detach from the refresh gesture's task so its cancellation
+                // doesn't abort the URLSession calls and surface as a bogus
+                // "network error" (see FitnessOverviewViewModel.refresh).
+                .refreshable { await Task { await vm.loadAll() }.value }
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(item: $navigateToDetail) { payload in
                 FitnessTemplateDetailView(payload: payload, onEdit: { editorPayload in
                     navigateToEditor = editorPayload
                 }, onStart: { sessionPayload in
-                    navigateToSession = sessionPayload
+                    workout.start(sessionPayload)
+                    // Pop the template detail so collapsing the workout reveals the
+                    // fitness home, not the "开始训练" screen we launched from.
+                    navigateToDetail = nil
                 })
             }
             .navigationDestination(item: $navigateToEditor) { payload in
@@ -287,9 +322,12 @@ struct FitnessTemplateListView: View {
                     }
                 )
             }
-            .navigationDestination(item: $navigateToSession) { payload in
-                FitnessActiveSessionView(payload: payload) { await vm.load() }
-            }
+        }
+        // The active workout is hosted at the app root now (see ContentView), so when
+        // it finishes we reload everything (templates + stats + records) so the
+        // just-finished workout shows up in the training records list.
+        .onReceive(NotificationCenter.default.publisher(for: .fitnessSessionDidComplete)) { _ in
+            Task { await vm.loadAll() }
         }
         .sheet(item: $selectedStatsSession) { session in
             FitnessSessionStatsDetailSheet(session: session)

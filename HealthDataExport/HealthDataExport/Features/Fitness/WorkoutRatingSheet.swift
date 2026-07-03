@@ -26,7 +26,11 @@ private let rpeLevels: [RPELevel] = [
 
 struct WorkoutRatingSheet: View {
     @Binding var rpe: Double
+    /// Whether this session came from a template (only then can we offer to
+    /// update it). When false the "保存并更新模版" button is hidden.
+    var canUpdateTemplate: Bool = false
     let onSave: () -> Void
+    var onSaveAndUpdateTemplate: () -> Void = {}
 
     private var level: RPELevel { rpeLevels[max(0, min(9, Int(rpe.rounded()) - 1)) ] }
 
@@ -61,15 +65,33 @@ struct WorkoutRatingSheet: View {
 
             Spacer()
 
-            Button(action: onSave) {
-                Text("保存并结束体能训练")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(Color(hex: "1C1C1E"), in: Capsule())
+            VStack(spacing: 12) {
+                Button(action: onSave) {
+                    Text("保存体能训练")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(Color(hex: "1C1C1E"), in: Capsule())
+                }
+                .buttonStyle(HapticButtonStyle())
+
+                if canUpdateTemplate {
+                    Button(action: onSaveAndUpdateTemplate) {
+                        Text("保存并更新模版")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(Color(hex: "1C1C1E"))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(
+                                Capsule()
+                                    .fill(Color.white)
+                                    .overlay(Capsule().stroke(Color(hex: "D8D8DE"), lineWidth: 1.5))
+                            )
+                    }
+                    .buttonStyle(HapticButtonStyle())
+                }
             }
-            .buttonStyle(HapticButtonStyle())
             .padding(.horizontal, 20)
             .padding(.bottom, 40)
         }

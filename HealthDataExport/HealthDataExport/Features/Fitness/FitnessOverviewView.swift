@@ -24,12 +24,50 @@ final class FitnessOverviewViewModel: ObservableObject {
             dashboard = d
             recentSessions = s
         } catch {
-            errorMessage = "加载失败，请检查网络"
+            errorMessage = Self.describe(error)
         }
     }
 
+    /// Turn an underlying error into a message that tells network problems apart
+    /// from decoding problems, so failures aren't all masked as "check network".
+    private static func describe(_ error: Error) -> String {
+        switch error {
+        case let urlError as URLError:
+            return "网络错误：\(urlError.localizedDescription)"
+        case let decodingError as DecodingError:
+            return "数据解析失败：\(Self.decodingDetail(decodingError))"
+        default:
+            return "加载失败：\(error.localizedDescription)"
+        }
+    }
+
+    private static func decodingDetail(_ error: DecodingError) -> String {
+        switch error {
+        case let .keyNotFound(key, ctx):
+            return "缺少字段 \(key.stringValue)（\(Self.path(ctx))）"
+        case let .typeMismatch(_, ctx):
+            return "类型不符（\(Self.path(ctx))）"
+        case let .valueNotFound(_, ctx):
+            return "值为空（\(Self.path(ctx))）"
+        case let .dataCorrupted(ctx):
+            return ctx.debugDescription
+        @unknown default:
+            return "未知解析错误"
+        }
+    }
+
+    private static func path(_ ctx: DecodingError.Context) -> String {
+        ctx.codingPath.map { $0.stringValue }.joined(separator: ".")
+    }
+
     func refresh() async {
-        await load()
+        // SwiftUI cancels the `.refreshable` task the moment the pull gesture
+        // ends. That cancellation propagates to the in-flight URLSession calls,
+        // which throw `URLError.cancelled` and get mis-reported as a network
+        // failure — even though the network is fine (entering the tab via
+        // `.task` loads correctly). Running the load in an unstructured Task
+        // detaches it from the gesture's lifetime so the requests complete.
+        await Task { await load() }.value
     }
 }
 

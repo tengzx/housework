@@ -318,10 +318,10 @@ private struct MuscleLoadCard: View {
                     .frame(width: 120, height: 120)
 
                 VStack(spacing: 9) {
-                    ForEach(visibleItems) { item in
+                    ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
                         HStack(spacing: 9) {
                             Circle()
-                                .fill(muscleLoadColor(item.muscleCode))
+                                .fill(muscleLoadColor(at: index))
                                 .frame(width: 9, height: 9)
                             Text(item.muscleName)
                                 .font(.system(size: 15, weight: .semibold))
@@ -352,7 +352,7 @@ private struct MuscleLoadDonutChart: View {
             let total = max(items.reduce(0) { $0 + max($1.percent, 0) }, 1)
             var start = Angle.degrees(-90)
 
-            for item in items {
+            for (index, item) in items.enumerated() {
                 let degrees = max(item.percent, 0) / total * 360
                 let end = start + .degrees(degrees)
                 var path = Path()
@@ -365,7 +365,7 @@ private struct MuscleLoadDonutChart: View {
                 )
                 context.stroke(
                     path,
-                    with: .color(muscleLoadColor(item.muscleCode)),
+                    with: .color(muscleLoadColor(at: index)),
                     style: StrokeStyle(lineWidth: 13, lineCap: .butt)
                 )
                 start = end
@@ -374,22 +374,26 @@ private struct MuscleLoadDonutChart: View {
     }
 }
 
-private func muscleLoadColor(_ code: String) -> Color {
-    switch code {
-    case "quadriceps": return Color(hex: "137A37")
-    case "glutes": return Color(hex: "39B54A")
-    case "hamstrings": return Color(hex: "57C85A")
-    case "adductors": return Color(hex: "A9D4E8")
-    case "calves": return Color(hex: "7ED957")
-    case "abductors": return Color(hex: "CDD7DD")
-    case "hip_flexors": return Color(hex: "12B53F")
-    case "traps": return Color(hex: "6D6DD6")
-    case "lats": return Color(hex: "5B8DEF")
-    case "lower_back": return Color(hex: "4A4AC0")
-    case "core": return Color(hex: "17B5B5")
-    case "forearms": return Color(hex: "4A7AEF")
-    default: return regionColor(code)
-    }
+/// Distinct colors assigned by position, so every muscle in the list gets its
+/// own color regardless of its code (the backend returns many muscle codes and
+/// hardcoding a color per code left most of them defaulting to the same gray).
+private let muscleLoadPalette: [Color] = [
+    Color(hex: "F5721E"), // orange
+    Color(hex: "5B8DEF"), // blue
+    Color(hex: "39B54A"), // green
+    Color(hex: "6D6DD6"), // purple
+    Color(hex: "17B5B5"), // teal
+    Color(hex: "F8C06A"), // amber
+    Color(hex: "EF5DA8"), // pink
+    Color(hex: "4A4AC0"), // indigo
+    Color(hex: "7ED957"), // light green
+    Color(hex: "9A6BEF"), // violet
+    Color(hex: "E85D5D"), // red
+    Color(hex: "5AC8FA")  // cyan
+]
+
+private func muscleLoadColor(at index: Int) -> Color {
+    muscleLoadPalette[index % muscleLoadPalette.count]
 }
 
 // MARK: - Heart rate
