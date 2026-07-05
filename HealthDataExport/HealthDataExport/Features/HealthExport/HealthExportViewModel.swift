@@ -13,9 +13,10 @@ final class HealthExportViewModel: ObservableObject {
     @Published var previewSummary = ""
     @Published var previewJSON = ""
 
-    let store = ConfigurationStore.shared
+    let store: ConfigurationStore
 
-    init() {
+    init(store: ConfigurationStore) {
+        self.store = store
         reloadSelectedConfiguration()
     }
 

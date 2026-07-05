@@ -10,6 +10,7 @@ struct Calendar2EventFormSheet: View {
     @ObservedObject var store: TimeCalendarStore
     let onSave: (Calendar2Event) -> Void
     let onDelete: ((String) -> Void)?
+    let onShowDetails: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -21,20 +22,34 @@ struct Calendar2EventFormSheet: View {
     @State private var start: Int
     @State private var end: Int
     @State private var draftNote: String
+    @State private var quickText: String
+    @State private var quickError: String
+    @State private var showDetails: Bool
     @State private var isSaving = false
+    @State private var didAddShortcut = false
+    @State private var shortcutAlert: String?
     @State private var showManagement = false
     @State private var managementTab: ManagementTab = .category
+    @FocusState private var isQuickEntryFocused: Bool
+
+    private let quickExamples = [
+        "15点玩手机半个小时",
+        "昨晚8点健身1小时",
+        "今天下午2点写代码2小时",
+    ]
 
     init(
         mode: Mode,
         store: TimeCalendarStore,
         onSave: @escaping (Calendar2Event) -> Void,
-        onDelete: ((String) -> Void)?
+        onDelete: ((String) -> Void)?,
+        onShowDetails: (() -> Void)? = nil
     ) {
         self.mode = mode
         self.store = store
         self.onSave = onSave
         self.onDelete = onDelete
+        self.onShowDetails = onShowDetails
 
         let source: Calendar2Event
         switch mode {
@@ -51,6 +66,12 @@ struct Calendar2EventFormSheet: View {
         _start = State(initialValue: source.start)
         _end = State(initialValue: source.end)
         _draftNote = State(initialValue: source.note ?? "")
+        _quickText = State(initialValue: "")
+        _quickError = State(initialValue: "")
+        _showDetails = State(initialValue: {
+            if case .edit = mode { return true }
+            return false
+        }())
     }
 
     private var isEdit: Bool {
@@ -68,18 +89,32 @@ struct Calendar2EventFormSheet: View {
     }
 
     private var trimmedName: String { draftName.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var canSave: Bool { !trimmedName.isEmpty && end > start && !isSaving }
+    private var trimmedQuickText: String { quickText.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var isQuickCreate: Bool { !isEdit && !showDetails }
+    private var canSave: Bool {
+        if isSaving { return false }
+        if isQuickCreate { return !trimmedQuickText.isEmpty }
+        return !trimmedName.isEmpty && end > start
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    header
-                    nameField
-                    timeCard
-                    categorySection
-                    subcategorySection
-                    noteField
+                    if isQuickCreate {
+                        quickHeader
+                    } else {
+                        header
+                    }
+                    if isQuickCreate {
+                        quickEntryField
+                    } else {
+                        nameField
+                        timeCard
+                        categorySection
+                        subcategorySection
+                        noteField
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 10)
@@ -88,6 +123,20 @@ struct Calendar2EventFormSheet: View {
             saveBar
         }
         .background(Calendar2Style.sheet)
+        .alert("快捷指令", isPresented: Binding(
+            get: { shortcutAlert != nil },
+            set: { if !$0 { shortcutAlert = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(shortcutAlert ?? "")
+        }
+        .onAppear {
+            guard isQuickCreate else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                isQuickEntryFocused = true
+            }
+        }
         .sheet(isPresented: $showManagement) {
             Calendar2ManagementSheet(
                 initialTab: managementTab,
@@ -107,6 +156,29 @@ struct Calendar2EventFormSheet: View {
 
     // MARK: - Header
 
+    private var quickHeader: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("你需要补录什么？")
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "111115"))
+            Spacer()
+            Button {
+                openDetails()
+            } label: {
+                HStack(spacing: 5) {
+                    Text("详细")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Calendar2Style.muted)
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+            }
+            .buttonStyle(HapticButtonStyle())
+        }
+    }
+
     private var header: some View {
         HStack(spacing: 10) {
             Circle()
@@ -116,6 +188,22 @@ struct Calendar2EventFormSheet: View {
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "23232A"))
             Spacer()
+            if isEdit {
+                Button {
+                    addAsShortcut()
+                } label: {
+                    Image(systemName: didAddShortcut ? "checkmark" : "bolt.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(didAddShortcut ? Color(hex: "24C48E") : Calendar2Style.accent)
+                        .frame(width: 38, height: 38)
+                        .background(
+                            (didAddShortcut ? Color(hex: "24C48E") : Calendar2Style.accent).opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                }
+                .buttonStyle(Calendar2PressStyle())
+                .disabled(didAddShortcut || trimmedName.isEmpty)
+            }
             if isEdit, let onDelete, let event = originalEvent {
                 Button(role: .destructive) {
                     onDelete(event.id)
@@ -128,6 +216,75 @@ struct Calendar2EventFormSheet: View {
                         .background(Color(hex: "FCEBE9"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(Calendar2PressStyle())
+            }
+        }
+    }
+
+    /// Add the event being edited to the quick-record shortcut list, mirroring
+    /// the current form state (name / category / subtype). The color follows the
+    /// event's color when known so the shortcut reads the same on the record grid.
+    private func addAsShortcut() {
+        guard !trimmedName.isEmpty else { return }
+        // Guard against duplicates client-side: the backend rejects a repeated
+        // name ("shortcut name already exists"), so surface that up front instead
+        // of enqueuing a create that can never land.
+        if ShortcutRecordStore.shared.tasks.contains(where: { $0.name == trimmedName }) {
+            shortcutAlert = "「\(trimmedName)」已在快捷指令中"
+            return
+        }
+        let colorHex = RemoteShortcut.normalizeHex(originalEvent?.colorHex) ?? ShortcutTask.defaultColorHex
+        let template = ShortcutTask(
+            name: trimmedName,
+            symbolName: ShortcutRecordStore.symbolName(for: trimmedName),
+            colorHex: colorHex
+        )
+        ShortcutRecordStore.shared.addTask(
+            name: trimmedName,
+            template: template,
+            categoryId: pickedCategory.isEmpty ? nil : pickedCategory,
+            subtypeId: pickedType
+        )
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            didAddShortcut = true
+        }
+        shortcutAlert = "已添加「\(trimmedName)」到快捷指令"
+    }
+
+    // MARK: - Quick Entry
+
+    private var quickEntryField: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField("几点开始，做了什么，做了多久，例如 15点玩手机半个小时", text: $quickText, axis: .vertical)
+                .lineLimit(2...4)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .focused($isQuickEntryFocused)
+                .font(.system(size: 21, weight: .semibold))
+                .foregroundStyle(Color(hex: "23232A"))
+                .tint(Calendar2Style.accent)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(quickExamples, id: \.self) { example in
+                    Button {
+                        quickText = example
+                        isQuickEntryFocused = true
+                    } label: {
+                        Text("例：\(example)")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color(hex: "B8B8C0"))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(HapticButtonStyle())
+                }
+            }
+            .padding(.top, 2)
+
+            if !quickError.isEmpty {
+                Text(quickError)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color(hex: "E5564B"))
+                    .padding(.horizontal, 2)
             }
         }
     }
@@ -331,7 +488,7 @@ struct Calendar2EventFormSheet: View {
                 .fill(Color.black.opacity(0.05))
                 .frame(height: 1)
             Button { commit() } label: {
-                Text("保存")
+                Text(isQuickCreate ? "继续" : "保存")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -376,9 +533,34 @@ struct Calendar2EventFormSheet: View {
             .foregroundStyle(Color(hex: "9A9AA2"))
     }
 
+    private func openDetails() {
+        isQuickEntryFocused = false
+        onShowDetails?()
+        DispatchQueue.main.async {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                showDetails = true
+            }
+        }
+    }
+
     private func commit() {
         guard canSave else { return }
         isSaving = true
+        if isQuickCreate {
+            let text = trimmedQuickText
+            let dayOffset = pickedDayOffset
+            quickError = ""
+            Task {
+                if await store.createNaturalLanguageEvent(text: text, dayOffset: dayOffset) != nil {
+                    dismiss()
+                } else {
+                    quickError = store.statusMessage
+                }
+                isSaving = false
+            }
+            return
+        }
+
         let original = originalEvent
         let event = Calendar2Event(
             id: original?.id ?? "",

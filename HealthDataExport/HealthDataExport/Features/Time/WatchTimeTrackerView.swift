@@ -2,203 +2,217 @@ import SwiftUI
 
 @MainActor
 struct WatchTimeTrackerView: View {
-    @StateObject private var store = ShortcutRecordStore()
-    @State private var isListening = false
-    @State private var heardText = ""
-    @State private var isSendingStart = false
-    @State private var isSendingStop = false
+    @ObservedObject private var store = ShortcutRecordStore.shared
+    @State private var shortcutTasks: [ShortcutTask] = []
+    @State private var isLoadingShortcuts = false
     @State private var statusMessage = ""
-    @FocusState private var isInputFocused: Bool
 
     var body: some View {
-        ZStack {
-            WatchDesign.stage.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                Text("FLOW")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .tracking(3)
-                    .foregroundStyle(WatchDesign.brand)
-                    .padding(.top, 14)
-
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, 16)
-
-                dock
-                    .padding(.bottom, 16)
+        Group {
+            if store.activeSession != nil {
+                activeSessionView
+            } else {
+                shortcutList
+                    .padding(.horizontal, 8)
             }
-            .frame(width: 198, height: 242)
-            .background(.black, in: RoundedRectangle(cornerRadius: 46, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: 46, style: .continuous))
         }
-        .background(WatchDesign.stage)
-        .onChange(of: isListening) { newValue in
-            isInputFocused = newValue
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WatchDesign.stage.ignoresSafeArea())
         .task {
             await refreshRunningSession()
+            await refreshShortcuts()
         }
     }
 
     @ViewBuilder
-    private var content: some View {
+    private var activeSessionView: some View {
         if let session = store.activeSession {
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                VStack(spacing: 5) {
+                VStack(spacing: 0) {
+                    Text(session.task.name)
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+
                     HStack(spacing: 6) {
                         Circle()
                             .fill(WatchDesign.green)
                             .frame(width: 7, height: 7)
                             .watchPulse()
 
-                        Text("进行中")
-                            .font(.system(size: 10, weight: .regular))
-                            .tracking(2)
+                        Text("进行中 · \(startTimeText(session.startedAt)) 开始")
+                            .font(.system(size: 12, weight: .regular))
                             .foregroundStyle(WatchDesign.muted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                     }
-
-                    Text(session.task.name)
-                        .font(.system(size: 19, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                        .minimumScaleFactor(0.76)
+                    .padding(.top, 6)
 
                     Text(timerText(from: session.startedAt, now: timeline.date))
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .font(.system(size: 52, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                        .tracking(1)
-                        .foregroundStyle(WatchDesign.accent)
-                        .padding(.top, 2)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .padding(.top, 8)
 
-                    if !statusMessage.isEmpty {
-                        Text(statusMessage)
+                    Spacer(minLength: 28)
+
+                    dock
+
+                    let activeStatus = store.syncStatusMessage.isEmpty ? statusMessage : store.syncStatusMessage
+                    if !activeStatus.isEmpty {
+                        Text(activeStatus)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(WatchDesign.muted)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
-                            .padding(.top, 2)
+                            .padding(.top, 4)
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
             }
-        } else if isListening {
-            VStack(spacing: 8) {
-                Text("正在聆听")
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(2)
-                    .foregroundStyle(WatchDesign.accent)
-
-                TextField("说出正在做的事", text: $heardText)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .focused($isInputFocused)
-                    .submitLabel(.send)
-                    .onSubmit {
-                        submitHeardText()
-                    }
-            }
-        } else {
-            Text("点麦克风\n说出正在做的事")
-                .font(.system(size: 13, weight: .regular))
-                .lineSpacing(4)
-                .foregroundStyle(WatchDesign.muted)
-                .multilineTextAlignment(.center)
         }
+    }
+
+    private var shortcutList: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                Text("选择一个活动，快速开始记录")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(WatchDesign.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 2)
+
+                if shortcutTasks.isEmpty && !isLoadingShortcuts {
+                    VStack(spacing: 8) {
+                        Image(systemName: "bolt.slash")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(WatchDesign.muted)
+                        Text("暂无快捷指令")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
+                        Text(statusMessage.isEmpty ? "下拉刷新" : statusMessage)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(WatchDesign.muted)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .minimumScaleFactor(0.75)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                } else {
+                    ForEach(shortcutTasks) { task in
+                        shortcutRow(task)
+                    }
+                }
+
+                let activeStatus = store.syncStatusMessage.isEmpty ? statusMessage : store.syncStatusMessage
+                if !activeStatus.isEmpty && !shortcutTasks.isEmpty {
+                    Text(activeStatus)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(WatchDesign.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.top, 2)
+                }
+            }
+            .padding(.top, 2)
+            .padding(.bottom, 8)
+        }
+        .scrollIndicators(.hidden)
+        .refreshable { await refreshShortcuts() }
+        .navigationTitle("快捷开始")
+    }
+
+    private func shortcutRow(_ task: ShortcutTask) -> some View {
+        Button {
+            startTask(task)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: task.symbolName)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(task.color.gradient, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.name)
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+
+                    Text(subtitle(for: task))
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(WatchDesign.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "play.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(task.color)
+                    .frame(width: 32, height: 32)
+                    .background(task.color.opacity(0.22), in: Circle())
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 62)
+            .background(WatchDesign.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(WatchPressButtonStyle())
+    }
+
+    /// "生活 · 常用" or "出行 · 预计 30 分钟" — big-category label plus usage/estimate.
+    private func subtitle(for task: ShortcutTask) -> String {
+        let category = task.categoryName?.trimmingCharacters(in: .whitespaces)
+        let tail: String
+        if let minutes = task.defaultDurationMinutes, minutes > 0 {
+            tail = "预计 \(minutes) 分钟"
+        } else {
+            tail = "常用"
+        }
+        if let category, !category.isEmpty {
+            return "\(category) · \(tail)"
+        }
+        return tail
     }
 
     private var dock: some View {
-        Group {
-            if store.activeSession != nil {
-                Button {
-                    Task { await stopActiveSession() }
-                } label: {
-                    Image(systemName: isSendingStop ? "hourglass" : "square.fill")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 62, height: 62)
-                        .background(WatchDesign.surface, in: Circle())
-                        .overlay(Circle().stroke(WatchDesign.line, lineWidth: 1))
-                }
-                .buttonStyle(WatchPressButtonStyle())
-                .disabled(isSendingStop)
-            } else {
-                Button {
-                    toggleMic()
-                } label: {
-                    Image(systemName: isSendingStart ? "hourglass" : "mic.fill")
-                        .font(.system(size: 26, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 62, height: 62)
-                        .background(isListening ? WatchDesign.green : WatchDesign.accent, in: Circle())
-                        .shadow(color: (isListening ? WatchDesign.green : WatchDesign.accent).opacity(0.45), radius: 18, y: 6)
-                        .watchMicLive(isActive: isListening)
-                }
-                .buttonStyle(WatchPressButtonStyle())
-                .disabled(isSendingStart)
-            }
+        Button {
+            stopActiveSession()
+        } label: {
+            Text("结束记录")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 8)
+                .background(WatchDesign.accent, in: Capsule())
         }
-        .accessibilityLabel(store.activeSession == nil ? "开始语音记录" : "结束当前记录")
+        .buttonStyle(WatchPressButtonStyle())
+        .accessibilityLabel("结束当前记录")
     }
 
-    private func toggleMic() {
-        if isListening {
-            submitHeardText()
-        } else {
-            heardText = ""
-            statusMessage = ""
-            isListening = true
-        }
-    }
-
-    private func submitHeardText() {
-        let name = heardText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            isListening = false
-            return
-        }
-
-        isListening = false
-        heardText = ""
-        let task = ShortcutTask(name: name, symbolName: "mic.fill", colorHex: WatchDesign.accentHex)
-        Task { await startTask(task) }
-    }
-
-    private func startTask(_ task: ShortcutTask) async {
-        let hadActiveSession = store.activeSession != nil
-        isSendingStart = true
+    private func startTask(_ task: ShortcutTask) {
         statusMessage = ""
-
-        if hadActiveSession {
-            store.stop(note: "")
-        }
         store.start(task)
-
-        do {
-            if hadActiveSession {
-                try await ShortcutAPI.end(note: "")
-            }
-            try await ShortcutAPI.start(taskName: task.name)
-        } catch {
-            statusMessage = "同步失败"
-        }
-
-        isSendingStart = false
+        #if os(watchOS)
+        WatchAuthSync.shared.broadcastTimeEntry(store.sharedActiveActivity())
+        #endif
     }
 
-    private func stopActiveSession() async {
-        isSendingStop = true
+    private func stopActiveSession() {
         statusMessage = ""
         store.stop(note: "")
-
-        do {
-            try await ShortcutAPI.end(note: "")
-        } catch {
-            statusMessage = "结束同步失败"
-        }
-
-        isSendingStop = false
+        #if os(watchOS)
+        WatchAuthSync.shared.broadcastTimeEntry(nil)
+        #endif
     }
 
     private func refreshRunningSession() async {
@@ -208,6 +222,97 @@ struct WatchTimeTrackerView: View {
         } catch {
             statusMessage = "读取失败"
         }
+    }
+
+    private func refreshShortcuts() async {
+        guard !isLoadingShortcuts else { return }
+        isLoadingShortcuts = true
+        defer { isLoadingShortcuts = false }
+
+        do {
+            // Primary source: the user's shortcut list (same endpoint as the phone).
+            let remote = try await ShortcutAPI.listShortcuts()
+            let remoteTasks = remote.map { ShortcutTask(remote: $0) }
+            if !remoteTasks.isEmpty {
+                shortcutTasks = remoteTasks
+            } else {
+                // No shortcuts yet: fall back to category-derived tasks so the
+                // watch still offers something to start.
+                let categories = (try? await ShortcutAPI.categories()) ?? []
+                let derived = Self.tasks(from: categories)
+                shortcutTasks = derived.isEmpty ? store.tasks : derived
+            }
+            statusMessage = ""
+        } catch {
+            if shortcutTasks.isEmpty {
+                shortcutTasks = store.tasks
+            }
+            statusMessage = "快捷指令读取失败"
+        }
+    }
+
+    private static func tasks(from categories: [ShortcutCategory]) -> [ShortcutTask] {
+        categories.flatMap { category in
+            if category.subtypes.isEmpty {
+                return [
+                    ShortcutTask(
+                        name: category.label,
+                        symbolName: symbolName(for: category.label),
+                        colorHex: category.colorHex,
+                        categoryId: category.id,
+                        subtypeId: nil,
+                        categoryName: category.label
+                    )
+                ]
+            }
+
+            return category.subtypes.map { subtype in
+                ShortcutTask(
+                    name: subtype.label,
+                    symbolName: symbolName(for: subtype.label),
+                    colorHex: category.colorHex,
+                    categoryId: category.id,
+                    subtypeId: subtype.id,
+                    categoryName: category.label
+                )
+            }
+        }
+    }
+
+    private static func symbolName(for label: String) -> String {
+        let mappings: [(String, String)] = [
+            ("编程", "chevron.left.forwardslash.chevron.right"),
+            ("代码", "chevron.left.forwardslash.chevron.right"),
+            ("会议", "briefcase.fill"),
+            ("写作", "pencil"),
+            ("设计", "paintbrush.fill"),
+            ("阅读", "book.fill"),
+            ("课程", "graduationcap.fill"),
+            ("笔记", "note.text"),
+            ("练习", "checklist"),
+            ("吃饭", "fork.knife"),
+            ("购物", "cart.fill"),
+            ("通勤", "car.fill"),
+            ("家务", "house.fill"),
+            ("健身", "dumbbell.fill"),
+            ("跑步", "figure.run"),
+            ("瑜伽", "figure.mind.and.body"),
+            ("睡眠", "moon.stars.fill"),
+            ("冥想", "figure.mind.and.body"),
+            ("游戏", "gamecontroller.fill"),
+            ("音乐", "music.note"),
+            ("视频", "video.fill"),
+            ("社交", "heart.fill")
+        ]
+
+        return mappings.first { label.contains($0.0) }?.1 ?? "bolt.fill"
+    }
+
+    private func startTimeText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 
     private func timerText(from startDate: Date, now: Date) -> String {
@@ -239,7 +344,7 @@ private struct WatchPulseModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .shadow(color: WatchDesign.green.opacity(isPulsing ? 0 : 0.5), radius: isPulsing ? 6 : 0)
+            .opacity(isPulsing ? 1 : 0.4)
             .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: isPulsing)
             .onAppear {
                 isPulsing = true
@@ -247,32 +352,9 @@ private struct WatchPulseModifier: ViewModifier {
     }
 }
 
-private struct WatchMicLiveModifier: ViewModifier {
-    let isActive: Bool
-    @State private var isRinging = false
-
-    func body(content: Content) -> some View {
-        content
-            .overlay {
-                Circle()
-                    .stroke(WatchDesign.green.opacity(isActive && !isRinging ? 0.55 : 0), lineWidth: 2)
-                    .scaleEffect(isRinging ? 1.38 : 1)
-                    .opacity(isActive ? 1 : 0)
-            }
-            .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: isRinging)
-            .onAppear {
-                isRinging = true
-            }
-    }
-}
-
 private extension View {
     func watchPulse() -> some View {
         modifier(WatchPulseModifier())
-    }
-
-    func watchMicLive(isActive: Bool) -> some View {
-        modifier(WatchMicLiveModifier(isActive: isActive))
     }
 }
 
@@ -285,6 +367,7 @@ private enum WatchDesign {
     static let accentHex = "FF7847"
     static let accent = Color(hex: accentHex)
     static let green = Color(hex: "22C55E")
+    static let stop = Color(hex: "FF453A")
 }
 
 private struct WatchTimeTrackerView_Previews: PreviewProvider {

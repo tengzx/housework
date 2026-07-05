@@ -11,6 +11,7 @@ struct Calendar2Event: Identifiable, Equatable {
     var name: String
     var category: String
     var typeId: String?
+    var colorHex: String?
     var source: String?
     var note: String?
     var isRunning: Bool
@@ -29,6 +30,7 @@ struct Calendar2Event: Identifiable, Equatable {
         name: String,
         category: String,
         typeId: String? = nil,
+        colorHex: String? = nil,
         source: String? = nil,
         note: String? = nil,
         isRunning: Bool = false,
@@ -46,6 +48,7 @@ struct Calendar2Event: Identifiable, Equatable {
         self.name = name
         self.category = category
         self.typeId = typeId
+        self.colorHex = colorHex
         self.source = source
         self.note = note
         self.isRunning = isRunning
@@ -57,7 +60,8 @@ struct Calendar2Event: Identifiable, Equatable {
     static func segments(response: TimeEventResponse, now: Date = .now) -> [Calendar2Event] {
         makeSegments(
             id: response.id, name: response.name, categoryId: response.categoryId,
-            typeId: response.typeId, startedAt: response.startedAt, endedAt: response.endedAt,
+            typeId: response.typeId, colorHex: response.resolvedColor,
+            startedAt: response.startedAt, endedAt: response.endedAt,
             source: response.source, note: response.note, isMobileApp: false, now: now
         )
     }
@@ -67,7 +71,7 @@ struct Calendar2Event: Identifiable, Equatable {
         startedAt: Date, endedAt: Date?, source: String?, now: Date = .now
     ) -> [Calendar2Event] {
         makeSegments(
-            id: id, name: name, categoryId: categoryId, typeId: typeId,
+            id: id, name: name, categoryId: categoryId, typeId: typeId, colorHex: nil,
             startedAt: startedAt, endedAt: endedAt, source: source, note: nil,
             isMobileApp: true, now: now
         )
@@ -75,6 +79,7 @@ struct Calendar2Event: Identifiable, Equatable {
 
     private static func makeSegments(
         id: String, name: String, categoryId: String, typeId: String?,
+        colorHex: String?,
         startedAt: Date, endedAt: Date?, source: String?, note: String?,
         isMobileApp: Bool, now: Date
     ) -> [Calendar2Event] {
@@ -109,6 +114,7 @@ struct Calendar2Event: Identifiable, Equatable {
                 name: name,
                 category: categoryId,
                 typeId: typeId,
+                colorHex: colorHex,
                 source: source,
                 note: note,
                 isRunning: endedAt == nil && index == segmentCount - 1,

@@ -12,11 +12,11 @@ private struct FitnessNullData: Decodable {}
 // MARK: - Client
 
 enum FitnessAPIClient {
-    static let baseURL = URL(string: "http://100.67.64.11:8081/api/v1")!
+    static let baseURL = AppEnvironment.apiV1BaseURL
 
     /// Server origin (scheme + host + port), without the "/api/v1" path — media
     /// (thumbnails / GIFs) are served here, e.g. `${mediaOrigin}/exercise-media/...`.
-    static let mediaOrigin = "http://100.67.64.11:8081"
+    static let mediaOrigin = AppEnvironment.mediaOrigin
 
     /// Resolve a media path (thumbnail / GIF) to an absolute URL. Absolute URLs
     /// pass through unchanged; relative paths are prefixed with `mediaOrigin`.
@@ -30,6 +30,17 @@ enum FitnessAPIClient {
         let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
         return URL(string: mediaOrigin + encoded)
     }
+
+    static func isMissingResourceError(_ error: Error) -> Bool {
+        guard case let HTTPClientError.httpFailure(statusCode, data) = error else { return false }
+        if statusCode == 404 { return true }
+        let body = String(data: data, encoding: .utf8)?.lowercased() ?? ""
+        return body.contains("not found")
+            || body.contains("not_found")
+            || body.contains("不存在")
+            || body.contains("没有找到")
+    }
+
     private static let isoDateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
@@ -264,6 +275,13 @@ enum FitnessAPIClient {
         return envelope.data
     }
 
+    @discardableResult
+    static func applySessionOperation(id: Int, request: FitnessSessionOperationRequest) async throws -> FitnessSessionDetail {
+        let url = baseURL.appendingPathComponent("workout-sessions/\(id)/operations")
+        let envelope = try await send(FitnessEnvelope<FitnessSessionDetail>.self, url: url, method: "POST", body: request)
+        return envelope.data
+    }
+
     static func exerciseProgress(exerciseId: Int, range: String = "30d", metric: String? = nil) async throws -> ExerciseProgressResponse {
         var components = URLComponents(url: baseURL.appendingPathComponent("exercises/\(exerciseId)/progress"), resolvingAgainstBaseURL: false)!
         var queryItems = [URLQueryItem(name: "range", value: range)]
@@ -288,18 +306,18 @@ enum FitnessAPIClient {
     }
 
     private static func send<T: Decodable, Body: Encodable>(_ type: T.Type, url: URL, method: String, body: Body?) async throws -> T {
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 10
-        if let body {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(body)
-        }
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
+        let httpMethod = HTTPMethod(rawValue: method) ?? .get
+        return try await HTTPClient.shared.decode(
+            T.self,
+            url: url,
+            method: httpMethod,
+            body: body,
+            decoder: fitnessDecoder,
+            timeoutInterval: 10
+        )
+    }
+
+    private static var fitnessDecoder: JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
@@ -312,6 +330,6 @@ enum FitnessAPIClient {
                 debugDescription: "Invalid ISO8601 date: \(rawValue)"
             )
         }
-        return try decoder.decode(T.self, from: data)
+        return decoder
     }
 }

@@ -4,7 +4,7 @@ import SwiftUI
 struct HealthDataExportWatchApp: App {
     var body: some Scene {
         WindowGroup {
-            WatchTimeTrackerView()
+            WatchRootView()
         }
     }
 }

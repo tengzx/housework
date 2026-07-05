@@ -317,7 +317,7 @@ struct FitnessSessionCreateResponse: Decodable {
     let status: String
 }
 
-struct FitnessSessionDetail: Decodable, Identifiable {
+struct FitnessSessionDetail: Codable, Identifiable {
     let id: Int
     let templateId: Int?
     let trainingTheme: String?
@@ -334,7 +334,7 @@ struct FitnessSessionDetail: Decodable, Identifiable {
     let exercises: [FitnessSessionExercise]
 }
 
-struct FitnessSessionExercise: Decodable, Identifiable {
+struct FitnessSessionExercise: Codable, Identifiable {
     let sessionExerciseId: Int
     let exerciseId: Int
     let name: String
@@ -351,7 +351,7 @@ struct FitnessSessionExercise: Decodable, Identifiable {
     var showSecondColumn: Bool { ExerciseTrackingDisplay.showsSecondColumn(trackingType) }
 }
 
-struct FitnessSessionSet: Decodable, Identifiable {
+struct FitnessSessionSet: Codable, Identifiable {
     let sessionSetId: Int
     let templateSetId: Int?
     let setOrder: Int
@@ -382,7 +382,7 @@ struct FitnessSessionCompleteRequest: Encodable {
     let rpe: Double?
 }
 
-struct FitnessSessionCompleteResponse: Decodable {
+struct FitnessSessionCompleteResponse: Codable {
     let sessionId: Int
     let status: String
     let durationSeconds: Int?
@@ -393,13 +393,13 @@ struct FitnessSessionCompleteResponse: Decodable {
     let analysisGenerated: Bool
 }
 
-struct FitnessSessionStructureRequest: Encodable {
+struct FitnessSessionStructureRequest: Codable {
     let exercises: [FitnessSessionExerciseRequest]
     let deletedSessionExerciseIds: [Int]
     let deletedSessionSetIds: [Int]
 }
 
-struct FitnessSessionExerciseRequest: Encodable {
+struct FitnessSessionExerciseRequest: Codable {
     let sessionExerciseId: Int?
     let exerciseId: Int
     let sortOrder: Int
@@ -408,7 +408,7 @@ struct FitnessSessionExerciseRequest: Encodable {
     let sets: [FitnessSessionSetRequest]
 }
 
-struct FitnessSessionSetRequest: Encodable {
+struct FitnessSessionSetRequest: Codable {
     let sessionSetId: Int?
     let setOrder: Int
     let setType: String
@@ -430,12 +430,26 @@ struct FitnessSessionSetRequest: Encodable {
     let note: String?
 }
 
-struct FitnessSessionStructureResponse: Decodable {
+struct FitnessSessionStructureResponse: Codable {
     let sessionId: Int
     let totalVolumeKg: Double
     let totalSets: Int
     let totalReps: Int?
     let updatedAt: Date?
+}
+
+struct FitnessSessionOperationRequest: Codable, Identifiable {
+    let operationId: String
+    let type: String
+    let sessionSetId: Int
+    let actualWeightKg: Double?
+    let actualReps: Int?
+    let actualDurationSeconds: Int?
+    let actualDistanceMeters: Double?
+    let rpe: Double?
+    let clientTime: String
+
+    var id: String { operationId }
 }
 
 struct FitnessSessionAnalysisResponse: Decodable {

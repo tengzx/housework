@@ -14,6 +14,26 @@
 		2A0000142FE0000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2A0000152FE0000000000015 /* Assets.xcassets */; };
 		2A0000172FE0000000000017 /* HealthDataExport/Shared/Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000182FE0000000000018 /* HealthDataExport/Shared/Haptics.swift */; };
 		2A00001F2FE000000000001F /* HealthDataExport/Shared/Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */; };
+		2A0000212FE0000000000021 /* HealthDataExport/Shared/AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000222FE0000000000022 /* HealthDataExport/Shared/AppEnvironment.swift */; };
+		2A0000232FE0000000000023 /* HealthDataExport/Shared/HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000242FE0000000000024 /* HealthDataExport/Shared/HTTPClient.swift */; };
+		2A0100000000000000000002 /* WatchAuthSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000001 /* WatchAuthSync.swift */; };
+		2A0100000000000000000004 /* WatchWorkoutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000003 /* WatchWorkoutManager.swift */; };
+		2A0100000000000000000006 /* WatchWorkoutViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000005 /* WatchWorkoutViewModel.swift */; };
+		2A0100000000000000000008 /* WatchWorkoutDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000007 /* WatchWorkoutDesign.swift */; };
+		2A010000000000000000000A /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000009 /* WatchRootView.swift */; };
+		2A010000000000000000000C /* WatchTemplateListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A010000000000000000000B /* WatchTemplateListView.swift */; };
+		2A010000000000000000000E /* WatchTemplateDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A010000000000000000000D /* WatchTemplateDetailView.swift */; };
+		2A0100000000000000000010 /* WatchActiveWorkoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A010000000000000000000F /* WatchActiveWorkoutView.swift */; };
+		2A0100000000000000000012 /* WatchSetEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000011 /* WatchSetEditorView.swift */; };
+		2A0100000000000000000014 /* HealthDataExport/Features/Fitness/FitnessAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000013 /* HealthDataExport/Features/Fitness/FitnessAPIClient.swift */; };
+		2A0100000000000000000016 /* HealthDataExport/Features/Fitness/FitnessModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000015 /* HealthDataExport/Features/Fitness/FitnessModels.swift */; };
+		2A0100000000000000000385 /* WatchActiveWorkoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000384 /* WatchActiveWorkoutStore.swift */; };
+		2A0100000000000000000387 /* WatchTemplateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0100000000000000000386 /* WatchTemplateStore.swift */; };
+		2A0200000000000000000010 /* HealthDataExportWatchWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0200000000000000000002 /* HealthDataExportWatchWidget.swift */; };
+		2A0200000000000000000011 /* SharedActiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0200000000000000000005 /* SharedActiveActivity.swift */; };
+		2A0200000000000000000012 /* SharedActiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0200000000000000000005 /* SharedActiveActivity.swift */; };
+		2A0200000000000000000013 /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */; };
+		2A0200000000000000000014 /* HealthDataExportWatchWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2A0200000000000000000001 /* HealthDataExportWatchWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,6 +58,13 @@
 			remoteGlobalIDString = 2A00000A2FE000000000000A;
 			remoteInfo = "HealthDataExport Watch App";
 		};
+		2A0200000000000000000039 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1B38A3442FD6D714008783FC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2A0200000000000000000030;
+			remoteInfo = HealthDataExportWatchWidget;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -50,6 +77,17 @@
 				2A0000102FE0000000000010 /* HealthDataExport Watch App.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A0200000000000000000034 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				2A0200000000000000000014 /* HealthDataExportWatchWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -65,6 +103,26 @@
 		2A0000152FE0000000000015 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2A0000182FE0000000000018 /* HealthDataExport/Shared/Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Shared/Haptics.swift; sourceTree = SOURCE_ROOT; };
 		2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthDataExport/Shared/Color+Hex.swift"; sourceTree = SOURCE_ROOT; };
+		2A0000222FE0000000000022 /* HealthDataExport/Shared/AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Shared/AppEnvironment.swift; sourceTree = SOURCE_ROOT; };
+		2A0000242FE0000000000024 /* HealthDataExport/Shared/HTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Shared/HTTPClient.swift; sourceTree = SOURCE_ROOT; };
+		2A0100000000000000000001 /* WatchAuthSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAuthSync.swift; sourceTree = "<group>"; };
+		2A0100000000000000000003 /* WatchWorkoutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutManager.swift; sourceTree = "<group>"; };
+		2A0100000000000000000005 /* WatchWorkoutViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutViewModel.swift; sourceTree = "<group>"; };
+		2A0100000000000000000007 /* WatchWorkoutDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutDesign.swift; sourceTree = "<group>"; };
+		2A0100000000000000000009 /* WatchRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRootView.swift; sourceTree = "<group>"; };
+		2A010000000000000000000B /* WatchTemplateListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTemplateListView.swift; sourceTree = "<group>"; };
+		2A010000000000000000000D /* WatchTemplateDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTemplateDetailView.swift; sourceTree = "<group>"; };
+		2A010000000000000000000F /* WatchActiveWorkoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchActiveWorkoutView.swift; sourceTree = "<group>"; };
+		2A0100000000000000000011 /* WatchSetEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSetEditorView.swift; sourceTree = "<group>"; };
+		2A0100000000000000000013 /* HealthDataExport/Features/Fitness/FitnessAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Features/Fitness/FitnessAPIClient.swift; sourceTree = SOURCE_ROOT; };
+		2A0100000000000000000015 /* HealthDataExport/Features/Fitness/FitnessModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Features/Fitness/FitnessModels.swift; sourceTree = SOURCE_ROOT; };
+		2A0100000000000000000384 /* WatchActiveWorkoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchActiveWorkoutStore.swift; sourceTree = "<group>"; };
+		2A0100000000000000000386 /* WatchTemplateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTemplateStore.swift; sourceTree = "<group>"; };
+		2A0200000000000000000001 /* HealthDataExportWatchWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HealthDataExportWatchWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A0200000000000000000002 /* HealthDataExportWatchWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExportWatchWidget.swift; sourceTree = "<group>"; };
+		2A0200000000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		2A0200000000000000000004 /* HealthDataExportWatchWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HealthDataExportWatchWidget.entitlements; sourceTree = "<group>"; };
+		2A0200000000000000000005 /* SharedActiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Shared/SharedActiveActivity.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -127,6 +185,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2A0200000000000000000032 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -135,6 +200,7 @@
 			children = (
 				1B38A34E2FD6D714008783FC /* HealthDataExport */,
 				2A0000092FE0000000000009 /* HealthDataExportWatchApp */,
+				2A0200000000000000000020 /* HealthDataExportWatchWidget */,
 				1B38A35C2FD6D715008783FC /* HealthDataExportTests */,
 				1B38A3662FD6D716008783FC /* HealthDataExportUITests */,
 				1B38A34D2FD6D714008783FC /* Products */,
@@ -147,6 +213,7 @@
 			children = (
 				1B38A34C2FD6D714008783FC /* HealthDataExport.app */,
 				2A0000072FE0000000000007 /* HealthDataExport Watch App.app */,
+				2A0200000000000000000001 /* HealthDataExportWatchWidgetExtension.appex */,
 				1B38A3592FD6D715008783FC /* HealthDataExportTests.xctest */,
 				1B38A3632FD6D716008783FC /* HealthDataExportUITests.xctest */,
 			);
@@ -156,6 +223,8 @@
 		1B38A6542FF6A23F008783FC /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
+				2A0000222FE0000000000022 /* HealthDataExport/Shared/AppEnvironment.swift */,
+				2A0000242FE0000000000024 /* HealthDataExport/Shared/HTTPClient.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -163,14 +232,38 @@
 		2A0000092FE0000000000009 /* HealthDataExportWatchApp */ = {
 			isa = PBXGroup;
 			children = (
+				2A0100000000000000000384 /* WatchActiveWorkoutStore.swift */,
+				2A0100000000000000000386 /* WatchTemplateStore.swift */,
+				2A0100000000000000000001 /* WatchAuthSync.swift */,
+				2A0100000000000000000003 /* WatchWorkoutManager.swift */,
+				2A0100000000000000000005 /* WatchWorkoutViewModel.swift */,
+				2A0100000000000000000007 /* WatchWorkoutDesign.swift */,
+				2A0100000000000000000009 /* WatchRootView.swift */,
+				2A010000000000000000000B /* WatchTemplateListView.swift */,
+				2A010000000000000000000D /* WatchTemplateDetailView.swift */,
+				2A010000000000000000000F /* WatchActiveWorkoutView.swift */,
+				2A0100000000000000000011 /* WatchSetEditorView.swift */,
+				2A0100000000000000000013 /* HealthDataExport/Features/Fitness/FitnessAPIClient.swift */,
+				2A0100000000000000000015 /* HealthDataExport/Features/Fitness/FitnessModels.swift */,
 				2A0000022FE0000000000002 /* HealthDataExportWatchApp.swift */,
 				2A0000152FE0000000000015 /* Assets.xcassets */,
 				2A0000042FE0000000000004 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift */,
 				2A0000062FE0000000000006 /* HealthDataExport/Features/Record/ShortcutRecord.swift */,
 				2A0000182FE0000000000018 /* HealthDataExport/Shared/Haptics.swift */,
 				2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */,
+				2A0200000000000000000005 /* SharedActiveActivity.swift */,
 			);
 			path = HealthDataExportWatchApp;
+			sourceTree = "<group>";
+		};
+		2A0200000000000000000020 /* HealthDataExportWatchWidget */ = {
+			isa = PBXGroup;
+			children = (
+				2A0200000000000000000002 /* HealthDataExportWatchWidget.swift */,
+				2A0200000000000000000003 /* Info.plist */,
+				2A0200000000000000000004 /* HealthDataExportWatchWidget.entitlements */,
+			);
+			path = HealthDataExportWatchWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -253,10 +346,12 @@
 				2A00000C2FE000000000000C /* Sources */,
 				2A0000082FE0000000000008 /* Frameworks */,
 				2A00000D2FE000000000000D /* Resources */,
+				2A0200000000000000000034 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				2A0200000000000000000038 /* PBXTargetDependency */,
 			);
 			name = "HealthDataExport Watch App";
 			packageProductDependencies = (
@@ -264,6 +359,25 @@
 			productName = "HealthDataExport Watch App";
 			productReference = 2A0000072FE0000000000007 /* HealthDataExport Watch App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		2A0200000000000000000030 /* HealthDataExportWatchWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A0200000000000000000037 /* Build configuration list for PBXNativeTarget "HealthDataExportWatchWidget" */;
+			buildPhases = (
+				2A0200000000000000000031 /* Sources */,
+				2A0200000000000000000032 /* Frameworks */,
+				2A0200000000000000000033 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HealthDataExportWatchWidget;
+			packageProductDependencies = (
+			);
+			productName = HealthDataExportWatchWidget;
+			productReference = 2A0200000000000000000001 /* HealthDataExportWatchWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -289,6 +403,9 @@
 					2A00000A2FE000000000000A = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
+					2A0200000000000000000030 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
 				};
 			};
 			buildConfigurationList = 1B38A3472FD6D714008783FC /* Build configuration list for PBXProject "HealthDataExport" */;
@@ -307,6 +424,7 @@
 			targets = (
 				1B38A34B2FD6D714008783FC /* HealthDataExport */,
 				2A00000A2FE000000000000A /* HealthDataExport Watch App */,
+				2A0200000000000000000030 /* HealthDataExportWatchWidget */,
 				1B38A3582FD6D715008783FC /* HealthDataExportTests */,
 				1B38A3622FD6D716008783FC /* HealthDataExportUITests */,
 			);
@@ -343,6 +461,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2A0200000000000000000033 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -371,11 +496,37 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2A0100000000000000000385 /* WatchActiveWorkoutStore.swift in Sources */,
+				2A0100000000000000000387 /* WatchTemplateStore.swift in Sources */,
+				2A0100000000000000000002 /* WatchAuthSync.swift in Sources */,
+				2A0100000000000000000004 /* WatchWorkoutManager.swift in Sources */,
+				2A0100000000000000000006 /* WatchWorkoutViewModel.swift in Sources */,
+				2A0100000000000000000008 /* WatchWorkoutDesign.swift in Sources */,
+				2A010000000000000000000A /* WatchRootView.swift in Sources */,
+				2A010000000000000000000C /* WatchTemplateListView.swift in Sources */,
+				2A010000000000000000000E /* WatchTemplateDetailView.swift in Sources */,
+				2A0100000000000000000010 /* WatchActiveWorkoutView.swift in Sources */,
+				2A0100000000000000000012 /* WatchSetEditorView.swift in Sources */,
+				2A0100000000000000000014 /* HealthDataExport/Features/Fitness/FitnessAPIClient.swift in Sources */,
+				2A0100000000000000000016 /* HealthDataExport/Features/Fitness/FitnessModels.swift in Sources */,
 				2A0000012FE0000000000001 /* HealthDataExportWatchApp.swift in Sources */,
 				2A0000032FE0000000000003 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift in Sources */,
 				2A0000052FE0000000000005 /* HealthDataExport/Features/Record/ShortcutRecord.swift in Sources */,
 				2A0000172FE0000000000017 /* HealthDataExport/Shared/Haptics.swift in Sources */,
 				2A00001F2FE000000000001F /* HealthDataExport/Shared/Color+Hex.swift in Sources */,
+				2A0000212FE0000000000021 /* HealthDataExport/Shared/AppEnvironment.swift in Sources */,
+				2A0000232FE0000000000023 /* HealthDataExport/Shared/HTTPClient.swift in Sources */,
+				2A0200000000000000000012 /* SharedActiveActivity.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A0200000000000000000031 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A0200000000000000000010 /* HealthDataExportWatchWidget.swift in Sources */,
+				2A0200000000000000000011 /* SharedActiveActivity.swift in Sources */,
+				2A0200000000000000000013 /* Color+Hex.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -396,6 +547,11 @@
 			isa = PBXTargetDependency;
 			target = 2A00000A2FE000000000000A /* HealthDataExport Watch App */;
 			targetProxy = 2A0000112FE0000000000011 /* PBXContainerItemProxy */;
+		};
+		2A0200000000000000000038 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2A0200000000000000000030 /* HealthDataExportWatchWidget */;
+			targetProxy = 2A0200000000000000000039 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -695,13 +851,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HealthDataExportWatchApp/HealthDataExportWatchApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y5S7NUB77K;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HealthDataExportWatchApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "知行";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "读取心率与活动能量，用于在训练中显示实时数据。";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "将体能训练记录保存到“健康”。";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tengzx.HealthDataExport;
@@ -712,6 +872,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tengzx.HealthDataExport.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -731,13 +892,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HealthDataExportWatchApp/HealthDataExportWatchApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y5S7NUB77K;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HealthDataExportWatchApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "知行";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "读取心率与活动能量，用于在训练中显示实时数据。";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "将体能训练记录保存到“健康”。";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tengzx.HealthDataExport;
@@ -748,12 +913,75 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tengzx.HealthDataExport.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "watchos watchsimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		2A0200000000000000000035 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CODE_SIGN_ENTITLEMENTS = HealthDataExportWatchWidget/HealthDataExportWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y5S7NUB77K;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HealthDataExportWatchWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "进行中";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tengzx.HealthDataExport.watchkitapp.widget;
+				PRODUCT_NAME = HealthDataExportWatchWidgetExtension;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		2A0200000000000000000036 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CODE_SIGN_ENTITLEMENTS = HealthDataExportWatchWidget/HealthDataExportWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y5S7NUB77K;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HealthDataExportWatchWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "进行中";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tengzx.HealthDataExport.watchkitapp.widget;
+				PRODUCT_NAME = HealthDataExportWatchWidgetExtension;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
@@ -806,6 +1034,15 @@
 			buildConfigurations = (
 				2A00000E2FE000000000000E /* Debug */,
 				2A00000F2FE000000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2A0200000000000000000037 /* Build configuration list for PBXNativeTarget "HealthDataExportWatchWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2A0200000000000000000035 /* Debug */,
+				2A0200000000000000000036 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

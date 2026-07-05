@@ -23,11 +23,13 @@ final class ConfigurationStore: ObservableObject {
         }
         do {
             configurations = try JSONDecoder().decode([ExportConfiguration].self, from: data)
+            let migratedLegacyTokens = migrateLegacyTokensIfNeeded()
             if configurations.isEmpty {
                 configurations = [ExportConfiguration()]
                 save()
             } else {
                 migrateIfNeeded()
+                if migratedLegacyTokens { save() }
             }
         } catch {
             configurations = [ExportConfiguration(lastStatus: "配置读取失败，已重置")]
@@ -36,7 +38,7 @@ final class ConfigurationStore: ObservableObject {
     }
 
     private func migrateIfNeeded() {
-        let defaultURL = "http://100.67.64.11:8081/api/health/ingest"
+        let defaultURL = AppEnvironment.defaultHealthIngestURL
         var changed = false
         for i in configurations.indices where configurations[i].endpointURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             configurations[i].endpointURL = defaultURL
@@ -45,7 +47,22 @@ final class ConfigurationStore: ObservableObject {
         if changed { save() }
     }
 
+    private func migrateLegacyTokensIfNeeded() -> Bool {
+        var migrated = false
+        for i in configurations.indices {
+            let legacyToken = configurations[i].bearerToken
+            if legacyToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                configurations[i].bearerToken = KeychainTokenStore.token(for: configurations[i].id)
+            } else {
+                KeychainTokenStore.saveToken(legacyToken, for: configurations[i].id)
+                migrated = true
+            }
+        }
+        return migrated
+    }
+
     func save() {
+        configurations.forEach { KeychainTokenStore.saveToken($0.bearerToken, for: $0.id) }
         guard let data = try? JSONEncoder().encode(configurations) else { return }
         defaults.set(data, forKey: Self.storageKey)
     }
@@ -64,6 +81,7 @@ final class ConfigurationStore: ObservableObject {
     }
 
     func delete(_ configuration: ExportConfiguration) {
+        KeychainTokenStore.saveToken("", for: configuration.id)
         configurations.removeAll { $0.id == configuration.id }
         if configurations.isEmpty {
             configurations.append(ExportConfiguration())

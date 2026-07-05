@@ -3,12 +3,11 @@ import SwiftUI
 @MainActor
 struct RecordView: View {
     @ObservedObject var calendarStore: TimeCalendarStore
-    @StateObject private var store = ShortcutRecordStore()
+    @ObservedObject private var store = ShortcutRecordStore.shared
     @State private var text = ""
     @State private var isAdding = false
     @State private var isManagingShortcuts = false
-    @State private var isSendingStart = false
-    @State private var isSendingStop = false
+    @State private var editingTask: ShortcutTask?
     @State private var statusMessage = ""
     @FocusState private var isInputFocused: Bool
 
@@ -37,10 +36,11 @@ struct RecordView: View {
 
                     shortcutsGrid
 
-                    if !statusMessage.isEmpty {
-                        Text(statusMessage)
+                    let displayStatus = store.syncStatusMessage.isEmpty ? statusMessage : store.syncStatusMessage
+                    if !displayStatus.isEmpty {
+                        Text(displayStatus)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(statusMessage.contains("失败") ? .red : Design.muted)
+                            .foregroundStyle(displayStatus.contains("失败") ? .red : Design.muted)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 12)
                     }
@@ -50,6 +50,7 @@ struct RecordView: View {
                 .padding(.bottom, 18)
                 .frame(maxWidth: 430)
             }
+            .collapsibleTabScroll()
             .scrollDismissesKeyboard(.immediately)
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
@@ -66,8 +67,15 @@ struct RecordView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(.white)
         }
+        .sheet(item: $editingTask) { task in
+            AddShortcutSheet(store: store, calendarStore: calendarStore, editingTask: task)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(.white)
+        }
         .task {
             await refreshRunningSession()
+            await store.refreshTasks()
         }
     }
 
@@ -118,10 +126,10 @@ struct RecordView: View {
                             .padding(.bottom, 14)
 
                         Button {
-                            Task { await stopActiveSession() }
+                            stopActiveSession()
                         } label: {
                             HStack(spacing: 8) {
-                                Image(systemName: isSendingStop ? "hourglass" : "square.fill")
+                                Image(systemName: "square.fill")
                                     .font(.system(size: 16, weight: .semibold))
                                 Text("结束")
                                     .font(.system(size: 15, weight: .bold))
@@ -132,7 +140,6 @@ struct RecordView: View {
                             .background(Design.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
                         .buttonStyle(PressButtonStyle())
-                        .disabled(isSendingStop)
                     }
                     .padding(.horizontal, 18)
                     .padding(.vertical, 16)
@@ -207,7 +214,7 @@ struct RecordView: View {
                     .background(Design.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(PressButtonStyle())
-            .disabled(trimmedText.isEmpty || isSendingStart)
+            .disabled(trimmedText.isEmpty)
             .opacity(trimmedText.isEmpty ? 0.4 : 1)
         }
     }
@@ -287,7 +294,19 @@ struct RecordView: View {
             if isManagingShortcuts {
                 Button {
                     isInputFocused = false
-                    Task { await deleteTask(task) }
+                    editingTask = task
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Design.accent, in: Circle())
+                }
+                .buttonStyle(PressButtonStyle())
+
+                Button {
+                    isInputFocused = false
+                    deleteTask(task)
                 } label: {
                     Image(systemName: "minus")
                         .font(.system(size: 15, weight: .bold))
@@ -303,7 +322,7 @@ struct RecordView: View {
             } else {
                 Button {
                     isInputFocused = false
-                    Task { await startTask(task) }
+                    startTask(task)
                 } label: {
                     Image(systemName: "play.fill")
                         .font(.system(size: 13, weight: .bold))
@@ -312,8 +331,6 @@ struct RecordView: View {
                         .background(Design.accent, in: Circle())
                 }
                 .buttonStyle(PressButtonStyle())
-                .disabled(isSendingStart)
-                .opacity(isSendingStart ? 0.5 : 1)
             }
         }
         .padding(.horizontal, 12)
@@ -338,52 +355,29 @@ struct RecordView: View {
         text = ""
         isInputFocused = false
         let task = ShortcutTask(name: name, symbolName: "pencil", colorHex: Design.accentHex)
-        Task { await startTask(task) }
+        startTask(task)
     }
 
-    private func startTask(_ task: ShortcutTask) async {
-        let hadActiveSession = store.activeSession != nil
-        isSendingStart = true
+    private func startTask(_ task: ShortcutTask) {
         statusMessage = ""
-        if hadActiveSession {
-            store.stop(note: "")
-        }
+        calendarStore.clearMobileAppEvents()
         store.start(task)
-
-        do {
-            if hadActiveSession {
-                try await ShortcutAPI.end(note: "")
-            }
-            try await ShortcutAPI.start(taskName: task.name, typeId: task.subtypeId)
-        } catch {
-            statusMessage = "\(task.name) 同步失败：\(error.localizedDescription)"
-        }
-        isSendingStart = false
+        PhoneWatchSync.shared.broadcastTimeEntry(store.sharedActiveActivity())
     }
 
-    private func deleteTask(_ task: ShortcutTask) async {
-        let isActiveTask = store.activeSession?.task.id == task.id
+    private func deleteTask(_ task: ShortcutTask) {
         store.removeTask(task)
-        if isActiveTask {
-            try? await ShortcutAPI.end(note: "")
-        }
         if store.tasks.isEmpty {
             isManagingShortcuts = false
         }
     }
 
-    private func stopActiveSession() async {
+    private func stopActiveSession() {
         isInputFocused = false
-        isSendingStop = true
         statusMessage = ""
+        calendarStore.clearMobileAppEvents()
         store.stop(note: "")
-
-        do {
-            try await ShortcutAPI.end(note: "")
-        } catch {
-            statusMessage = "结束同步失败：\(error.localizedDescription)"
-        }
-        isSendingStop = false
+        PhoneWatchSync.shared.broadcastTimeEntry(nil)
     }
 
     private func refreshRunningSession() async {
@@ -455,12 +449,26 @@ private struct AddShortcutSheet: View {
                    "camera.fill", "heart.fill", "gift.fill", "map.fill", "airplane"],
     ]
 
-    init(store: ShortcutRecordStore, calendarStore: TimeCalendarStore) {
+    private let editingTask: ShortcutTask?
+
+    init(store: ShortcutRecordStore, calendarStore: TimeCalendarStore, editingTask: ShortcutTask? = nil) {
         self.store = store
         self.calendarStore = calendarStore
-        let first = calendarStore.categories.first
-        _pickedCategory = State(initialValue: first?.id ?? "")
-        _pickedSubtype = State(initialValue: first?.types.first?.id)
+        self.editingTask = editingTask
+        if let editingTask {
+            _name = State(initialValue: editingTask.name)
+            _selectedTemplate = State(initialValue: ShortcutTask(
+                name: editingTask.name,
+                symbolName: editingTask.symbolName,
+                colorHex: editingTask.colorHex
+            ))
+            _pickedCategory = State(initialValue: editingTask.categoryId ?? calendarStore.categories.first?.id ?? "")
+            _pickedSubtype = State(initialValue: editingTask.subtypeId)
+        } else {
+            let first = calendarStore.categories.first
+            _pickedCategory = State(initialValue: first?.id ?? "")
+            _pickedSubtype = State(initialValue: first?.types.first?.id)
+        }
     }
 
     private var category: Calendar2Category {
@@ -544,7 +552,7 @@ private struct AddShortcutSheet: View {
             Circle()
                 .fill(category.color)
                 .frame(width: 13, height: 13)
-            Text("新增快捷指令")
+            Text(editingTask == nil ? "新增快捷指令" : "编辑快捷指令")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "23232A"))
             Spacer()
@@ -773,7 +781,7 @@ private struct AddShortcutSheet: View {
                 .fill(Color.black.opacity(0.05))
                 .frame(height: 1)
             Button { save() } label: {
-                Text("保存指令")
+                Text(editingTask == nil ? "保存指令" : "保存修改")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -820,7 +828,12 @@ private struct AddShortcutSheet: View {
 
     private func save() {
         guard !trimmedName.isEmpty else { return }
-        store.addTask(name: trimmedName, template: selectedTemplate, categoryId: pickedCategory.isEmpty ? nil : pickedCategory, subtypeId: pickedSubtype)
+        let categoryId = pickedCategory.isEmpty ? nil : pickedCategory
+        if let editingTask {
+            store.updateTask(editingTask, name: trimmedName, template: selectedTemplate, categoryId: categoryId, subtypeId: pickedSubtype)
+        } else {
+            store.addTask(name: trimmedName, template: selectedTemplate, categoryId: categoryId, subtypeId: pickedSubtype)
+        }
         dismiss()
     }
 }

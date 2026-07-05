@@ -71,6 +71,9 @@ final class FitnessActiveSessionViewModel: ObservableObject {
 
     private var sessionPausedAt: Date?
     private var accumulatedSessionPauseSeconds = 0
+    private var needsReloadAfterCurrentLoad = false
+    private var pendingOperations: [FitnessSessionOperationRequest] = []
+    private var isFlushingOperations = false
 
     private static let isoFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -80,6 +83,8 @@ final class FitnessActiveSessionViewModel: ObservableObject {
 
     init(payload: FitnessWorkoutSessionPayload) {
         self.payload = payload
+        self.pendingOperations = Self.loadPendingOperations(sessionId: payload.sessionId)
+        Task { await flushPendingOperations() }
     }
 
     var title: String { detail?.name ?? payload.name }
@@ -106,18 +111,61 @@ final class FitnessActiveSessionViewModel: ObservableObject {
     }
 
     func load() async {
-        guard !isLoading else { return }
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-        do {
-            detail = try await FitnessAPIClient.sessionDetail(id: payload.sessionId)
-        } catch {
-            errorMessage = "训练详情加载失败"
+        if isLoading {
+            needsReloadAfterCurrentLoad = true
+            return
         }
+
+        repeat {
+            needsReloadAfterCurrentLoad = false
+            isLoading = true
+            errorMessage = nil
+            do {
+                detail = try await FitnessAPIClient.sessionDetail(id: payload.sessionId)
+            } catch {
+                errorMessage = "训练详情加载失败"
+            }
+            isLoading = false
+        } while needsReloadAfterCurrentLoad
     }
 
     func toggleSetCompletion(exerciseId: Int, setId: Int) async {
+        guard let detail, !savingSetIds.contains(setId) else { return }
+        let contexts = orderedSetContexts(from: detail)
+        guard let target = contexts.first(where: { $0.exercise.sessionExerciseId == exerciseId && $0.set.sessionSetId == setId }) else { return }
+        let now = Date()
+        let operation: FitnessSessionOperationRequest
+        if target.set.isCompleted {
+            operation = makeOperation(type: "reopen_set", setId: setId, now: now)
+        } else if target.set.timerStatus == "running" {
+            let elapsed = (target.set.timerAccumulatedSeconds ?? 0) + (target.set.timerStartedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0)
+            operation = makeOperation(
+                type: "complete_set",
+                setId: setId,
+                actualWeightKg: target.set.actualWeightKg ?? target.set.plannedWeightKg,
+                actualReps: target.set.actualReps ?? target.set.plannedReps,
+                actualDurationSeconds: target.exercise.isTimeBased ? elapsed : (target.set.actualDurationSeconds ?? target.set.plannedDurationSeconds),
+                actualDistanceMeters: target.set.actualDistanceMeters ?? target.set.plannedDistanceMeters,
+                now: now
+            )
+        } else {
+            operation = makeOperation(type: "start_set", setId: setId, now: now)
+        }
+
+        applyOptimistic(operation)
+        broadcastCurrentSnapshot()
+        enqueueOperation(operation)
+        if operation.type == "start_set" {
+            if let pausedAt = sessionPausedAt {
+                accumulatedSessionPauseSeconds += max(0, Int(Date().timeIntervalSince(pausedAt)))
+            }
+            sessionPausedAt = nil
+            isSessionPaused = false
+        }
+    }
+
+    private func saveSetCompletionViaStructure(exerciseId: Int, setId: Int) async {
+        await waitForPendingLoad()
         guard let detail, !savingSetIds.contains(setId) else { return }
         let contexts = orderedSetContexts(from: detail)
         guard let target = contexts.first(where: { $0.exercise.sessionExerciseId == exerciseId && $0.set.sessionSetId == setId }) else { return }
@@ -182,6 +230,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
                 )
             }
             _ = try await FitnessAPIClient.saveSessionStructure(id: payload.sessionId, request: request)
+            PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             if shouldStartSet {
                 if let pausedAt = sessionPausedAt {
                     accumulatedSessionPauseSeconds += max(0, Int(Date().timeIntervalSince(pausedAt)))
@@ -196,6 +245,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
     }
 
     func addSet(to exerciseId: Int) async {
+        await waitForPendingLoad()
         guard let detail, !savingExerciseIds.contains(exerciseId) else { return }
         savingExerciseIds.insert(exerciseId)
         errorMessage = nil
@@ -229,6 +279,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
                 )
             }
             _ = try await FitnessAPIClient.saveSessionStructure(id: payload.sessionId, request: request)
+            PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
             errorMessage = "添加组失败，请检查网络"
@@ -237,44 +288,22 @@ final class FitnessActiveSessionViewModel: ObservableObject {
 
     func updateSetValues(exerciseId: Int, setId: Int, actualWeightKg: Double?, actualReps: Int?, actualDurationSeconds: Int?, actualDistanceMeters: Double?) async {
         guard let detail, !updatingSetIds.contains(setId) else { return }
-        updatingSetIds.insert(setId)
-        errorMessage = nil
-        defer { updatingSetIds.remove(setId) }
-        do {
-            let request = makeStructureRequest(from: detail) { exercise, set in
-                guard set.sessionSetId == setId else {
-                    return sessionSetRequest(from: set, exercise: exercise)
-                }
-                return FitnessSessionSetRequest(
-                    sessionSetId: set.sessionSetId,
-                    setOrder: set.setOrder,
-                    setType: set.setType,
-                    plannedWeightKg: set.plannedWeightKg,
-                    plannedReps: set.plannedReps,
-                    plannedDurationSeconds: set.plannedDurationSeconds,
-                    plannedDistanceMeters: set.plannedDistanceMeters,
-                    actualWeightKg: actualWeightKg,
-                    actualReps: actualReps,
-                    actualDurationSeconds: actualDurationSeconds,
-                    actualDistanceMeters: actualDistanceMeters,
-                    timerStatus: set.timerStatus ?? "idle",
-                    timerStartedAt: set.timerStartedAt.map { Self.isoFormatter.string(from: $0) },
-                    timerAccumulatedSeconds: set.timerAccumulatedSeconds ?? 0,
-                    rpe: set.rpe,
-                    isCompleted: set.isCompleted,
-                    completedAt: set.completedAt.map { Self.isoFormatter.string(from: $0) },
-                    restSeconds: set.restSeconds ?? exercise.restSeconds,
-                    note: set.note
-                )
-            }
-            _ = try await FitnessAPIClient.saveSessionStructure(id: payload.sessionId, request: request)
-            await load()
-        } catch {
-            errorMessage = "保存失败，请检查网络"
-        }
+        guard orderedSetContexts(from: detail).contains(where: { $0.exercise.sessionExerciseId == exerciseId && $0.set.sessionSetId == setId }) else { return }
+        let operation = makeOperation(
+            type: "update_set_values",
+            setId: setId,
+            actualWeightKg: actualWeightKg,
+            actualReps: actualReps,
+            actualDurationSeconds: actualDurationSeconds,
+            actualDistanceMeters: actualDistanceMeters
+        )
+        applyOptimistic(operation)
+        broadcastCurrentSnapshot()
+        enqueueOperation(operation)
     }
 
     func deleteSetFromSession(exerciseId: Int, setId: Int) async {
+        await waitForPendingLoad()
         guard let detail else { return }
         errorMessage = nil
         do {
@@ -312,6 +341,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
                 deletedSessionSetIds: [setId]
             )
             _ = try await FitnessAPIClient.saveSessionStructure(id: payload.sessionId, request: request)
+            PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
             errorMessage = "删除组失败，请检查网络"
@@ -319,6 +349,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
     }
 
     func deleteExerciseFromSession(exerciseId: Int) async {
+        await waitForPendingLoad()
         guard let detail, !savingExerciseIds.contains(exerciseId) else { return }
         savingExerciseIds.insert(exerciseId)
         errorMessage = nil
@@ -341,6 +372,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
                 deletedSessionSetIds: []
             )
             _ = try await FitnessAPIClient.saveSessionStructure(id: payload.sessionId, request: request)
+            PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
             errorMessage = "删除动作失败，请检查网络"
@@ -348,6 +380,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
     }
 
     func addExercisesToSession(_ selected: [FitnessExercise]) async {
+        await waitForPendingLoad()
         guard let detail, !isAddingExercise else { return }
         let existingExerciseIds = Set(detail.exercises.map { $0.exerciseId })
         let newExercises = selected.filter { !existingExerciseIds.contains($0.id) }
@@ -390,6 +423,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
                 deletedSessionSetIds: []
             )
             _ = try await FitnessAPIClient.saveSessionStructure(id: payload.sessionId, request: request)
+            PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
             errorMessage = "添加动作失败，请检查网络"
@@ -400,6 +434,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
     /// (so it doesn't snap back while the save round-trips), sort orders are
     /// renumbered to match the new arrangement, then the full structure is saved.
     func moveExercise(from source: IndexSet, to destination: Int) async {
+        await waitForPendingLoad()
         guard let detail, !isReorderingExercises else { return }
         var reordered = detail.exercises
         reordered.move(fromOffsets: source, toOffset: destination)
@@ -429,6 +464,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
                 deletedSessionSetIds: []
             )
             _ = try await FitnessAPIClient.saveSessionStructure(id: payload.sessionId, request: request)
+            PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
             errorMessage = "调整顺序失败，请检查网络"
@@ -460,6 +496,12 @@ final class FitnessActiveSessionViewModel: ObservableObject {
         try? await Task.sleep(nanoseconds: 150_000_000)
         while !updatingSetIds.isEmpty {
             try? await Task.sleep(nanoseconds: 80_000_000)
+        }
+    }
+
+    private func waitForPendingLoad() async {
+        while isLoading {
+            try? await Task.sleep(nanoseconds: 50_000_000)
         }
     }
 
@@ -496,33 +538,10 @@ final class FitnessActiveSessionViewModel: ObservableObject {
         guard let detail, !isPausing, !savingSetIds.contains(setId) else { return }
         let contexts = orderedSetContexts(from: detail)
         guard let running = contexts.first(where: { $0.set.sessionSetId == setId && $0.set.timerStatus == "running" }) else { return }
-        isPausing = true
-        savingSetIds.insert(running.set.sessionSetId)
-        errorMessage = nil
-        defer {
-            isPausing = false
-            savingSetIds.remove(running.set.sessionSetId)
-        }
-        do {
-            let now = Date()
-            let elapsed = running.set.timerStartedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
-            let accumulated = (running.set.timerAccumulatedSeconds ?? 0) + elapsed
-            let request = makeStructureRequest(from: detail) { exercise, set in
-                guard set.sessionSetId == running.set.sessionSetId else {
-                    return sessionSetRequest(from: set, exercise: exercise)
-                }
-                return sessionSetRequest(
-                    from: set,
-                    exercise: exercise,
-                    timerStatusOverride: "paused",
-                    timerAccumulatedSecondsOverride: accumulated
-                )
-            }
-            _ = try await FitnessAPIClient.saveSessionStructure(id: payload.sessionId, request: request)
-            await load()
-        } catch {
-            errorMessage = "暂停训练失败，请检查网络"
-        }
+        let operation = makeOperation(type: "pause_set", setId: running.set.sessionSetId)
+        applyOptimistic(operation)
+        broadcastCurrentSnapshot()
+        enqueueOperation(operation)
     }
 
     func complete(rpe: Double? = nil) async -> Bool {
@@ -534,6 +553,9 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             _ = try await FitnessAPIClient.completeSession(id: payload.sessionId, rpe: rpe)
             return true
         } catch {
+            if FitnessAPIClient.isMissingResourceError(error) {
+                return true
+            }
             errorMessage = "完成训练失败，请检查网络"
             return false
         }
@@ -559,6 +581,9 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             _ = try await FitnessAPIClient.completeSession(id: payload.sessionId, rpe: rpe)
             return true
         } catch {
+            if FitnessAPIClient.isMissingResourceError(error) {
+                return true
+            }
             errorMessage = "保存并更新模板失败，请检查网络"
             return false
         }
@@ -617,8 +642,15 @@ final class FitnessActiveSessionViewModel: ObservableObject {
         defer { isDiscarding = false }
         do {
             _ = try await FitnessAPIClient.discardSession(id: payload.sessionId)
+            // Also remove the Apple Health workout the watch saved for this
+            // session (only the watch can delete its own workouts).
+            PhoneWatchSync.shared.requestWorkoutDeletion(sessionId: payload.sessionId)
             return true
         } catch {
+            if FitnessAPIClient.isMissingResourceError(error) {
+                PhoneWatchSync.shared.requestWorkoutDeletion(sessionId: payload.sessionId)
+                return true
+            }
             errorMessage = "删除训练失败，请检查网络"
             return false
         }
@@ -749,6 +781,152 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             || set.isCompleted
     }
 
+    private func makeOperation(
+        type: String,
+        setId: Int,
+        actualWeightKg: Double? = nil,
+        actualReps: Int? = nil,
+        actualDurationSeconds: Int? = nil,
+        actualDistanceMeters: Double? = nil,
+        rpe: Double? = nil,
+        now: Date = .now
+    ) -> FitnessSessionOperationRequest {
+        FitnessSessionOperationRequest(
+            operationId: UUID().uuidString,
+            type: type,
+            sessionSetId: setId,
+            actualWeightKg: actualWeightKg,
+            actualReps: actualReps,
+            actualDurationSeconds: actualDurationSeconds,
+            actualDistanceMeters: actualDistanceMeters,
+            rpe: rpe,
+            clientTime: Self.isoFormatter.string(from: now)
+        )
+    }
+
+    private func enqueueOperation(_ operation: FitnessSessionOperationRequest) {
+        pendingOperations.append(operation)
+        persistPendingOperations()
+        Task { await flushPendingOperations() }
+    }
+
+    private func flushPendingOperations() async {
+        guard !isFlushingOperations else { return }
+        isFlushingOperations = true
+        defer { isFlushingOperations = false }
+        while !pendingOperations.isEmpty {
+            let operation = pendingOperations[0]
+            do {
+                let fresh = try await FitnessAPIClient.applySessionOperation(id: payload.sessionId, request: operation)
+                pendingOperations.removeFirst()
+                persistPendingOperations()
+                detail = fresh
+                PhoneWatchSync.shared.broadcastSessionSnapshot(fresh)
+                PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
+                errorMessage = nil
+            } catch {
+                errorMessage = "训练操作未同步，稍后自动重试"
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                if pendingOperations.first?.operationId == operation.operationId {
+                    Task { await flushPendingOperations() }
+                    return
+                }
+            }
+        }
+    }
+
+    private func persistPendingOperations() {
+        if let data = try? JSONEncoder().encode(pendingOperations) {
+            UserDefaults.standard.set(data, forKey: Self.pendingOperationsKey(sessionId: payload.sessionId))
+        }
+    }
+
+    private static func loadPendingOperations(sessionId: Int) -> [FitnessSessionOperationRequest] {
+        guard let data = UserDefaults.standard.data(forKey: pendingOperationsKey(sessionId: sessionId)),
+              let operations = try? JSONDecoder().decode([FitnessSessionOperationRequest].self, from: data) else {
+            return []
+        }
+        return operations
+    }
+
+    private static func pendingOperationsKey(sessionId: Int) -> String {
+        "fitness.pendingOperations.\(sessionId)"
+    }
+
+    private func applyOptimistic(_ operation: FitnessSessionOperationRequest) {
+        guard let detail else { return }
+        let now = Self.isoFormatter.date(from: operation.clientTime) ?? .now
+        let exercises = detail.exercises.map { exercise in
+            let sets = exercise.sets.map { set in
+                optimisticSet(set, exercise: exercise, operation: operation, now: now)
+            }
+            return exercise.replacingSets(sets)
+        }
+        self.detail = detail.replacingExercises(exercises)
+    }
+
+    func applyRemoteSnapshot(_ snapshot: FitnessSessionDetail) {
+        guard snapshot.id == payload.sessionId else { return }
+        detail = snapshot
+    }
+
+    private func broadcastCurrentSnapshot() {
+        guard let detail else { return }
+        PhoneWatchSync.shared.broadcastSessionSnapshot(detail)
+    }
+
+    private func optimisticSet(
+        _ set: FitnessSessionSet,
+        exercise: FitnessSessionExercise,
+        operation: FitnessSessionOperationRequest,
+        now: Date
+    ) -> FitnessSessionSet {
+        let isTarget = set.sessionSetId == operation.sessionSetId
+        if operation.type == "start_set" {
+            if isTarget {
+                return set.replacing(timerStatus: "running", timerStartedAt: now, timerAccumulatedSeconds: set.timerAccumulatedSeconds ?? 0, isCompleted: false, completedAt: nil)
+            }
+            if set.timerStatus == "running" {
+                let elapsed = set.timerStartedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
+                return set.replacing(timerStatus: "idle", clearTimerStartedAt: true, timerAccumulatedSeconds: (set.timerAccumulatedSeconds ?? 0) + elapsed)
+            }
+            return set
+        }
+        guard isTarget else { return set }
+        switch operation.type {
+        case "complete_set":
+            let elapsed = set.timerStartedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
+            let accumulated = (set.timerAccumulatedSeconds ?? 0) + (set.timerStatus == "running" ? elapsed : 0)
+            return set.replacing(
+                actualWeightKg: operation.actualWeightKg ?? set.plannedWeightKg,
+                actualReps: operation.actualReps ?? set.plannedReps,
+                actualDurationSeconds: operation.actualDurationSeconds ?? (exercise.isTimeBased ? accumulated : set.plannedDurationSeconds),
+                actualDistanceMeters: operation.actualDistanceMeters ?? set.plannedDistanceMeters,
+                timerStatus: "idle",
+                clearTimerStartedAt: true,
+                timerAccumulatedSeconds: accumulated,
+                rpe: operation.rpe ?? set.rpe,
+                isCompleted: true,
+                completedAt: now
+            )
+        case "reopen_set":
+            return set.replacing(timerStatus: "idle", clearTimerStartedAt: true, isCompleted: false, clearCompletedAt: true)
+        case "pause_set":
+            let elapsed = set.timerStartedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
+            return set.replacing(timerStatus: "paused", clearTimerStartedAt: true, timerAccumulatedSeconds: (set.timerAccumulatedSeconds ?? 0) + elapsed)
+        case "update_set_values":
+            return set.replacing(
+                actualWeightKg: operation.actualWeightKg,
+                actualReps: operation.actualReps,
+                actualDurationSeconds: operation.actualDurationSeconds,
+                actualDistanceMeters: operation.actualDistanceMeters,
+                rpe: operation.rpe ?? set.rpe
+            )
+        default:
+            return set
+        }
+    }
+
     private func makeStructureRequest(
         from detail: FitnessSessionDetail,
         setMapper: (FitnessSessionExercise, FitnessSessionSet) -> FitnessSessionSetRequest,
@@ -860,6 +1038,61 @@ private extension FitnessSessionExercise {
             restSeconds: restSeconds,
             note: note,
             sets: sets
+        )
+    }
+
+    func replacingSets(_ sets: [FitnessSessionSet]) -> FitnessSessionExercise {
+        FitnessSessionExercise(
+            sessionExerciseId: sessionExerciseId,
+            exerciseId: exerciseId,
+            name: name,
+            trackingType: trackingType,
+            exerciseType: exerciseType,
+            imageUrl: imageUrl,
+            sortOrder: sortOrder,
+            restSeconds: restSeconds,
+            note: note,
+            sets: sets
+        )
+    }
+}
+
+private extension FitnessSessionSet {
+    func replacing(
+        actualWeightKg: Double? = nil,
+        actualReps: Int? = nil,
+        actualDurationSeconds: Int? = nil,
+        actualDistanceMeters: Double? = nil,
+        timerStatus: String? = nil,
+        timerStartedAt: Date? = nil,
+        clearTimerStartedAt: Bool = false,
+        timerAccumulatedSeconds: Int? = nil,
+        rpe: Double? = nil,
+        isCompleted: Bool? = nil,
+        completedAt: Date? = nil,
+        clearCompletedAt: Bool = false
+    ) -> FitnessSessionSet {
+        FitnessSessionSet(
+            sessionSetId: sessionSetId,
+            templateSetId: templateSetId,
+            setOrder: setOrder,
+            setType: setType,
+            plannedWeightKg: plannedWeightKg,
+            plannedReps: plannedReps,
+            plannedDurationSeconds: plannedDurationSeconds,
+            plannedDistanceMeters: plannedDistanceMeters,
+            actualWeightKg: actualWeightKg ?? self.actualWeightKg,
+            actualReps: actualReps ?? self.actualReps,
+            actualDurationSeconds: actualDurationSeconds ?? self.actualDurationSeconds,
+            actualDistanceMeters: actualDistanceMeters ?? self.actualDistanceMeters,
+            timerStatus: timerStatus ?? self.timerStatus,
+            timerStartedAt: clearTimerStartedAt ? nil : (timerStartedAt ?? self.timerStartedAt),
+            timerAccumulatedSeconds: timerAccumulatedSeconds ?? self.timerAccumulatedSeconds,
+            rpe: rpe ?? self.rpe,
+            isCompleted: isCompleted ?? self.isCompleted,
+            completedAt: clearCompletedAt ? nil : (completedAt ?? self.completedAt),
+            restSeconds: restSeconds,
+            note: note
         )
     }
 }

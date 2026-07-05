@@ -16,6 +16,7 @@ final class FitnessTemplateListViewModel: ObservableObject {
     @Published private(set) var isSessionsLoading = false
     @Published var selectedStrengthRange: FitnessStrengthVolumeRange = .month
     @Published private(set) var periodOffset = 0
+    private var needsStatsReloadAfterCurrentLoad = false
 
     /// 当前选中的时间周期（含起止区间、标签、能否前进）。
     var period: FitnessStatsPeriod {
@@ -64,38 +65,46 @@ final class FitnessTemplateListViewModel: ObservableObject {
     /// of several times (which caused the scroll view to jitter on load / period
     /// switch).
     func loadStats() async {
-        guard !isStatsLoading else { return }
-        isStatsLoading = true
-        isSessionsLoading = true
-        statsErrorMessage = nil
-        sessionsErrorMessage = nil
-
-        let period = self.period
-        async let volumeTask = FitnessAPIClient.strengthVolume(
-            range: selectedStrengthRange.rawValue,
-            startDate: period.startDateString,
-            endDate: period.endDateString
-        )
-        async let sessionsTask = FitnessAPIClient.workoutSessions(
-            status: "completed",
-            startDate: period.startDateString,
-            endDate: period.endDateString,
-            page: 1,
-            pageSize: selectedStrengthRange.sessionPageSize
-        )
-
-        do {
-            let volume = try await volumeTask
-            let sessions = try await sessionsTask
-            strengthVolume = volume
-            sessionsInRange = sessions.items
-        } catch {
-            statsErrorMessage = "统计分析加载失败"
-            sessionsErrorMessage = "训练记录加载失败"
+        if isStatsLoading {
+            needsStatsReloadAfterCurrentLoad = true
+            return
         }
 
-        isStatsLoading = false
-        isSessionsLoading = false
+        repeat {
+            needsStatsReloadAfterCurrentLoad = false
+            isStatsLoading = true
+            isSessionsLoading = true
+            statsErrorMessage = nil
+            sessionsErrorMessage = nil
+
+            let range = selectedStrengthRange
+            let period = self.period
+            async let volumeTask = FitnessAPIClient.strengthVolume(
+                range: range.rawValue,
+                startDate: period.startDateString,
+                endDate: period.endDateString
+            )
+            async let sessionsTask = FitnessAPIClient.workoutSessions(
+                status: "completed",
+                startDate: period.startDateString,
+                endDate: period.endDateString,
+                page: 1,
+                pageSize: range.sessionPageSize
+            )
+
+            do {
+                let volume = try await volumeTask
+                let sessions = try await sessionsTask
+                strengthVolume = volume
+                sessionsInRange = sessions.items
+            } catch {
+                statsErrorMessage = "统计分析加载失败"
+                sessionsErrorMessage = "训练记录加载失败"
+            }
+
+            isStatsLoading = false
+            isSessionsLoading = false
+        } while needsStatsReloadAfterCurrentLoad
     }
 
     func loadStrengthVolume() async {
@@ -172,6 +181,7 @@ final class FitnessTemplateListViewModel: ObservableObject {
 struct FitnessTemplateListView: View {
     @StateObject private var vm = FitnessTemplateListViewModel()
     @EnvironmentObject private var workout: ActiveWorkoutStore
+    @EnvironmentObject private var fitnessSessionEvents: FitnessSessionEventStore
     @State private var navigateToDetail: FitnessTemplateDetailPayload?
     @State private var navigateToEditor: FitnessTemplateEditorPayload?
     @State private var selectedStatsSession: FitnessSessionSummary?
@@ -179,15 +189,7 @@ struct FitnessTemplateListView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                LinearGradient(
-                    colors: [Color(hex: "F3F2F7"), Color(hex: "EEEDF4")],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-
-                ScrollView {
+            ScrollView {
                     VStack(spacing: 0) {
                         HStack(alignment: .center) {
                             Text("体能训练模板")
@@ -299,8 +301,17 @@ struct FitnessTemplateListView: View {
                 // doesn't abort the URLSession calls and surface as a bogus
                 // "network error" (see FitnessOverviewViewModel.refresh).
                 .refreshable { await Task { await vm.loadAll() }.value }
-            }
+                .collapsibleTabScroll()
+                .background(
+                    LinearGradient(
+                        colors: [Color(hex: "F3F2F7"), Color(hex: "EEEDF4")],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .ignoresSafeArea()
+                )
             .toolbar(.hidden, for: .navigationBar)
+            .tabBarMinimizeBehavior(.onScrollDown)
             .navigationDestination(item: $navigateToDetail) { payload in
                 FitnessTemplateDetailView(payload: payload, onEdit: { editorPayload in
                     navigateToEditor = editorPayload
@@ -326,7 +337,7 @@ struct FitnessTemplateListView: View {
         // The active workout is hosted at the app root now (see ContentView), so when
         // it finishes we reload everything (templates + stats + records) so the
         // just-finished workout shows up in the training records list.
-        .onReceive(NotificationCenter.default.publisher(for: .fitnessSessionDidComplete)) { _ in
+        .onChange(of: fitnessSessionEvents.completedSessionVersion) { _, _ in
             Task { await vm.loadAll() }
         }
         .sheet(item: $selectedStatsSession) { session in

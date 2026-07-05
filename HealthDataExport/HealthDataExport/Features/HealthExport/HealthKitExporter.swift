@@ -144,26 +144,32 @@ final class HealthKitExporter {
             throw ExportError.invalidEndpoint
         }
 
+        // Health data is attributed to the logged-in user server-side, so always
+        // send the login token (not the per-config bearer token).
+        var headers: [String: String] = [:]
+        if let token = AuthTokenStore.token {
+            headers["Authorization"] = "Bearer \(token)"
+        }
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        request.httpMethod = HTTPMethod.post.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if !configuration.bearerToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            request.setValue("Bearer \(configuration.bearerToken)", forHTTPHeaderField: "Authorization")
-        }
+        headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
         request.httpBody = try payload.jsonData
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw ExportError.invalidResponse
+        let response: HTTPClientResponse
+        do {
+            response = try await HTTPClient.shared.data(for: request)
+        } catch let error as HTTPClientError {
+            switch error {
+            case .invalidResponse:
+                throw ExportError.invalidResponse
+            case let .httpFailure(statusCode, data):
+                throw ExportError.httpFailure(statusCode, String(data: data, encoding: .utf8) ?? "")
+            }
         }
 
-        let responseBody = String(data: data, encoding: .utf8) ?? ""
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw ExportError.httpFailure(httpResponse.statusCode, responseBody)
-        }
-
-        return "发送成功，HTTP \(httpResponse.statusCode)，\(payload.itemCount) 条数据"
+        return "发送成功，HTTP \(response.statusCode)，\(payload.itemCount) 条数据"
     }
 
     // MARK: - Metric dispatch

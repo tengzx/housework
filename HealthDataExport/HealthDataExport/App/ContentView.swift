@@ -12,27 +12,58 @@ final class ActiveWorkoutStore: ObservableObject {
     /// full screen reuses the same model, so its data isn't reloaded.
     @Published private(set) var vm: FitnessActiveSessionViewModel?
     @Published var isMinimized = false
+    /// Live heart rate pushed from the watch during the active session.
+    @Published var remoteHeartRate: Int?
+
+    /// Broadcasts a local session change to the watch. nil = the workout ended.
+    /// Set by the app root; not called while applying a change that came *from*
+    /// the watch (so the two don't ping-pong).
+    var onLocalChange: ((FitnessWorkoutSessionPayload?) -> Void)?
+    private var applyingRemote = false
 
     func start(_ payload: FitnessWorkoutSessionPayload) {
         vm = FitnessActiveSessionViewModel(payload: payload)
         isMinimized = false
+        remoteHeartRate = nil
+        if !applyingRemote { onLocalChange?(payload) }
     }
     func minimize() { isMinimized = true }
     func restore() { isMinimized = false }
     func end() {
+        let hadSession = vm != nil
         vm = nil
         isMinimized = false
+        remoteHeartRate = nil
+        if hadSession && !applyingRemote { onLocalChange?(nil) }
+    }
+
+    /// Open a workout that was started on the watch — minimized into the floating
+    /// bar so it's present but unobtrusive. No-op if that session is already open.
+    func applyRemoteStart(_ payload: FitnessWorkoutSessionPayload) {
+        guard vm?.payload.sessionId != payload.sessionId else { return }
+        applyingRemote = true
+        vm = FitnessActiveSessionViewModel(payload: payload)
+        isMinimized = true
+        remoteHeartRate = nil
+        applyingRemote = false
+    }
+
+    /// Close the workout because it finished on the watch.
+    @discardableResult
+    func applyRemoteEnd() -> Bool {
+        guard vm != nil else { return false }
+        applyingRemote = true
+        end()
+        applyingRemote = false
+        return true
     }
 }
 
-extension Notification.Name {
-    /// Posted when a workout session finishes (completed or discarded) so screens
-    /// can refresh their records without a direct reference to the session view.
-    static let fitnessSessionDidComplete = Notification.Name("fitnessSessionDidComplete")
-}
-
 struct ContentView: View {
+    @EnvironmentObject private var dependencies: AppDependencies
+    @EnvironmentObject private var fitnessSessionEvents: FitnessSessionEventStore
     @StateObject private var workout = ActiveWorkoutStore()
+    @ObservedObject private var timeTracker = ShortcutRecordStore.shared
     // Persist the selected tab so collapsing the workout (which toggles the tab-bar
     // accessory) keeps the user on the tab they were on, not resetting to 记录.
     @State private var selectedTab = 0
@@ -40,24 +71,31 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             RecordWorkspaceView()
+                .tabBarMinimizeBehavior(.onScrollDown)
                 .tabItem {
                     Label("记录", systemImage: "list.bullet.rectangle.portrait.fill")
                 }
                 .tag(0)
 
             FitnessTemplateListView()
+                .tabBarMinimizeBehavior(.onScrollDown)
                 .tabItem {
                     Label("健身", systemImage: "figure.strengthtraining.traditional")
                 }
                 .tag(1)
 
-            HealthExportView()
+            HealthExportView(
+                configurationStore: dependencies.configurationStore,
+                observerSyncManager: dependencies.healthObserverSyncManager
+            )
+            .tabBarMinimizeBehavior(.onScrollDown)
                 .tabItem {
                     Label("数据", systemImage: "house")
                 }
                 .tag(2)
 
-            PlaceholderTabView(title: "我的", symbolName: "person")
+            ProfileTabView()
+                .tabBarMinimizeBehavior(.onScrollDown)
                 .tabItem {
                     Label("我的", systemImage: "person")
                 }
@@ -65,6 +103,7 @@ struct ContentView: View {
         }
         .tint(Color(hex: "FF7847"))
         .environmentObject(workout)
+        .tabBarMinimizeBehavior(.onScrollDown)
         // Attach the collapsed-workout accessory to the tab bar ONLY while a workout
         // is minimized — otherwise the accessory chrome would show as an empty bar.
         // Applied as a conditional modifier on the same TabView so tab state is kept.
@@ -74,7 +113,7 @@ struct ContentView: View {
         .overlay {
             if let vm = workout.vm, !workout.isMinimized {
                 FitnessActiveSessionView(vm: vm) {
-                    NotificationCenter.default.post(name: .fitnessSessionDidComplete, object: nil)
+                    fitnessSessionEvents.sessionDidComplete()
                 }
                 .environmentObject(workout)
                 .transition(.move(edge: .bottom))
@@ -82,6 +121,103 @@ struct ContentView: View {
         }
         .animation(.spring(response: 0.38, dampingFraction: 0.92), value: workout.isMinimized)
         .animation(.spring(response: 0.38, dampingFraction: 0.92), value: workout.vm == nil)
+        .task {
+            // Keep the watch and phone showing the same active workout.
+            workout.onLocalChange = { payload in
+                PhoneWatchSync.shared.broadcastWorkout(
+                    payload.map { WorkoutSyncPayload(sessionId: $0.sessionId, name: $0.name) }
+                )
+            }
+            // Relay time-tracking changes to the watch face complication whenever
+            // the phone's active entry is saved (started, switched, or stopped).
+            SharedActivityStore.onWrite = { activity in
+                PhoneWatchSync.shared.broadcastTimeEntry(activity)
+            }
+            // Catch up: if the phone already has a running entry mirrored, push it so
+            // a freshly-launched watch converges. Only when non-nil — broadcasting a
+            // stale `nil` here could wrongly clear a live entry on the watch.
+            if let current = SharedActivityStore.read() ?? timeTracker.sharedActiveActivity() {
+                PhoneWatchSync.shared.broadcastTimeEntry(current)
+            }
+            // Reflect time-tracking changes made on the watch, even when the
+            // Record tab hasn't been opened yet.
+            PhoneWatchSync.shared.onRemoteTimeEntry = { activity in
+                Task { @MainActor in
+                    timeTracker.applyRemoteActive(activity)
+                }
+            }
+            PhoneWatchSync.shared.onRemoteWorkout = { remote in
+                Task { @MainActor in
+                    if let remote {
+                        await applyRemoteWorkoutIfAvailable(remote)
+                    } else {
+                        if workout.applyRemoteEnd() {
+                            fitnessSessionEvents.sessionDidComplete()
+                        }
+                    }
+                }
+            }
+            // The watch changed a set — reload if we're showing that same session.
+            PhoneWatchSync.shared.onRemoteSessionChanged = { sessionId in
+                Task { @MainActor in
+                    if workout.vm?.payload.sessionId == sessionId {
+                        await workout.vm?.load()
+                    }
+                }
+            }
+            PhoneWatchSync.shared.onRemoteSessionSnapshot = { sessionId, detail in
+                Task { @MainActor in
+                    if workout.vm?.payload.sessionId == sessionId {
+                        workout.vm?.applyRemoteSnapshot(detail)
+                    }
+                }
+            }
+            PhoneWatchSync.shared.onRemoteSessionCompleted = { _ in
+                Task { @MainActor in
+                    fitnessSessionEvents.sessionDidComplete()
+                }
+            }
+            // Live heart rate from the watch → shown in the floating workout bar.
+            PhoneWatchSync.shared.onRemoteHeartRate = { sessionId, bpm in
+                Task { @MainActor in
+                    if workout.vm?.payload.sessionId == sessionId {
+                        workout.remoteHeartRate = bpm
+                    }
+                }
+            }
+            // Catch up: if the watch already started a workout before this app
+            // launched, open it now (the callback above wasn't set when the
+            // watch's state first arrived).
+            PhoneWatchSync.shared.refreshFromContext()
+            if let existing = PhoneWatchSync.shared.currentWorkout() {
+                await applyRemoteWorkoutIfAvailable(existing)
+            }
+        }
+    }
+
+    @MainActor
+    private func applyRemoteWorkoutIfAvailable(_ remote: WorkoutSyncPayload) async {
+        do {
+            let detail = try await FitnessAPIClient.sessionDetail(id: remote.sessionId)
+            let fallbackName = remote.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let payload = FitnessWorkoutSessionPayload(
+                sessionId: remote.sessionId,
+                name: detail.name.isEmpty ? fallbackName : detail.name
+            )
+            workout.applyRemoteStart(payload)
+            workout.vm?.applyRemoteSnapshot(detail)
+        } catch {
+            if FitnessAPIClient.isMissingResourceError(error) {
+                if workout.vm?.payload.sessionId == remote.sessionId,
+                   workout.applyRemoteEnd() {
+                    fitnessSessionEvents.sessionDidComplete()
+                }
+                PhoneWatchSync.shared.broadcastWorkout(nil)
+            } else {
+                workout.applyRemoteStart(FitnessWorkoutSessionPayload(sessionId: remote.sessionId, name: remote.name))
+                await workout.vm?.load()
+            }
+        }
     }
 }
 
@@ -95,9 +231,8 @@ private struct CollapsedWorkoutAccessory: ViewModifier {
         if let vm = workout.vm, workout.isMinimized {
             content
                 .tabViewBottomAccessory {
-                    WorkoutAccessoryBar(vm: vm) { workout.restore() }
+                    WorkoutAccessoryBar(vm: vm, workout: workout) { workout.restore() }
                 }
-                .tabBarMinimizeBehavior(.onScrollDown)
         } else {
             content
         }
@@ -110,6 +245,7 @@ private struct CollapsedWorkoutAccessory: ViewModifier {
 /// button advances the workout (or expands to finish).
 private struct WorkoutAccessoryBar: View {
     @ObservedObject var vm: FitnessActiveSessionViewModel
+    @ObservedObject var workout: ActiveWorkoutStore
     let onExpand: () -> Void
 
     var body: some View {
@@ -137,6 +273,20 @@ private struct WorkoutAccessoryBar: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+
+                if let bpm = workout.remoteHeartRate {
+                    HStack(spacing: 3) {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.red)
+                        Text("\(bpm)")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(.primary)
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                    }
+                    .transition(.opacity)
+                }
 
                 Button {
                     Haptics.tap()
@@ -273,21 +423,56 @@ private func endEditingIfAvailable() {
 private func endEditingIfAvailable() {}
 #endif
 
-private struct PlaceholderTabView: View {
-    let title: String
-    let symbolName: String
+extension View {
+    /// Lets the tab bar minimize on scroll even when a screen's content is shorter
+    /// than the viewport. `.onScrollDown` only fires on an actual downward scroll
+    /// gesture, which short pages can't produce; forcing bounce lets the drag
+    /// register without padding the page with empty spacer views.
+    func collapsibleTabScroll() -> some View {
+        self
+            .scrollBounceBehavior(.always, axes: .vertical)
+            .tabBarMinimizeBehavior(.onScrollDown)
+    }
+}
+
+private struct ProfileTabView: View {
+    @EnvironmentObject private var session: SessionStore
 
     var body: some View {
         NavigationStack {
-            ContentUnavailableView(title, systemImage: symbolName)
+            List {
+                if let user = session.session {
+                    Section("账户") {
+                        LabeledContent("昵称", value: user.nickname)
+                        LabeledContent("用户 ID", value: String(user.userId))
+                        if let unit = user.unitSystem, !unit.isEmpty {
+                            LabeledContent("单位", value: unit)
+                        }
+                    }
+                }
+                Section {
+                    Button(role: .destructive) {
+                        Haptics.tap()
+                        session.logout()
+                    } label: {
+                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                }
+            }
+            .navigationTitle("我的")
         }
     }
 }
 
 struct HealthExportView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var viewModel = HealthExportViewModel()
-    @ObservedObject private var observerSyncManager = HealthObserverSyncManager.shared
+    @StateObject private var viewModel: HealthExportViewModel
+    @ObservedObject private var observerSyncManager: HealthObserverSyncManager
+
+    init(configurationStore: ConfigurationStore, observerSyncManager: HealthObserverSyncManager) {
+        _viewModel = StateObject(wrappedValue: HealthExportViewModel(store: configurationStore))
+        _observerSyncManager = ObservedObject(wrappedValue: observerSyncManager)
+    }
 
     var body: some View {
         NavigationStack {
@@ -364,7 +549,7 @@ struct HealthExportView: View {
 
     private var endpointSection: some View {
         Section("接收地址") {
-            TextField("http://100.67.64.11:8081/api/health/ingest", text: $viewModel.draft.endpointURL, axis: .vertical)
+            TextField(AppEnvironment.defaultHealthIngestURL, text: $viewModel.draft.endpointURL, axis: .vertical)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()

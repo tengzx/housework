@@ -3,6 +3,7 @@ import SwiftUI
 struct CalendarTrackerView2: View {
     private static let historyLookaheadDays = 7
     private static let maxFlickDays = 7
+    private static let quickCreateSheetDetent = PresentationDetent.height(320)
 
     @ObservedObject var store: TimeCalendarStore
     @State private var anchorOffset = -2
@@ -12,6 +13,7 @@ struct CalendarTrackerView2: View {
     @State private var timelineWidth: CGFloat = 0
     @State private var selectedEvent: Calendar2Event?
     @State private var draftEvent: Calendar2Event?
+    @State private var draftSheetDetent: PresentationDetent = Self.quickCreateSheetDetent
     @State private var isScrollingVertically = false
     @State private var scrollResetTask: Task<Void, Never>?
     @State private var showMonthPicker = false
@@ -73,9 +75,17 @@ struct CalendarTrackerView2: View {
                 mode: .create(draft),
                 store: store,
                 onSave: createEvent,
-                onDelete: nil
+                onDelete: nil,
+                onShowDetails: {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                        draftSheetDetent = .large
+                    }
+                    DispatchQueue.main.async {
+                        draftSheetDetent = .large
+                    }
+                }
             )
-            .presentationDetents([.large])
+            .presentationDetents([Self.quickCreateSheetDetent, .large], selection: $draftSheetDetent)
             .presentationDragIndicator(.visible)
             .presentationBackground(Calendar2Style.sheet)
         }
@@ -141,6 +151,7 @@ struct CalendarTrackerView2: View {
             .buttonStyle(HapticButtonStyle())
 
             Button {
+                draftSheetDetent = Self.quickCreateSheetDetent
                 draftEvent = store.makeDraftEvent(dayOffset: min(0, anchorOffset + 2))
             } label: {
                 Image(systemName: "plus")
@@ -495,7 +506,12 @@ private struct Calendar2EventBlockView: View {
 
     private var event: Calendar2Event { layout.event }
     private var tint: Color {
-        event.isMobileApp ? Self.mobileAppColor(for: event.name) : category.color
+        if event.isMobileApp {
+            return Self.mobileAppColor(for: event.name)
+        }
+        // 事件块颜色始终跟随所属大类的颜色，忽略小类颜色与服务端下发的快照色，
+        // 保证日历与分类列表显示一致。
+        return category.color
     }
 
     private static let mobileAppPalette: [Color] = [

@@ -122,8 +122,8 @@ struct EndAppSessionIntent: AppIntent {
 // MARK: - App Session API
 
 enum AppSessionAPI {
-    private static let startURL = URL(string: "http://100.67.64.11:8081/api/mobile/app-sessions/start")!
-    private static let endURL = URL(string: "http://100.67.64.11:8081/api/mobile/app-sessions/end")!
+    private static let startURL = AppEnvironment.apiURL("mobile/app-sessions/start")
+    private static let endURL = AppEnvironment.apiURL("mobile/app-sessions/end")
     private static let deviceId = "iphone"
 
     static func start(appName: String, bundleId: String? = nil, note: String? = nil) async throws {
@@ -158,18 +158,14 @@ enum AppSessionAPI {
     }
 
     private static func post<T: Encodable>(url: URL, body: T) async throws {
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONDecoder().decode(AppSessionErrorResponse.self, from: data))?.error ?? "请求失败"
-            throw AppSessionAPIError(statusCode: http.statusCode, message: message)
+        do {
+            _ = try await HTTPClient.shared.data(url: url, method: .post, body: body)
+        } catch let error as HTTPClientError {
+            if case let .httpFailure(statusCode, data) = error {
+                let message = (try? JSONDecoder().decode(AppSessionErrorResponse.self, from: data))?.error ?? "请求失败"
+                throw AppSessionAPIError(statusCode: statusCode, message: message)
+            }
+            throw error
         }
     }
 }

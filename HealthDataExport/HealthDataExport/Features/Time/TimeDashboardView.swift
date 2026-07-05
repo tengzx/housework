@@ -217,21 +217,14 @@ private enum TimeDashboardAPI {
     static func mobileAppSummary(granularity: DashboardGranularity, anchorDate: Date) async throws -> MobileAppSummaryResponse {
         try await get(MobileAppSummaryResponse.self, path: "mobile/app-sessions/summary", params: [
             "granularity": granularity.rawValue,
-            "anchorDate": anchorDate.dashboardDateString,
-            "userId": "1"
+            "anchorDate": anchorDate.dashboardDateString
         ])
     }
 
     private static func get<T: Decodable>(_ type: T.Type, path: String, params: [String: String]) async throws -> T {
         var components = URLComponents(url: base.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         components.queryItems = params.sorted(by: { $0.key < $1.key }).map { URLQueryItem(name: $0.key, value: $0.value) }
-        var request = URLRequest(url: components.url!)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        return try JSONDecoder().decode(T.self, from: data)
+        return try await HTTPClient.shared.decode(T.self, url: components.url!, method: .get)
     }
 }
 
@@ -461,6 +454,7 @@ struct TimeDashboardView: View {
             }
             .padding(.bottom, 32)
         }
+        .collapsibleTabScroll()
         .background(Color(hex: "F5F6F8").ignoresSafeArea())
         .task(id: viewModel.taskID) {
             await viewModel.load()

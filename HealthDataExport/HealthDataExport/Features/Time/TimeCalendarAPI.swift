@@ -147,6 +147,17 @@ final class TimeCalendarStore: ObservableObject {
         }
     }
 
+    func createNaturalLanguageEvent(text: String, dayOffset: Int, note: String? = nil) async -> Calendar2Event? {
+        do {
+            let created = try await TimeCalendarAPI.createNaturalLanguage(text: text, dayOffset: dayOffset, note: note)
+            upsert(created)
+            return created.first(where: { $0.dayOffset == dayOffset }) ?? created.first
+        } catch {
+            statusMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     func updateCategory(id: String, categoryId: String) async -> Calendar2Event? {
         guard hasLoadedRemoteCategories else {
             statusMessage = "服务器分类未加载成功，不能修改分类"
@@ -160,6 +171,7 @@ final class TimeCalendarStore: ObservableObject {
         event.category = categoryId
         event.typeId = category.types.first?.id
         event.name = category.types.first?.label ?? category.label
+        event.colorHex = nil // 清掉旧的服务端颜色，先按新分类着色，服务器确认后再回填
         return await update(event)
     }
 
@@ -176,6 +188,7 @@ final class TimeCalendarStore: ObservableObject {
         event.name = name
         event.category = categoryId
         event.typeId = typeId
+        event.colorHex = nil
         return await update(event)
     }
 
@@ -191,6 +204,7 @@ final class TimeCalendarStore: ObservableObject {
         guard var event = events.first(where: { $0.id == id }) else { return nil }
         event.category = categoryId
         event.typeId = typeId
+        event.colorHex = nil
         return await update(event)
     }
 
@@ -206,6 +220,7 @@ final class TimeCalendarStore: ObservableObject {
         event.name = name
         event.category = categoryId
         event.typeId = typeId
+        event.colorHex = nil
         event.start = start
         event.end = end
         return await update(event)
@@ -339,8 +354,7 @@ final class TimeCalendarStore: ObservableObject {
 }
 
 enum TimeCalendarAPI {
-    // 局域网调试（无 VPN 时用）: http://192.168.1.155:8081/api
-    static let baseURL = URL(string: "http://100.67.64.11:8081/api")!
+    static let baseURL = AppEnvironment.apiBaseURL
 
     static func events(from: Date, to: Date) async throws -> [Calendar2Event] {
         var components = URLComponents(url: baseURL.appendingPathComponent("time-events"), resolvingAgainstBaseURL: false)!
@@ -363,6 +377,20 @@ enum TimeCalendarAPI {
             url: baseURL.appendingPathComponent("time-events"),
             method: "POST",
             body: TimeEventRequest(event: event)
+        )
+        return Calendar2Event.segments(response: response.event)
+    }
+
+    static func createNaturalLanguage(text: String, dayOffset: Int, note: String?) async throws -> [Calendar2Event] {
+        let response = try await send(
+            FlexibleEventEnvelope.self,
+            url: baseURL.appendingPathComponent("time-events").appendingPathComponent("natural-language"),
+            method: "POST",
+            body: NaturalLanguageTimeEventRequest(
+                text: text,
+                date: Calendar2Format.apiDate(Calendar2Format.day(offset: dayOffset)),
+                note: note
+            )
         )
         return Calendar2Event.segments(response: response.event)
     }
@@ -443,8 +471,7 @@ enum TimeCalendarAPI {
         var components = URLComponents(url: baseURL.appendingPathComponent("mobile-app-events"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "from", value: Calendar2Format.apiDate(from)),
-            URLQueryItem(name: "to", value: Calendar2Format.apiDate(to)),
-            URLQueryItem(name: "userId", value: "1")
+            URLQueryItem(name: "to", value: Calendar2Format.apiDate(to))
         ]
         let response = try await send(MobileAppEventsResponse.self, url: components.url!, method: "GET")
         return response.events.flatMap {
@@ -456,21 +483,22 @@ enum TimeCalendarAPI {
     }
 
     private static func send<T: Decodable, Body: Encodable>(_ type: T.Type, url: URL, method: String, body: Body? = Optional<String>.none) async throws -> T {
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let body {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder.timeCalendarEncoder.encode(body)
+        let httpMethod = HTTPMethod(rawValue: method) ?? .get
+        let response: HTTPClientResponse
+        do {
+            response = try await HTTPClient.shared.data(
+                url: url,
+                method: httpMethod,
+                body: body,
+                encoder: JSONEncoder.timeCalendarEncoder
+            )
+        } catch let error as HTTPClientError {
+            if case let .httpFailure(statusCode, data) = error {
+                throw TimeCalendarAPIError(statusCode: statusCode, data: data)
+            }
+            throw error
         }
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw TimeCalendarAPIError(statusCode: httpResponse.statusCode, data: data)
-        }
+        let data = response.data
         if data.isEmpty, T.self == DeleteTimeEventResponse.self {
             return DeleteTimeEventResponse(ok: true) as! T
         }
@@ -649,10 +677,17 @@ struct TimeEventResponse: Decodable {
     var name: String
     var categoryId: String
     var typeId: String?
+    var categoryName: String?
+    var typeName: String?
+    var categoryColor: String?
+    var typeColor: String?
     var startedAt: Date
     var endedAt: Date?
     var source: String?
     var note: String?
+
+    /// 服务端下发的分段颜色：优先使用小类颜色，其次大类颜色。
+    var resolvedColor: String? { typeColor ?? categoryColor }
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -664,6 +699,14 @@ struct TimeEventResponse: Decodable {
         case category
         case typeId
         case type_id
+        case categoryName
+        case category_name
+        case typeName
+        case type_name
+        case categoryColor
+        case category_color
+        case typeColor
+        case type_color
         case startedAt
         case started_at
         case startTime
@@ -682,6 +725,10 @@ struct TimeEventResponse: Decodable {
         name = try container.decodeFirstString(keys: [.name, .taskName, .task_name]) ?? "未命名"
         categoryId = try container.decodeFirstString(keys: [.categoryId, .category_id, .category]) ?? "rest"
         typeId = try container.decodeFirstString(keys: [.typeId, .type_id])
+        categoryName = try container.decodeFirstString(keys: [.categoryName, .category_name])
+        typeName = try container.decodeFirstString(keys: [.typeName, .type_name])
+        categoryColor = try container.decodeFirstString(keys: [.categoryColor, .category_color])
+        typeColor = try container.decodeFirstString(keys: [.typeColor, .type_color])
         startedAt = try container.decodeFirstDate(keys: [.startedAt, .started_at, .startTime, .start_time])
         endedAt = try container.decodeFirstOptionalDate(keys: [.endedAt, .ended_at, .endTime, .end_time])
         source = try container.decodeFirstString(keys: [.source])
@@ -705,6 +752,12 @@ private struct TimeEventRequest: Encodable {
         endedAt = event.absoluteEndedAt ?? Calendar2Format.date(dayOffset: event.dayOffset, minute: event.end)
         note = event.note
     }
+}
+
+private struct NaturalLanguageTimeEventRequest: Encodable {
+    var text: String
+    var date: String
+    var note: String?
 }
 
 struct MobileAppEventResponse: Decodable {

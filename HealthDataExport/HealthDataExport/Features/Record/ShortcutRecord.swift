@@ -31,20 +31,49 @@ struct ShortcutSubtype: Identifiable {
 
 struct ShortcutTask: Codable, Identifiable, Hashable {
     let id: UUID
+    /// Backend `time_shortcuts.id`. Nil while an optimistically-created shortcut
+    /// is still waiting for its POST to land (mirrors the Fitness template flow).
+    var remoteId: Int?
     var name: String
     var symbolName: String
     var colorHex: String
     var categoryId: String?
     var subtypeId: String?
+    /// Human-readable big-category label (e.g. "生活"), shown in the list subtitle.
+    var categoryName: String?
+    /// Default/estimated duration in minutes, shown as "预计 N 分钟" when present.
+    var defaultDurationMinutes: Int?
 
-    init(id: UUID = UUID(), name: String, symbolName: String, colorHex: String, categoryId: String? = nil, subtypeId: String? = nil) {
+    init(id: UUID = UUID(), remoteId: Int? = nil, name: String, symbolName: String, colorHex: String, categoryId: String? = nil, subtypeId: String? = nil, categoryName: String? = nil, defaultDurationMinutes: Int? = nil) {
         self.id = id
+        self.remoteId = remoteId
         self.name = name
         self.symbolName = symbolName
         self.colorHex = colorHex
         self.categoryId = categoryId
         self.subtypeId = subtypeId
+        self.categoryName = categoryName
+        self.defaultDurationMinutes = defaultDurationMinutes
     }
+
+    /// Build a task from a backend shortcut. The backend doesn't persist a
+    /// per-shortcut SF Symbol, so the icon is derived from the name and the
+    /// color falls back through type → category → accent.
+    init(remote: RemoteShortcut) {
+        self.init(
+            id: UUID(),
+            remoteId: remote.id,
+            name: remote.name,
+            symbolName: ShortcutRecordStore.symbolName(for: remote.name),
+            colorHex: RemoteShortcut.normalizeHex(remote.typeColor ?? remote.categoryColor) ?? Self.defaultColorHex,
+            categoryId: remote.categoryId.map(String.init),
+            subtypeId: remote.typeId.map(String.init),
+            categoryName: remote.categoryName,
+            defaultDurationMinutes: remote.defaultDurationMinutes
+        )
+    }
+
+    static let defaultColorHex = "FF7847"
 
     var color: Color {
         Color(hex: colorHex)
@@ -78,29 +107,176 @@ struct ActiveShortcutSession: Codable, Hashable {
     var startedAt: Date
 }
 
+/// A queued backend time-entry operation, persisted so it survives relaunch and
+/// can be retried until it lands (mirrors the Fitness session operation queue).
+struct ShortcutSyncOperation: Codable, Identifiable {
+    enum Kind: String, Codable {
+        case start
+        case end
+    }
+
+    let id: UUID
+    let kind: Kind
+    let taskName: String
+    let typeId: String?
+    let note: String
+
+    init(id: UUID = UUID(), kind: Kind, taskName: String = "", typeId: String? = nil, note: String = "") {
+        self.id = id
+        self.kind = kind
+        self.taskName = taskName
+        self.typeId = typeId
+        self.note = note
+    }
+}
+
+/// A queued backend shortcut CRUD operation (create / update / delete), persisted
+/// so it survives relaunch and is retried until it lands. The UI mutates local
+/// state immediately and pushes here — nothing waits on the network. Operations
+/// reference the task by its local `UUID`; the server id is resolved at flush
+/// time (a create earlier in the FIFO queue populates it first).
+struct ShortcutCrudOperation: Codable, Identifiable {
+    enum Kind: String, Codable {
+        case create
+        case update
+        case delete
+    }
+
+    let id: UUID
+    let kind: Kind
+    /// Local `ShortcutTask.id` this operation targets.
+    let localId: UUID
+    /// Known backend id at enqueue time (set for edits/deletes of synced tasks).
+    var remoteId: Int?
+    // Mutation payload — only the fields that should change are non-nil.
+    var name: String?
+    var taskName: String?
+    var typeId: Int?
+    var sortOrder: Int?
+    var note: String?
+
+    init(
+        id: UUID = UUID(),
+        kind: Kind,
+        localId: UUID,
+        remoteId: Int? = nil,
+        name: String? = nil,
+        taskName: String? = nil,
+        typeId: Int? = nil,
+        sortOrder: Int? = nil,
+        note: String? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.localId = localId
+        self.remoteId = remoteId
+        self.name = name
+        self.taskName = taskName
+        self.typeId = typeId
+        self.sortOrder = sortOrder
+        self.note = note
+    }
+}
+
 @MainActor
 final class ShortcutRecordStore: ObservableObject {
+    static let shared = ShortcutRecordStore()
+
     @Published var tasks: [ShortcutTask]
     @Published var activeSession: ActiveShortcutSession?
     @Published var events: [ShortcutEvent]
+    /// Non-empty while a queued start/end operation is failing and being retried.
+    @Published var syncStatusMessage: String = ""
 
     private let tasksKey = "shortcutRecord.tasks"
     private let activeKey = "shortcutRecord.activeSession"
     private let eventsKey = "shortcutRecord.events"
+    private let pendingSyncKey = "shortcutRecord.pendingSync"
+    private let pendingCrudKey = "shortcutRecord.pendingCrud"
+    private let remoteIdsKey = "shortcutRecord.remoteIds"
     private let userDefaults: UserDefaults
+
+    /// Backend start/end operations queued for delivery. Mirrors the Fitness
+    /// session queue: the UI mutates local state immediately and pushes here,
+    /// so nothing waits on the network.
+    private var pendingSync: [ShortcutSyncOperation]
+    private var isFlushingSync = false
+
+    /// Backend shortcut create/update/delete operations queued for delivery,
+    /// same optimistic pattern as `pendingSync`.
+    private var pendingCrud: [ShortcutCrudOperation]
+    private var isFlushingCrud = false
+    /// Maps a local task id to its server id once a create lands, so a later
+    /// update/delete for the same task can resolve the id even after the task
+    /// was removed from `tasks`.
+    private var remoteIds: [UUID: Int]
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
         self.tasks = Self.load([ShortcutTask].self, key: tasksKey, from: userDefaults) ?? Self.defaultTasks
         self.activeSession = Self.load(ActiveShortcutSession.self, key: activeKey, from: userDefaults)
         self.events = Self.load([ShortcutEvent].self, key: eventsKey, from: userDefaults) ?? Self.defaultEvents
+        self.pendingSync = Self.load([ShortcutSyncOperation].self, key: pendingSyncKey, from: userDefaults) ?? []
+        self.pendingCrud = Self.load([ShortcutCrudOperation].self, key: pendingCrudKey, from: userDefaults) ?? []
+        self.remoteIds = Self.load([String: Int].self, key: remoteIdsKey, from: userDefaults)
+            .map { Dictionary(uniqueKeysWithValues: $0.compactMap { key, value in UUID(uuidString: key).map { ($0, value) } }) }
+            ?? [:]
+        if !pendingSync.isEmpty {
+            Task { await flushSync() }
+        }
+        if !pendingCrud.isEmpty {
+            Task { await flushCrud() }
+        }
     }
 
     func addTask(name: String, template: ShortcutTask, categoryId: String?, subtypeId: String?) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        tasks.append(ShortcutTask(name: trimmedName, symbolName: template.symbolName, colorHex: template.colorHex, categoryId: categoryId, subtypeId: subtypeId))
+        let task = ShortcutTask(
+            name: trimmedName,
+            symbolName: template.symbolName,
+            colorHex: template.colorHex,
+            categoryId: categoryId,
+            subtypeId: subtypeId
+        )
+        tasks.append(task)
         saveTasks()
+        enqueueCrud(ShortcutCrudOperation(
+            kind: .create,
+            localId: task.id,
+            name: task.name,
+            taskName: task.name,
+            typeId: subtypeId.flatMap { Int($0) },
+            sortOrder: tasks.count - 1
+        ))
+    }
+
+    /// Apply an edit to an existing shortcut: mutate local state immediately and
+    /// queue a PATCH.
+    func updateTask(_ task: ShortcutTask, name: String, template: ShortcutTask, categoryId: String?, subtypeId: String?) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        var updated = tasks[index]
+        updated.name = trimmedName
+        updated.symbolName = template.symbolName
+        updated.colorHex = template.colorHex
+        updated.categoryId = categoryId
+        updated.subtypeId = subtypeId
+        tasks[index] = updated
+        if activeSession?.task.id == task.id {
+            activeSession?.task = updated
+            saveActiveSession()
+        }
+        saveTasks()
+        enqueueCrud(ShortcutCrudOperation(
+            kind: .update,
+            localId: updated.id,
+            remoteId: updated.remoteId,
+            name: trimmedName,
+            taskName: trimmedName,
+            typeId: subtypeId.flatMap { Int($0) }
+        ))
     }
 
     func removeTask(_ task: ShortcutTask) {
@@ -108,20 +284,73 @@ final class ShortcutRecordStore: ObservableObject {
         if activeSession?.task.id == task.id {
             activeSession = nil
             saveActiveSession()
+            enqueueSync(ShortcutSyncOperation(kind: .end))
         }
         saveTasks()
+        enqueueCrud(ShortcutCrudOperation(kind: .delete, localId: task.id, remoteId: task.remoteId))
     }
 
     func moveTask(from source: IndexSet, to destination: Int) {
         tasks.move(fromOffsets: source, toOffset: destination)
         saveTasks()
+        // Persist the new order: PATCH each task's sortOrder to its index.
+        for (index, task) in tasks.enumerated() {
+            enqueueCrud(ShortcutCrudOperation(
+                kind: .update,
+                localId: task.id,
+                remoteId: task.remoteId,
+                sortOrder: index
+            ))
+        }
+    }
+
+    /// Load the canonical shortcut list from the backend and merge it into local
+    /// state. Skipped while CRUD operations are in flight so it never clobbers an
+    /// optimistic change that hasn't finished syncing (same guard as
+    /// `syncRunningSession`).
+    func refreshTasks() async {
+        guard pendingCrud.isEmpty else { return }
+        let remote: [RemoteShortcut]
+        do {
+            remote = try await ShortcutAPI.listShortcuts()
+        } catch {
+            return
+        }
+        // A create may have been queued while the request was in flight.
+        guard pendingCrud.isEmpty else { return }
+        merge(remote)
+    }
+
+    /// Replace local tasks with the server list, preserving the user's chosen
+    /// icon/color for shortcuts we already know (matched by `remoteId`).
+    private func merge(_ remote: [RemoteShortcut]) {
+        tasks = remote.map { shortcut in
+            if let existing = tasks.first(where: { $0.remoteId == shortcut.id }) {
+                var task = existing
+                task.name = shortcut.name
+                task.categoryId = shortcut.categoryId.map(String.init)
+                task.subtypeId = shortcut.typeId.map(String.init)
+                return task
+            }
+            return ShortcutTask(remote: shortcut)
+        }
+        saveTasks()
     }
 
     func start(_ task: ShortcutTask) {
+        let wasRunning = activeSession != nil
         activeSession = ActiveShortcutSession(task: task, startedAt: .now)
         events.insert(ShortcutEvent(task: task, kind: .started, note: "开始了"), at: 0)
         saveActiveSession()
         saveEvents()
+        replaceSyncQueue(
+            wasRunning
+                ? [
+                    ShortcutSyncOperation(kind: .end),
+                    ShortcutSyncOperation(kind: .start, taskName: task.name, typeId: task.subtypeId)
+                ]
+                : [ShortcutSyncOperation(kind: .start, taskName: task.name, typeId: task.subtypeId)]
+        )
     }
 
     func stop(note: String) {
@@ -131,9 +360,50 @@ final class ShortcutRecordStore: ObservableObject {
         self.activeSession = nil
         saveActiveSession()
         saveEvents()
+        replaceSyncQueue([ShortcutSyncOperation(kind: .end, note: trimmedNote)])
+    }
+
+    /// Apply an active-entry change that originated on the *watch* (relayed via
+    /// WatchConnectivity). Updates local state only — the watch already wrote the
+    /// backend — and persists silently so it isn't echoed back to the watch.
+    func applyRemoteActive(_ activity: SharedActiveActivity?) {
+        let incoming = activity.map { ($0.name, $0.startedAt) }
+        let current = activeSession.map { ($0.task.name, $0.startedAt) }
+        if incoming?.0 == current?.0, incoming?.1 == current?.1 { return }
+
+        if let activity {
+            let task = tasks.first { $0.name == activity.name }
+                ?? ShortcutTask(name: activity.name, symbolName: activity.symbolName, colorHex: activity.colorHex)
+            activeSession = ActiveShortcutSession(task: task, startedAt: activity.startedAt)
+        } else {
+            activeSession = nil
+        }
+        Self.save(activeSession, key: activeKey, to: userDefaults)
+        SharedActivityStore.writeSilently(activeSession.map {
+            SharedActiveActivity(
+                name: $0.task.name,
+                startedAt: $0.startedAt,
+                colorHex: $0.task.colorHex,
+                symbolName: $0.task.symbolName
+            )
+        })
+    }
+
+    func sharedActiveActivity() -> SharedActiveActivity? {
+        activeSession.map {
+            SharedActiveActivity(
+                name: $0.task.name,
+                startedAt: $0.startedAt,
+                colorHex: $0.task.colorHex,
+                symbolName: $0.task.symbolName
+            )
+        }
     }
 
     func syncRunningSession(_ runningEntry: RunningShortcutEntry?) {
+        // Don't let stale server state clobber optimistic changes that haven't
+        // finished syncing yet.
+        guard pendingSync.isEmpty else { return }
         guard let runningEntry else {
             activeSession = nil
             saveActiveSession()
@@ -154,12 +424,240 @@ final class ShortcutRecordStore: ObservableObject {
         saveEvents()
     }
 
+    // MARK: - Backend sync queue
+
+    private func enqueueSync(_ operation: ShortcutSyncOperation) {
+        pendingSync.append(operation)
+        savePendingSync()
+        Task { await flushSync() }
+    }
+
+    private func replaceSyncQueue(_ operations: [ShortcutSyncOperation]) {
+        pendingSync = operations
+        savePendingSync()
+        syncStatusMessage = ""
+        Task { await flushSync() }
+    }
+
+    private func flushSync() async {
+        guard !isFlushingSync else { return }
+        isFlushingSync = true
+        defer { isFlushingSync = false }
+
+        while let operation = pendingSync.first {
+            do {
+                switch operation.kind {
+                case .start:
+                    try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId)
+                case .end:
+                    do {
+                        try await ShortcutAPI.end(note: operation.note)
+                    } catch {
+                        guard Self.canIgnoreEndError(error) else { throw error }
+                    }
+                }
+                if pendingSync.first?.id == operation.id {
+                    pendingSync.removeFirst()
+                    savePendingSync()
+                    syncStatusMessage = ""
+                }
+            } catch {
+                guard pendingSync.first?.id == operation.id else {
+                    continue
+                }
+                syncStatusMessage = "同步失败：\(Self.readableMessage(for: error))"
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                if pendingSync.first?.id == operation.id {
+                    Task { await flushSync() }
+                }
+                return
+            }
+        }
+    }
+
+    private func savePendingSync() {
+        Self.save(pendingSync, key: pendingSyncKey, to: userDefaults)
+    }
+
+    // MARK: - Backend CRUD queue
+
+    private func enqueueCrud(_ operation: ShortcutCrudOperation) {
+        pendingCrud.append(operation)
+        savePendingCrud()
+        Task { await flushCrud() }
+    }
+
+    private func flushCrud() async {
+        guard !isFlushingCrud else { return }
+        isFlushingCrud = true
+        defer { isFlushingCrud = false }
+
+        while let operation = pendingCrud.first {
+            do {
+                try await perform(operation)
+                if pendingCrud.first?.id == operation.id {
+                    pendingCrud.removeFirst()
+                    savePendingCrud()
+                    syncStatusMessage = ""
+                }
+            } catch {
+                guard pendingCrud.first?.id == operation.id else { continue }
+                syncStatusMessage = "同步失败：\(Self.readableMessage(for: error))"
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                if pendingCrud.first?.id == operation.id {
+                    Task { await flushCrud() }
+                }
+                return
+            }
+        }
+
+        // Once the queue drains, pull the canonical list so server-assigned ids,
+        // ordering and type metadata reconcile.
+        await refreshTasks()
+    }
+
+    private func perform(_ operation: ShortcutCrudOperation) async throws {
+        switch operation.kind {
+        case .create:
+            let shortcut: RemoteShortcut
+            do {
+                shortcut = try await ShortcutAPI.createShortcut(ShortcutMutationRequest(
+                    name: operation.name,
+                    taskName: operation.taskName,
+                    typeId: operation.typeId,
+                    sortOrder: operation.sortOrder,
+                    note: operation.note
+                ))
+            } catch {
+                // The name already exists server-side (e.g. created on another
+                // device) — nothing to do; let the queue drain and reconcile ids
+                // via the refresh that follows.
+                guard Self.canIgnoreExistsError(error) else { throw error }
+                return
+            }
+            remoteIds[operation.localId] = shortcut.id
+            saveRemoteIds()
+            if let index = tasks.firstIndex(where: { $0.id == operation.localId }) {
+                tasks[index].remoteId = shortcut.id
+                saveTasks()
+            }
+        case .update:
+            guard let remoteId = resolveRemoteId(for: operation) else { return }
+            _ = try await ShortcutAPI.updateShortcut(id: remoteId, ShortcutMutationRequest(
+                name: operation.name,
+                taskName: operation.taskName,
+                typeId: operation.typeId,
+                sortOrder: operation.sortOrder,
+                note: operation.note
+            ))
+        case .delete:
+            guard let remoteId = resolveRemoteId(for: operation) else { return }
+            do {
+                try await ShortcutAPI.deleteShortcut(id: remoteId)
+            } catch {
+                guard Self.canIgnoreMissingError(error) else { throw error }
+            }
+            remoteIds.removeValue(forKey: operation.localId)
+            saveRemoteIds()
+        }
+    }
+
+    /// Resolve the server id for an update/delete: the id captured at enqueue
+    /// time, else the one recorded when the task's create landed.
+    private func resolveRemoteId(for operation: ShortcutCrudOperation) -> Int? {
+        operation.remoteId
+            ?? remoteIds[operation.localId]
+            ?? tasks.first(where: { $0.id == operation.localId })?.remoteId
+    }
+
+    private func savePendingCrud() {
+        Self.save(pendingCrud, key: pendingCrudKey, to: userDefaults)
+    }
+
+    private func saveRemoteIds() {
+        let encodable = Dictionary(uniqueKeysWithValues: remoteIds.map { ($0.key.uuidString, $0.value) })
+        Self.save(encodable, key: remoteIdsKey, to: userDefaults)
+    }
+
+    private static func readableMessage(for error: Error) -> String {
+        if let apiError = error as? ShortcutAPIError {
+            return apiError.message
+        }
+        if let httpError = error as? HTTPClientError,
+           case let .httpFailure(statusCode, data) = httpError {
+            if let apiError = try? JSONDecoder().decode(TimeEntryErrorResponse.self, from: data) {
+                return "\(apiError.error) (\(statusCode))"
+            }
+            return "HTTP \(statusCode)"
+        }
+        if let urlError = error as? URLError {
+            return urlError.localizedDescription
+        }
+        return error.localizedDescription
+    }
+
+    private static func canIgnoreEndError(_ error: Error) -> Bool {
+        if let apiError = error as? ShortcutAPIError {
+            let normalized = apiError.message.lowercased()
+            return [404, 409].contains(apiError.statusCode)
+                || normalized.contains("no running")
+                || normalized.contains("not running")
+                || normalized.contains("没有进行")
+                || normalized.contains("没有正在")
+        }
+        if let httpError = error as? HTTPClientError,
+           case let .httpFailure(statusCode, data) = httpError {
+            guard [404, 409].contains(statusCode) else { return false }
+            let body = (String(data: data, encoding: .utf8) ?? "").lowercased()
+            return body.contains("no running")
+                || body.contains("not running")
+                || body.contains("没有进行")
+                || body.contains("没有正在")
+                || body.isEmpty
+        }
+        return false
+    }
+
+    /// A create whose name already exists server-side — treat it as success so
+    /// the queue drains; the follow-up refresh reconciles the real id.
+    private static func canIgnoreExistsError(_ error: Error) -> Bool {
+        if let apiError = error as? ShortcutAPIError {
+            let normalized = apiError.message.lowercased()
+            return apiError.statusCode == 409
+                || normalized.contains("already exists")
+                || normalized.contains("已存在")
+        }
+        if let httpError = error as? HTTPClientError,
+           case let .httpFailure(statusCode, data) = httpError {
+            if statusCode == 409 { return true }
+            let body = (String(data: data, encoding: .utf8) ?? "").lowercased()
+            return body.contains("already exists") || body.contains("已存在")
+        }
+        return false
+    }
+
+    /// A delete that 404/409s means the shortcut is already gone server-side —
+    /// treat it as success so the queue drains.
+    private static func canIgnoreMissingError(_ error: Error) -> Bool {
+        if let apiError = error as? ShortcutAPIError {
+            return [404, 409].contains(apiError.statusCode)
+        }
+        if let httpError = error as? HTTPClientError,
+           case let .httpFailure(statusCode, _) = httpError {
+            return [404, 409].contains(statusCode)
+        }
+        return false
+    }
+
     private func saveTasks() {
         Self.save(tasks, key: tasksKey, to: userDefaults)
     }
 
     private func saveActiveSession() {
         Self.save(activeSession, key: activeKey, to: userDefaults)
+        // Mirror the running activity into the App Group so the watch-face
+        // complication can show it (and clear it when nothing is running).
+        SharedActivityStore.write(sharedActiveActivity())
     }
 
     private func saveEvents() {
@@ -214,6 +712,41 @@ final class ShortcutRecordStore: ObservableObject {
             ShortcutSubtype(id: "fun.social", label: "社交"),
         ]),
     ]
+
+    /// Derive an SF Symbol from a shortcut's name. The backend stores a per-type
+    /// icon that isn't guaranteed to be an SF Symbol, so shortcuts fetched from
+    /// the server map their name to a symbol the same way the watch does.
+    nonisolated static func symbolName(for label: String) -> String {
+        let mappings: [(String, String)] = [
+            ("编程", "chevron.left.forwardslash.chevron.right"),
+            ("代码", "chevron.left.forwardslash.chevron.right"),
+            ("会议", "briefcase.fill"),
+            ("开会", "briefcase.fill"),
+            ("写作", "pencil"),
+            ("日记", "pencil"),
+            ("设计", "paintbrush.fill"),
+            ("阅读", "book.fill"),
+            ("课程", "graduationcap.fill"),
+            ("笔记", "note.text"),
+            ("练习", "checklist"),
+            ("吃饭", "fork.knife"),
+            ("购物", "cart.fill"),
+            ("通勤", "car.fill"),
+            ("家务", "house.fill"),
+            ("健身", "dumbbell.fill"),
+            ("跑步", "figure.run"),
+            ("瑜伽", "figure.mind.and.body"),
+            ("睡眠", "moon.stars.fill"),
+            ("冥想", "figure.mind.and.body"),
+            ("休息", "cup.and.saucer.fill"),
+            ("游戏", "gamecontroller.fill"),
+            ("音乐", "music.note"),
+            ("视频", "video.fill"),
+            ("社交", "heart.fill"),
+            ("健康", "heart")
+        ]
+        return mappings.first { label.contains($0.0) }?.1 ?? "bolt.fill"
+    }
 
     nonisolated static let defaultTasks: [ShortcutTask] = [
         ShortcutTask(name: "写代码", symbolName: "chevron.left.forwardslash.chevron.right", colorHex: "FF7847"),
@@ -346,40 +879,67 @@ struct RunningShortcutEntry: Hashable {
 }
 
 enum ShortcutAPI {
-    static let runningURL = URL(string: "http://100.67.64.11:8081/api/mobile/time-entries/running")!
-    static let startURL = URL(string: "http://100.67.64.11:8081/api/mobile/time-entries/start")!
-    static let endURL = URL(string: "http://100.67.64.11:8081/api/mobile/time-entries/end")!
-    static let categoriesURL = URL(string: "http://100.67.64.11:8081/api/time-categories")!
+    static let runningURL = AppEnvironment.apiURL("mobile/time-entries/running")
+    static let startURL = AppEnvironment.apiURL("mobile/time-entries/start")
+    static let endURL = AppEnvironment.apiURL("mobile/time-entries/end")
+    static let categoriesURL = AppEnvironment.apiURL("time-categories")
+    static let shortcutsURL = AppEnvironment.apiURL("mobile/time-shortcuts")
+
+    // MARK: - Shortcut CRUD (/api/mobile/time-shortcuts)
+
+    static func listShortcuts() async throws -> [RemoteShortcut] {
+        let response = try await request(url: shortcutsURL, method: .get, body: Optional<String>.none)
+        return try JSONDecoder().decode(ShortcutListEnvelope.self, from: response.data).shortcuts
+    }
+
+    static func createShortcut(_ body: ShortcutMutationRequest) async throws -> RemoteShortcut {
+        let response = try await request(url: shortcutsURL, method: .post, body: body)
+        return try JSONDecoder().decode(ShortcutEnvelope.self, from: response.data).shortcut
+    }
+
+    static func updateShortcut(id: Int, _ body: ShortcutMutationRequest) async throws -> RemoteShortcut {
+        let url = shortcutsURL.appendingPathComponent(String(id))
+        let response = try await request(url: url, method: .patch, body: body)
+        return try JSONDecoder().decode(ShortcutEnvelope.self, from: response.data).shortcut
+    }
+
+    static func deleteShortcut(id: Int) async throws {
+        let url = shortcutsURL.appendingPathComponent(String(id))
+        _ = try await request(url: url, method: .delete, body: Optional<String>.none)
+    }
+
+    /// Shared request wrapper that maps HTTP failures to `ShortcutAPIError`.
+    @discardableResult
+    private static func request<Body: Encodable>(url: URL, method: HTTPMethod, body: Body?) async throws -> HTTPClientResponse {
+        do {
+            return try await HTTPClient.shared.data(url: url, method: method, body: body)
+        } catch let error as HTTPClientError {
+            if case let .httpFailure(statusCode, data) = error {
+                throw apiError(from: data, statusCode: statusCode)
+            }
+            throw error
+        }
+    }
 
     static func running() async throws -> RunningShortcutEntry? {
-        var request = URLRequest(url: runningURL)
-        request.httpMethod = "GET"
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+        let response: HTTPClientResponse
+        do {
+            response = try await HTTPClient.shared.data(url: runningURL, method: .get)
+        } catch let error as HTTPClientError {
+            if case let .httpFailure(statusCode, data) = error {
+                if statusCode == 204 { return nil }
+                throw apiError(from: data, statusCode: statusCode)
+            }
+            throw error
         }
 
-        if httpResponse.statusCode == 204 {
-            return nil
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            throw apiError(from: data, statusCode: httpResponse.statusCode)
-        }
-
-        return try JSONDecoder.timeEntryDecoder.decode(TimeEntryResponse.self, from: data).runningEntry
+        if response.statusCode == 204 { return nil }
+        return try JSONDecoder.timeEntryDecoder.decode(TimeEntryResponse.self, from: response.data).runningEntry
     }
 
     static func categories() async throws -> [ShortcutCategory] {
-        var request = URLRequest(url: categoriesURL)
-        request.httpMethod = "GET"
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        let decoded = try JSONDecoder().decode(ShortcutCategoriesResponse.self, from: data)
+        let response = try await HTTPClient.shared.data(url: categoriesURL, method: .get)
+        let decoded = try JSONDecoder().decode(ShortcutCategoriesResponse.self, from: response.data)
         return decoded.categories.map { ShortcutCategory(response: $0) }
     }
 
@@ -391,7 +951,19 @@ enum ShortcutAPI {
             source: "mobile",
             note: nil
         )
-        try await post(url: startURL, body: requestBody)
+        do {
+            try await post(url: startURL, body: requestBody)
+        } catch {
+            guard typeId != nil, shouldRetryStartWithoutType(error) else { throw error }
+            let fallbackBody = StartTimeEntryRequest(
+                taskName: taskName,
+                typeId: nil,
+                startedAt: Date().apiISOString,
+                source: "mobile",
+                note: nil
+            )
+            try await post(url: startURL, body: fallbackBody)
+        }
     }
 
     static func end(note: String) async throws {
@@ -401,18 +973,13 @@ enum ShortcutAPI {
     }
 
     private static func post<T: Encodable>(url: URL, body: T) async throws {
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw apiError(from: data, statusCode: httpResponse.statusCode)
+        do {
+            _ = try await HTTPClient.shared.data(url: url, method: .post, body: body)
+        } catch let error as HTTPClientError {
+            if case let .httpFailure(statusCode, data) = error {
+                throw apiError(from: data, statusCode: statusCode)
+            }
+            throw error
         }
     }
 
@@ -422,6 +989,61 @@ enum ShortcutAPI {
         }
         return URLError(.badServerResponse)
     }
+
+    private static func shouldRetryStartWithoutType(_ error: Error) -> Bool {
+        guard let apiError = error as? ShortcutAPIError else { return false }
+        let message = apiError.message.lowercased()
+        return apiError.statusCode == 400 && (
+            message.contains("event type not found") ||
+            message.contains("type not found") ||
+            message.contains("类型不存在")
+        )
+    }
+}
+
+/// A shortcut as returned by `/api/mobile/time-shortcuts`.
+struct RemoteShortcut: Decodable {
+    var id: Int
+    var name: String
+    var taskName: String?
+    var typeId: Int?
+    var categoryId: Int?
+    var categoryName: String?
+    var typeName: String?
+    var categoryColor: String?
+    var typeColor: String?
+    var typeIcon: String?
+    var sortOrder: Int?
+    var note: String?
+    var defaultDurationMinutes: Int?
+    var running: Bool?
+
+    /// Strip a leading `#` (and reject blanks) so the value works with `Color(hex:)`.
+    static func normalizeHex(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed.replacingOccurrences(of: "#", with: "")
+    }
+}
+
+/// Body for shortcut create (POST) and update (PATCH). Optional fields are
+/// omitted from the JSON when nil, so a PATCH only touches what changed.
+struct ShortcutMutationRequest: Encodable {
+    var name: String?
+    var taskName: String?
+    var typeId: Int?
+    var sortOrder: Int?
+    var note: String?
+    var defaultDurationMinutes: Int?
+}
+
+private struct ShortcutListEnvelope: Decodable {
+    var shortcuts: [RemoteShortcut]
+}
+
+private struct ShortcutEnvelope: Decodable {
+    var shortcut: RemoteShortcut
 }
 
 private struct StartTimeEntryRequest: Encodable {
@@ -436,12 +1058,25 @@ private struct ShortcutCategoriesResponse: Decodable {
     var categories: [RemoteCategoryResponse]
 
     init(from decoder: Decoder) throws {
+        if let array = try? [RemoteCategoryResponse](from: decoder) {
+            categories = array
+            return
+        }
+
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        categories = try container.decodeIfPresent([RemoteCategoryResponse].self, forKey: .categories) ?? []
+        if let value = try container.decodeIfPresent([RemoteCategoryResponse].self, forKey: .categories) {
+            categories = value
+        } else if let value = try container.decodeIfPresent([RemoteCategoryResponse].self, forKey: .data) {
+            categories = value
+        } else if let value = try container.decodeIfPresent([RemoteCategoryResponse].self, forKey: .items) {
+            categories = value
+        } else {
+            categories = []
+        }
     }
 
     private enum CodingKeys: String, CodingKey {
-        case categories
+        case categories, data, items
     }
 }
 
