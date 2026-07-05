@@ -168,12 +168,16 @@ struct Calendar2Category: Identifiable {
     let id: String
     let label: String
     let color: Color
+    /// Backend icon name (a lucide glyph id, e.g. "briefcase"). Mapped to an
+    /// SF Symbol when a shortcut auto-derives its icon from the big category.
+    let icon: String?
     let types: [Calendar2CategoryType]
 
-    init(id: String, label: String, color: Color, types: [Calendar2CategoryType]) {
+    init(id: String, label: String, color: Color, icon: String? = nil, types: [Calendar2CategoryType]) {
         self.id = id
         self.label = label
         self.color = color
+        self.icon = icon
         self.types = types
     }
 
@@ -181,8 +185,9 @@ struct Calendar2Category: Identifiable {
         id = response.id
         label = response.label
         color = Color(hex: response.color.replacingOccurrences(of: "#", with: ""))
+        icon = response.icon
         types = response.types.map {
-            Calendar2CategoryType(id: $0.id, label: $0.label, color: $0.color.map { Color(hex: $0) }, tracksFocus: $0.tracksFocus ?? false)
+            Calendar2CategoryType(id: $0.id, label: $0.label, color: $0.color.map { Color(hex: $0) }, icon: $0.icon, tracksFocus: $0.tracksFocus ?? false)
         }
     }
 
@@ -223,12 +228,16 @@ struct Calendar2CategoryType: Identifiable {
     let id: String
     let label: String
     let color: Color?
+    /// Backend icon name (a lucide glyph id, e.g. "dumbbell"). Mapped to an
+    /// SF Symbol when a shortcut auto-derives its icon from the small category.
+    let icon: String?
     let tracksFocus: Bool
 
-    init(id: String, label: String, color: Color? = nil, tracksFocus: Bool = false) {
+    init(id: String, label: String, color: Color? = nil, icon: String? = nil, tracksFocus: Bool = false) {
         self.id = id
         self.label = label
         self.color = color
+        self.icon = icon
         self.tracksFocus = tracksFocus
     }
 }

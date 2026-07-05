@@ -57,14 +57,15 @@ struct ShortcutTask: Codable, Identifiable, Hashable {
     }
 
     /// Build a task from a backend shortcut. The backend doesn't persist a
-    /// per-shortcut SF Symbol, so the icon is derived from the name and the
-    /// color falls back through type → category → accent.
+    /// per-shortcut SF Symbol, so the icon is derived from the type's icon
+    /// (falling back to the name) and the color falls back through
+    /// type → category → accent.
     init(remote: RemoteShortcut) {
         self.init(
             id: UUID(),
             remoteId: remote.id,
             name: remote.name,
-            symbolName: ShortcutRecordStore.symbolName(for: remote.name),
+            symbolName: ShortcutRecordStore.resolvedSymbol(typeIcon: remote.typeIcon, name: remote.name),
             colorHex: RemoteShortcut.normalizeHex(remote.typeColor ?? remote.categoryColor) ?? Self.defaultColorHex,
             categoryId: remote.categoryId.map(String.init),
             subtypeId: remote.typeId.map(String.init),
@@ -713,6 +714,77 @@ final class ShortcutRecordStore: ObservableObject {
         ]),
     ]
 
+    /// Resolve the SF Symbol a shortcut should show, preferring the small
+    /// category's icon, then the big category's, then a guess from the name.
+    /// This is what powers "pick 大类/小类 → icon appears automatically": the
+    /// backend already assigns a meaningful (lucide) icon per type, so we just
+    /// translate it to the matching SF Symbol.
+    nonisolated static func resolvedSymbol(typeIcon: String?, categoryIcon: String? = nil, name: String = "") -> String {
+        if let symbol = sfSymbol(forLucide: typeIcon) { return symbol }
+        if let symbol = sfSymbol(forLucide: categoryIcon) { return symbol }
+        return symbolName(for: name)
+    }
+
+    /// Translate a backend lucide glyph id (e.g. "dumbbell") into the closest
+    /// SF Symbol. Returns nil when the name is blank or unmapped so callers can
+    /// fall back. Covers the icons seeded by the life-os category bootstrap.
+    nonisolated static func sfSymbol(forLucide lucide: String?) -> String? {
+        guard let key = lucide?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !key.isEmpty else {
+            return nil
+        }
+        let map: [String: String] = [
+            // Big categories
+            "briefcase": "briefcase.fill",
+            "book-open": "book.fill",
+            "heart-pulse": "heart.fill",
+            "home": "house.fill",
+            "sparkles": "sparkles",
+            "gamepad-2": "gamecontroller.fill",
+            "moon": "moon.fill",
+            "target": "target",
+            // Small categories
+            "brain": "brain.head.profile",
+            "messages": "bubble.left.and.bubble.right.fill",
+            "list-checks": "checklist",
+            "list-todo": "checklist",
+            "wrench": "wrench.adjustable.fill",
+            "kanban-square": "square.grid.2x2.fill",
+            "monitor": "desktopcomputer",
+            "languages": "globe",
+            "book": "book.closed.fill",
+            "graduation-cap": "graduationcap.fill",
+            "pen-tool": "pencil.tip.crop.circle",
+            "dumbbell": "dumbbell.fill",
+            "activity": "figure.run",
+            "footprints": "figure.walk",
+            "leaf": "leaf.fill",
+            "stethoscope": "stethoscope",
+            "baby": "figure.child",
+            "car-front": "car.fill",
+            "house": "house.fill",
+            "heart-handshake": "hands.sparkles.fill",
+            "users": "person.2.fill",
+            "utensils": "fork.knife",
+            "sofa": "sofa.fill",
+            "shopping-cart": "cart.fill",
+            "train-front": "tram.fill",
+            "clipboard-list": "list.clipboard.fill",
+            "smartphone": "iphone",
+            "clapperboard": "film.fill",
+            "party-popper": "party.popper.fill",
+            "palette": "paintpalette.fill",
+            "bed": "bed.double.fill",
+            "lamp": "lamp.desk.fill",
+            "alarm-clock-off": "alarm.fill",
+            "files": "folder.fill",
+            "folder": "folder.fill",
+            "lightbulb": "lightbulb.fill",
+            "clock": "clock.fill",
+            "circle": "circle.fill",
+        ]
+        return map[key]
+    }
+
     /// Derive an SF Symbol from a shortcut's name. The backend stores a per-type
     /// icon that isn't guaranteed to be an SF Symbol, so shortcuts fetched from
     /// the server map their name to a symbol the same way the watch does.
@@ -756,113 +828,6 @@ final class ShortcutRecordStore: ObservableObject {
         ShortcutTask(name: "吃饭", symbolName: "fork.knife", colorHex: "FF7847"),
         ShortcutTask(name: "休息", symbolName: "cup.and.saucer", colorHex: "FF7847")
     ]
-
-    nonisolated static let creationTemplates: [ShortcutTask] = [
-        ShortcutTask(name: "写代码", symbolName: "chevron.left.forwardslash.chevron.right", colorHex: "FF7847"),
-        ShortcutTask(name: "阅读", symbolName: "book", colorHex: "FF7847"),
-        ShortcutTask(name: "健身", symbolName: "dumbbell", colorHex: "FF7847"),
-        ShortcutTask(name: "开会", symbolName: "briefcase", colorHex: "FF7847"),
-        ShortcutTask(name: "吃饭", symbolName: "fork.knife", colorHex: "FF7847"),
-        ShortcutTask(name: "休息", symbolName: "cup.and.saucer", colorHex: "FF7847"),
-        ShortcutTask(name: "写日记", symbolName: "pencil", colorHex: "FF7847"),
-        ShortcutTask(name: "音乐", symbolName: "music.note", colorHex: "FF7847"),
-        ShortcutTask(name: "健康", symbolName: "heart", colorHex: "FF7847"),
-        ShortcutTask(name: "拍照", symbolName: "camera", colorHex: "FF7847"),
-        ShortcutTask(name: "通勤", symbolName: "car", colorHex: "FF7847"),
-        ShortcutTask(name: "购物", symbolName: "cart", colorHex: "FF7847")
-    ]
-
-    nonisolated static let iconOptions: [ShortcutTask] = {
-        let palette = [
-            "6C5CE7", "FF9500", "3F7BF7", "F642A8", "FF6257", "24C48E",
-            "FFB02E", "6B7CFF", "22C7BE", "F65BA8", "7AC943", "9D98D9"
-        ]
-        let items: [(String, String)] = [
-            ("睡眠", "moon.stars.fill"),
-            ("工作", "briefcase.fill"),
-            ("学习", "book.closed.fill"),
-            ("娱乐", "gamecontroller.fill"),
-            ("生活", "cup.and.saucer.fill"),
-            ("运动", "figure.walk"),
-            ("吃饭", "fork.knife"),
-            ("通勤", "car.fill"),
-            ("阅读", "book.fill"),
-            ("冥想", "figure.mind.and.body"),
-            ("社交", "heart.fill"),
-            ("健康", "cross.case.fill"),
-            ("购物", "bag.fill"),
-            ("户外", "leaf.fill"),
-            ("其他", "ellipsis"),
-            ("闹钟", "alarm.fill"),
-            ("电话", "phone.fill"),
-            ("消息", "message.fill"),
-            ("邮件", "envelope.fill"),
-            ("相机", "camera.fill"),
-            ("照片", "photo.fill"),
-            ("视频", "video.fill"),
-            ("音乐", "music.note"),
-            ("播客", "mic.fill"),
-            ("地图", "map.fill"),
-            ("天气", "cloud.sun.fill"),
-            ("日历", "calendar"),
-            ("时钟", "clock.fill"),
-            ("星标", "star.fill"),
-            ("旗帜", "flag.fill"),
-            ("定位", "location.fill"),
-            ("收藏", "bookmark.fill"),
-            ("笔记", "note.text"),
-            ("文件", "doc.fill"),
-            ("打印", "printer.fill"),
-            ("电脑", "desktopcomputer"),
-            ("手机", "iphone"),
-            ("平板", "ipad.landscape"),
-            ("家", "house.fill"),
-            ("钥匙", "key.fill"),
-            ("钱包", "wallet.pass.fill"),
-            ("雨伞", "umbrella.fill"),
-            ("雪花", "snowflake"),
-            ("火焰", "flame.fill"),
-            ("咖啡", "mug.fill"),
-            ("啤酒", "mug.fill"),
-            ("礼物", "gift.fill"),
-            ("购物车", "cart.fill"),
-            ("箱包", "suitcase.fill"),
-            ("工具", "wrench.and.screwdriver.fill"),
-            ("齿轮", "gearshape.fill"),
-            ("电池", "battery.100"),
-            ("闪电", "bolt.fill"),
-            ("盾牌", "shield.fill"),
-            ("锁", "lock.fill"),
-            ("解锁", "lock.open.fill"),
-            ("上箭头", "arrow.up.circle.fill"),
-            ("下箭头", "arrow.down.circle.fill"),
-            ("左箭头", "arrow.left.circle.fill"),
-            ("右箭头", "arrow.right.circle.fill"),
-            ("云", "cloud.fill"),
-            ("太阳", "sun.max.fill"),
-            ("月亮", "moon.fill"),
-            ("树叶", "leaf.fill"),
-            ("花朵", "flower.fill"),
-            ("水滴", "drop.fill"),
-            ("波浪", "water.waves"),
-            ("山", "mountain.2.fill"),
-            ("火车", "train.side.front.car"),
-            ("飞机", "airplane"),
-            ("自行车", "bicycle"),
-            ("跑步", "figure.run"),
-            ("健身", "dumbbell.fill"),
-            ("心脏", "heart.circle.fill"),
-            ("医疗", "cross.case.fill")
-        ]
-
-        return items.enumerated().map { index, item in
-            ShortcutTask(
-                name: item.0,
-                symbolName: item.1,
-                colorHex: palette[index % palette.count]
-            )
-        }
-    }()
 
     nonisolated private static let defaultEvents: [ShortcutEvent] = [
         ShortcutEvent(task: defaultTasks[0], kind: .stopped, note: "结束了", createdAt: Calendar.current.date(bySettingHour: 5, minute: 54, second: 0, of: .now) ?? .now),

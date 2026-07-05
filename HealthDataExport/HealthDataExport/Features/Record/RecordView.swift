@@ -58,7 +58,6 @@ struct RecordView: View {
                 Haptics.tap()
                 isInputFocused = false
             }
-
         }
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: $isAdding) {
@@ -81,17 +80,11 @@ struct RecordView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("FLOW")
+            Text(Self.todayText)
                 .font(.system(size: 20, weight: .bold, design: .rounded))
-                .tracking(4)
                 .foregroundStyle(Design.text)
 
             Spacer()
-
-            Text(Self.todayText)
-                .font(.system(size: 13, weight: .regular))
-                .tracking(0.5)
-                .foregroundStyle(Design.muted)
         }
     }
 
@@ -99,57 +92,65 @@ struct RecordView: View {
         Group {
             if let session = store.activeSession {
                 TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(Design.green)
-                                .frame(width: 9, height: 9)
-                                .pulse()
+                    VStack(spacing: 16) {
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(Design.green)
+                                        .frame(width: 9, height: 9)
+                                        .pulse()
 
-                            Text("进行中")
-                                .font(.system(size: 12, weight: .regular))
-                                .tracking(2)
-                                .foregroundStyle(Design.muted)
+                                    Text("进行中")
+                                        .font(.system(size: 12, weight: .regular))
+                                        .tracking(2)
+                                        .foregroundStyle(Design.muted)
+                                }
+                                .padding(.bottom, 12)
+
+                                Text(session.task.name)
+                                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Design.text)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                                    .padding(.bottom, 6)
+
+                                Text(timerText(from: session.startedAt, now: timeline.date))
+                                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                                    .monospacedDigit()
+                                    .tracking(1)
+                                    .foregroundStyle(Design.text)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            progressRing(progress: ringProgress(session: session, now: timeline.date))
                         }
-                        .padding(.bottom, 10)
-
-                        Text(session.task.name)
-                            .font(.system(size: 20, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Design.text)
-                            .padding(.bottom, 4)
-
-                        Text(timerText(from: session.startedAt, now: timeline.date))
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .tracking(1)
-                            .foregroundStyle(Design.accent)
-                            .padding(.bottom, 14)
 
                         Button {
                             stopActiveSession()
                         } label: {
                             HStack(spacing: 8) {
-                                Image(systemName: "square.fill")
-                                    .font(.system(size: 16, weight: .semibold))
+                                Image(systemName: "stop.fill")
+                                    .font(.system(size: 14, weight: .semibold))
                                 Text("结束")
                                     .font(.system(size: 15, weight: .bold))
                             }
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(Design.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .frame(height: 50)
+                            .background(Design.stopFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
                         .buttonStyle(PressButtonStyle())
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 16)
-                    .background(activeCardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .padding(18)
+                    .background(Design.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(Color(hex: "FFD9C7"), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(Design.line, lineWidth: 1)
                     )
                     .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
-                    .shadow(color: .black.opacity(0.04), radius: 24, y: 8)
+                    .shadow(color: .black.opacity(0.05), radius: 24, y: 8)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 5) {
@@ -165,9 +166,9 @@ struct RecordView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 16)
-                .background(Design.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(Design.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .stroke(Design.line, lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
@@ -176,52 +177,87 @@ struct RecordView: View {
         }
     }
 
-    private var activeCardBackground: some ShapeStyle {
-        LinearGradient(
-            colors: [Design.accentSoft, Design.surface],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+    /// Circular clock shown in the active card — replicates the prototype: a
+    /// dashed tick ring on the outside, a blue progress arc over it, and a
+    /// centered analog clock with thick hands.
+    private func progressRing(progress: Double) -> some View {
+        TimerClockRing(
+            progress: progress,
+            tickColor: Design.muted.opacity(0.5),
+            arcColor: Design.accent,
+            handColor: Design.text
         )
+        .frame(width: 92, height: 92)
+        .animation(.easeInOut(duration: 0.4), value: progress)
+    }
+
+    /// Ring fill: progress toward the shortcut's default duration when set,
+    /// otherwise a gentle sweep over the current hour so the ring always reads
+    /// as "live".
+    private func ringProgress(session: ActiveShortcutSession, now: Date) -> Double {
+        let elapsed = max(0, now.timeIntervalSince(session.startedAt))
+        if let minutes = session.task.defaultDurationMinutes, minutes > 0 {
+            return min(1, elapsed / Double(minutes * 60))
+        }
+        return elapsed.truncatingRemainder(dividingBy: 3600) / 3600
     }
 
     private var inputBar: some View {
-        HStack(spacing: 10) {
-            TextField(store.activeSession == nil ? "现在在做什么…" : "切换到新的事…", text: $text)
+        HStack(spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Design.accent)
+
+            TextField(store.activeSession == nil ? "输入：刚刚开会 30 分钟" : "切换到新的事…", text: $text)
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(Design.text)
                 .textInputAutocapitalization(.never)
                 .focused($isInputFocused)
-                .padding(.horizontal, 18)
-                .frame(height: 52)
-                .background(Design.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Design.line, lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
-                .shadow(color: .black.opacity(0.04), radius: 24, y: 8)
                 .onSubmit {
                     submitText()
                 }
 
             Button {
+                isInputFocused = true
+            } label: {
+                Image(systemName: "mic")
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(Design.muted)
+            }
+            .buttonStyle(PressButtonStyle())
+
+            Rectangle()
+                .fill(Design.line)
+                .frame(width: 1, height: 26)
+
+            Button {
                 submitText()
             } label: {
                 Image(systemName: "paperplane.fill")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                    .background(Design.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .frame(width: 42, height: 42)
+                    .background(Design.accent, in: Circle())
             }
             .buttonStyle(PressButtonStyle())
             .disabled(trimmedText.isEmpty)
-            .opacity(trimmedText.isEmpty ? 0.4 : 1)
+            .opacity(trimmedText.isEmpty ? 0.45 : 1)
         }
+        .padding(.leading, 18)
+        .padding(.trailing, 7)
+        .frame(height: 56)
+        .background(Design.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Design.line, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+        .shadow(color: .black.opacity(0.04), radius: 24, y: 8)
     }
 
     private var sectionHeader: some View {
         HStack {
-            Text("快捷指令")
+            Text("快捷开始")
                 .font(.system(size: 13, weight: .semibold))
                 .tracking(2)
                 .foregroundStyle(Design.muted)
@@ -268,12 +304,13 @@ struct RecordView: View {
     }
 
     private func shortcutTile(task: ShortcutTask, isOn: Bool) -> some View {
-        HStack(spacing: 12) {
+        let tint = categoryColor(for: task)
+        return HStack(spacing: 12) {
             Image(systemName: task.symbolName)
                 .font(.system(size: 20, weight: isOn ? .semibold : .medium))
-                .foregroundStyle(isOn ? .white : Design.icon)
-                .frame(width: 40, height: 40)
-                .background(isOn ? Design.accent : Design.iconSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .foregroundStyle(isOn ? .white : tint.darkened(by: 0.12))
+                .frame(width: 42, height: 42)
+                .background(isOn ? tint : tint.opacity(0.16), in: Circle())
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.name)
@@ -282,7 +319,7 @@ struct RecordView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
 
-                Text(isManagingShortcuts ? "管理中" : (isOn ? "进行中" : "按钮开始"))
+                Text(isManagingShortcuts ? "管理中" : (isOn ? "进行中" : "一键开始"))
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(0.4)
                     .foregroundStyle(isManagingShortcuts ? .red.opacity(0.72) : (isOn ? Design.accent : Design.muted.opacity(0.82)))
@@ -343,6 +380,17 @@ struct RecordView: View {
         )
         .shadow(color: .black.opacity(0.05), radius: 3, y: 1)
         .shadow(color: .black.opacity(0.035), radius: 18, y: 8)
+    }
+
+    /// Icon tint for a shortcut, taken from its 大类 (big category) color so the
+    /// grid mirrors the category palette. Falls back to the task's own color when
+    /// the category can't be resolved.
+    private func categoryColor(for task: ShortcutTask) -> Color {
+        if let id = task.categoryId,
+           let category = calendarStore.categories.first(where: { $0.id == id }) {
+            return category.color
+        }
+        return task.color
     }
 
     private var trimmedText: String {
@@ -412,42 +460,11 @@ private struct AddShortcutSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
-    @State private var selectedTemplate = ShortcutRecordStore.iconOptions.first ?? ShortcutRecordStore.defaultTasks[0]
-    @State private var searchText = ""
-    @State private var iconFilterTag: String = "common"
     @State private var pickedCategory: String
     @State private var pickedSubtype: String?
     @State private var showManagement = false
     @State private var managementTab: ManagementTab = .category
     @FocusState private var isNameFocused: Bool
-
-    private let iconColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 6)
-
-    private static let iconFilterTags: [(id: String, label: String)] = [
-        ("common", "常用"), ("work", "工作"), ("study", "学习"),
-        ("life", "生活"), ("sport", "运动"), ("rest", "休息"),
-        ("fun", "娱乐"), ("all", "全部"),
-    ]
-
-    private static let iconCategorySymbols: [String: [String]] = [
-        "common": ["star.fill", "heart.fill", "clock.fill", "calendar", "bookmark.fill",
-                   "flag.fill", "note.text", "camera.fill", "music.note", "moon.stars.fill",
-                   "flame.fill", "leaf.fill"],
-        "work":   ["briefcase.fill", "doc.fill", "envelope.fill", "phone.fill", "message.fill",
-                   "printer.fill", "desktopcomputer", "iphone", "ipad.landscape", "calendar",
-                   "clock.fill", "video.fill"],
-        "study":  ["book.fill", "book.closed.fill", "note.text", "doc.fill",
-                   "music.note", "mic.fill", "star.fill", "bookmark.fill"],
-        "life":   ["house.fill", "fork.knife", "cup.and.saucer.fill", "mug.fill", "cart.fill",
-                   "bag.fill", "car.fill", "umbrella.fill", "key.fill", "wallet.pass.fill",
-                   "suitcase.fill", "gift.fill"],
-        "sport":  ["figure.run", "figure.walk", "dumbbell.fill", "bicycle", "heart.circle.fill",
-                   "figure.mind.and.body", "flame.fill", "mountain.2.fill"],
-        "rest":   ["moon.stars.fill", "moon.fill", "sun.max.fill", "cloud.fill", "leaf.fill",
-                   "figure.mind.and.body", "cup.and.saucer.fill", "drop.fill", "water.waves"],
-        "fun":    ["gamecontroller.fill", "music.note", "video.fill", "mic.fill", "photo.fill",
-                   "camera.fill", "heart.fill", "gift.fill", "map.fill", "airplane"],
-    ]
 
     private let editingTask: ShortcutTask?
 
@@ -457,11 +474,6 @@ private struct AddShortcutSheet: View {
         self.editingTask = editingTask
         if let editingTask {
             _name = State(initialValue: editingTask.name)
-            _selectedTemplate = State(initialValue: ShortcutTask(
-                name: editingTask.name,
-                symbolName: editingTask.symbolName,
-                colorHex: editingTask.colorHex
-            ))
             _pickedCategory = State(initialValue: editingTask.categoryId ?? calendarStore.categories.first?.id ?? "")
             _pickedSubtype = State(initialValue: editingTask.subtypeId)
         } else {
@@ -476,20 +488,25 @@ private struct AddShortcutSheet: View {
             ?? calendarStore.category(for: pickedCategory)
     }
 
-    private var filteredOptions: [ShortcutTask] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let all = ShortcutRecordStore.iconOptions
-        if !query.isEmpty {
-            return Array(all.filter {
-                $0.name.lowercased().contains(query) || $0.symbolName.lowercased().contains(query)
-            }.prefix(60))
-        }
-        if iconFilterTag == "all" { return all }
-        if let symbols = Self.iconCategorySymbols[iconFilterTag] {
-            let filtered = all.filter { symbols.contains($0.symbolName) }
-            if !filtered.isEmpty { return filtered }
-        }
-        return Array(all.prefix(12))
+    /// The currently selected small category (type), if any.
+    private var pickedType: Calendar2CategoryType? {
+        category.types.first { $0.id == pickedSubtype }
+    }
+
+    /// Icon auto-derived from the chosen 大类/小类 — no manual picking. Prefers
+    /// the small category's backend icon, then the big category's, then a guess
+    /// from the name.
+    private var derivedSymbol: String {
+        ShortcutRecordStore.resolvedSymbol(
+            typeIcon: pickedType?.icon,
+            categoryIcon: category.icon,
+            name: trimmedName
+        )
+    }
+
+    /// Color auto-derived from the chosen 小类 (falling back to the 大类).
+    private var derivedColor: Color {
+        pickedType?.color ?? category.color
     }
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -500,9 +517,9 @@ private struct AddShortcutSheet: View {
                 VStack(alignment: .leading, spacing: 22) {
                     header
                     nameField
-                    iconSection
                     categorySection
                     subcategorySection
+                    iconPreviewSection
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 10)
@@ -580,106 +597,37 @@ private struct AddShortcutSheet: View {
         }
     }
 
-    // MARK: - Icon Section
+    // MARK: - Icon Preview (auto-derived from 大类/小类)
 
-    private var iconSection: some View {
+    private var iconPreviewSection: some View {
         VStack(alignment: .leading, spacing: 11) {
             sectionLabel("图标")
-
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(Color(hex: "9A9AA2"))
-                TextField("搜索图标（如：健身 / music / heart）", text: $searchText)
-                    .font(.system(size: 14, weight: .regular))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(Color(hex: "B0B0B8"))
-                    }
-                    .buttonStyle(PressButtonStyle())
-                }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 46)
-            .background(Color(hex: "F5F5F7"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
-            )
-
-            if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 7) {
-                        ForEach(Self.iconFilterTags, id: \.id) { tag in
-                            let isOn = iconFilterTag == tag.id
-                            Button { iconFilterTag = tag.id } label: {
-                                Text(tag.label)
-                                    .font(.system(size: 13, weight: isOn ? .semibold : .medium))
-                                    .foregroundStyle(isOn ? .white : Color(hex: "4A4A54"))
-                                    .padding(.horizontal, 13)
-                                    .padding(.vertical, 7)
-                                    .background(
-                                        isOn ? Calendar2Style.accent : Color(hex: "F0F0F5"),
-                                        in: Capsule()
-                                    )
-                            }
-                            .buttonStyle(PressButtonStyle())
-                            .animation(.easeOut(duration: 0.15), value: iconFilterTag)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-            }
-
-            HStack(spacing: 8) {
-                Image(systemName: selectedTemplate.symbolName)
-                    .font(.system(size: 20, weight: .semibold))
+            HStack(spacing: 12) {
+                Image(systemName: derivedSymbol)
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(Calendar2Style.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("已选图标")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color(hex: "B0B0B8"))
-                    Text(selectedTemplate.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color(hex: "4A4A54"))
+                    .frame(width: 46, height: 46)
+                    .background(derivedColor, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(trimmedName.isEmpty ? "自动图标" : trimmedName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color(hex: "2A2A30"))
+                        .lineLimit(1)
+                    Text("根据「\(category.label)\(pickedType.map { " · \($0.label)" } ?? "")」自动选择")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color(hex: "9A9AA2"))
+                        .lineLimit(1)
                 }
                 Spacer()
             }
-
-            LazyVGrid(columns: iconColumns, spacing: 8) {
-                ForEach(filteredOptions) { template in
-                    let isOn = selectedTemplate.symbolName == template.symbolName
-                    Button { selectedTemplate = template } label: {
-                        Image(systemName: template.symbolName)
-                            .font(.system(size: 19, weight: .medium))
-                            .foregroundStyle(isOn ? .white : Design.icon)
-                            .frame(maxWidth: .infinity)
-                            .aspectRatio(1, contentMode: .fit)
-                            .background(
-                                isOn ? Calendar2Style.accent : Color(hex: "F5F5F7"),
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(isOn ? Calendar2Style.accent : Color(hex: "ECECEF"), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(PressButtonStyle())
-                }
-            }
-
-            if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && filteredOptions.isEmpty {
-                Text("没找到匹配的图标，换个关键词试试")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Color(hex: "9A9AA2"))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-            }
+            .padding(.horizontal, 14)
+            .frame(height: 68)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(hex: "F5F5F7"), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+            )
         }
     }
 
@@ -829,12 +777,74 @@ private struct AddShortcutSheet: View {
     private func save() {
         guard !trimmedName.isEmpty else { return }
         let categoryId = pickedCategory.isEmpty ? nil : pickedCategory
+        // Icon + color are auto-derived from the chosen 大类/小类 — no manual pick.
+        let derived = ShortcutTask(
+            name: trimmedName,
+            symbolName: derivedSymbol,
+            colorHex: derivedColor.toHex() ?? ShortcutTask.defaultColorHex
+        )
         if let editingTask {
-            store.updateTask(editingTask, name: trimmedName, template: selectedTemplate, categoryId: categoryId, subtypeId: pickedSubtype)
+            store.updateTask(editingTask, name: trimmedName, template: derived, categoryId: categoryId, subtypeId: pickedSubtype)
         } else {
-            store.addTask(name: trimmedName, template: selectedTemplate, categoryId: categoryId, subtypeId: pickedSubtype)
+            store.addTask(name: trimmedName, template: derived, categoryId: categoryId, subtypeId: pickedSubtype)
         }
         dismiss()
+    }
+}
+
+/// The analog clock + progress ring in the active card. Drawn with Canvas so the
+/// radial tick ring, the blue progress arc, and the thick hands match the
+/// reference screenshot exactly.
+private struct TimerClockRing: View {
+    var progress: Double
+    var tickColor: Color
+    var arcColor: Color
+    var handColor: Color
+
+    var body: some View {
+        Canvas { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = min(size.width, size.height) / 2
+
+            // 1. Dashed radial tick ring (outermost).
+            let tickCount = 60
+            let tickOuter = radius
+            let tickInner = radius - 5
+            for i in 0..<tickCount {
+                let angle = Double(i) / Double(tickCount) * 2 * .pi - .pi / 2
+                var tick = Path()
+                tick.move(to: CGPoint(x: center.x + cos(angle) * tickInner,
+                                      y: center.y + sin(angle) * tickInner))
+                tick.addLine(to: CGPoint(x: center.x + cos(angle) * tickOuter,
+                                         y: center.y + sin(angle) * tickOuter))
+                context.stroke(tick, with: .color(tickColor), lineWidth: 1.4)
+            }
+
+            // 2. Blue progress arc, sitting over the ticks at the outer edge.
+            let arcRadius = radius - 2.5
+            let sweep = 360 * max(0.02, min(1, progress))
+            var arc = Path()
+            arc.addArc(center: center,
+                       radius: arcRadius,
+                       startAngle: .degrees(-90),
+                       endAngle: .degrees(-90 + sweep),
+                       clockwise: false)
+            context.stroke(arc, with: .color(arcColor),
+                           style: StrokeStyle(lineWidth: 6, lineCap: .round))
+
+            // 3. Analog hands — minute to 3 o'clock, hour down to 6, matching the
+            // screenshot. Thick with rounded caps.
+            let handStyle = StrokeStyle(lineWidth: 4, lineCap: .round)
+            var minute = Path()
+            minute.move(to: center)
+            minute.addLine(to: CGPoint(x: center.x + radius * 0.5, y: center.y))
+            context.stroke(minute, with: .color(handColor), style: handStyle)
+
+            var hour = Path()
+            hour.move(to: center)
+            hour.addLine(to: CGPoint(x: center.x, y: center.y + radius * 0.4))
+            context.stroke(hour, with: .color(handColor), style: handStyle)
+        }
     }
 }
 
@@ -873,14 +883,17 @@ private enum Design {
     static let bg = Color(hex: "F5F6F8")
     static let surface = Color(hex: "FFFFFF")
     static let surface2 = Color(hex: "F0F1F4")
-    static let line = Color(hex: "E4E6EB")
-    static let text = Color(hex: "1A1C20")
+    static let line = Color(hex: "E9EBF0")
+    static let text = Color(hex: "1E2333")
     static let muted = Color(hex: "8A8F9C")
     static let icon = Color(hex: "6F7480")
     static let iconSurface = Color(hex: "F7F8FA")
     static let iconLine = Color(hex: "EEF0F3")
-    static let accentHex = "FF7847"
+    // Prototype primary is blue; the 结束 button is dark navy.
+    static let accentHex = "4C6EF5"
     static let accent = Color(hex: accentHex)
-    static let accentSoft = Color(hex: "FFF7F3")
+    static let accentSoft = Color(hex: "EEF2FE")
+    // "结束" button: muted blue-gray slate with a white label.
+    static let stopFill = Color(hex: "5A6479")
     static let green = Color(hex: "22C55E")
 }

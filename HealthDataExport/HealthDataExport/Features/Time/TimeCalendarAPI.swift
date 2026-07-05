@@ -610,6 +610,7 @@ struct TimeCategoryResponse: Decodable {
     var id: String
     var label: String
     var color: String
+    var icon: String?
     var types: [TimeCategoryTypeResponse]
 
     private enum CodingKeys: String, CodingKey {
@@ -618,6 +619,7 @@ struct TimeCategoryResponse: Decodable {
         case name
         case title
         case color
+        case icon
         case types
         case subs
         case children
@@ -628,6 +630,7 @@ struct TimeCategoryResponse: Decodable {
         id = try container.decodeFlexibleString(for: .id)
         label = try container.decodeFirstString(keys: [.label, .name, .title]) ?? id
         color = try container.decodeFirstString(keys: [.color]) ?? "#8A8F9C"
+        icon = try container.decodeFirstString(keys: [.icon])
         types = (
             try container.decodeIfPresent([TimeCategoryTypeResponse].self, forKey: .types)
             ?? container.decodeIfPresent([TimeCategoryTypeResponse].self, forKey: .subs)
@@ -641,6 +644,7 @@ struct TimeCategoryTypeResponse: Decodable {
     var id: String
     var label: String
     var color: String?
+    var icon: String?
     var tracksFocus: Bool?
 
     private enum CodingKeys: String, CodingKey {
@@ -649,6 +653,7 @@ struct TimeCategoryTypeResponse: Decodable {
         case name
         case title
         case color
+        case icon
         case tracksFocus
         case tracksFocusSnake = "tracks_focus"
     }
@@ -659,6 +664,7 @@ struct TimeCategoryTypeResponse: Decodable {
             id = value
             label = value
             color = nil
+            icon = nil
             tracksFocus = nil
             return
         }
@@ -667,6 +673,7 @@ struct TimeCategoryTypeResponse: Decodable {
         id = try container.decodeFlexibleString(for: .id)
         label = try container.decodeFirstString(keys: [.label, .name, .title]) ?? id
         color = try container.decodeFirstString(keys: [.color])
+        icon = try container.decodeFirstString(keys: [.icon])
         tracksFocus = try container.decodeIfPresent(Bool.self, forKey: .tracksFocus)
             ?? container.decodeIfPresent(Bool.self, forKey: .tracksFocusSnake)
     }
