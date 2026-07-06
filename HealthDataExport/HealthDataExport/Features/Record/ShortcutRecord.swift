@@ -458,8 +458,9 @@ final class ShortcutRecordStore: ObservableObject {
                     // start already landed, the backend replays that same entry
                     // instead of 409-ing.
                     let clientId = operation.id.uuidString
+                    var serverEntry: RunningShortcutEntry?
                     do {
-                        try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId)
+                        serverEntry = try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId)
                     } catch {
                         // A 409 "already running" that idempotency didn't absorb
                         // means the backend has a *different* running entry our
@@ -471,12 +472,28 @@ final class ShortcutRecordStore: ObservableObject {
                         // then start ours.
                         guard Self.isAlreadyRunningError(error) else { throw error }
                         let running = try await ShortcutAPI.running()
-                        if running?.taskName != operation.taskName {
+                        if running?.taskName == operation.taskName {
+                            serverEntry = running
+                        } else {
                             if running != nil {
                                 try? await ShortcutAPI.end(note: "")
                             }
-                            try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId)
+                            serverEntry = try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId)
                         }
+                    }
+                    // Adopt the server's authoritative startedAt: a resume-merge
+                    // keeps the original start time, so a local `.now` would make
+                    // the timer read too small. Only when this start is still the
+                    // live intent (no newer op enqueued) and it's still the running
+                    // session, so a concurrent switch is never clobbered.
+                    if pendingSync.first?.id == operation.id,
+                       let serverEntry,
+                       var session = activeSession,
+                       session.task.name == operation.taskName,
+                       session.startedAt != serverEntry.startedAt {
+                        session.startedAt = serverEntry.startedAt
+                        activeSession = session
+                        saveActiveSession()
                     }
                 case .end:
                     do {
@@ -957,7 +974,11 @@ enum ShortcutAPI {
         return decoded.categories.map { ShortcutCategory(response: $0) }
     }
 
-    static func start(taskName: String, typeId: String? = nil, clientId: String? = nil) async throws {
+    /// Start an entry and return the server's view of it. The `startedAt` in the
+    /// response is authoritative: on a resume-merge the backend keeps the original
+    /// start time, so callers should adopt it rather than trusting a local `.now`.
+    @discardableResult
+    static func start(taskName: String, typeId: String? = nil, clientId: String? = nil) async throws -> RunningShortcutEntry? {
         let requestBody = StartTimeEntryRequest(
             taskName: taskName,
             typeId: typeId.flatMap { Int($0) },
@@ -967,7 +988,7 @@ enum ShortcutAPI {
             clientId: clientId
         )
         do {
-            try await post(url: startURL, body: requestBody)
+            return try await postReturningEntry(url: startURL, body: requestBody)
         } catch {
             guard typeId != nil, shouldRetryStartWithoutType(error) else { throw error }
             let fallbackBody = StartTimeEntryRequest(
@@ -978,7 +999,7 @@ enum ShortcutAPI {
                 note: nil,
                 clientId: clientId
             )
-            try await post(url: startURL, body: fallbackBody)
+            return try await postReturningEntry(url: startURL, body: fallbackBody)
         }
     }
 
@@ -997,6 +1018,22 @@ enum ShortcutAPI {
             }
             throw error
         }
+    }
+
+    /// POST that decodes the returned time entry. Used by `start`, whose response
+    /// carries the authoritative `startedAt`. Decoding is best-effort: a body we
+    /// can't parse just yields nil (the start still counts as delivered).
+    private static func postReturningEntry<Body: Encodable>(url: URL, body: Body) async throws -> RunningShortcutEntry? {
+        let response: HTTPClientResponse
+        do {
+            response = try await HTTPClient.shared.data(url: url, method: .post, body: body)
+        } catch let error as HTTPClientError {
+            if case let .httpFailure(statusCode, data) = error {
+                throw apiError(from: data, statusCode: statusCode)
+            }
+            throw error
+        }
+        return try? JSONDecoder.timeEntryDecoder.decode(TimeEntryResponse.self, from: response.data).runningEntry
     }
 
     private static func apiError(from data: Data, statusCode: Int) -> Error {
