@@ -454,23 +454,28 @@ final class ShortcutRecordStore: ObservableObject {
             do {
                 switch operation.kind {
                 case .start:
+                    // The operation id is a stable idempotency key: if a retried
+                    // start already landed, the backend replays that same entry
+                    // instead of 409-ing.
+                    let clientId = operation.id.uuidString
                     do {
-                        try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId)
+                        try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId)
                     } catch {
-                        // A 409 "already running" means the backend still has a
-                        // running entry our local state lost track of (e.g. a
-                        // previous end never landed). Retrying the same start is
-                        // futile — it will 409 forever and, because pendingSync
-                        // never empties, syncRunningSession can never self-heal.
-                        // Reconcile instead: if it's already our task, we're done;
-                        // otherwise end it first, then start ours.
+                        // A 409 "already running" that idempotency didn't absorb
+                        // means the backend has a *different* running entry our
+                        // local state lost track of (e.g. a previous end never
+                        // landed). Retrying the same start is futile — it 409s
+                        // forever and, because pendingSync never empties,
+                        // syncRunningSession can never self-heal. Reconcile: if
+                        // it's already our task we're done; otherwise end it first,
+                        // then start ours.
                         guard Self.isAlreadyRunningError(error) else { throw error }
                         let running = try await ShortcutAPI.running()
                         if running?.taskName != operation.taskName {
                             if running != nil {
                                 try? await ShortcutAPI.end(note: "")
                             }
-                            try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId)
+                            try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId)
                         }
                     }
                 case .end:
@@ -952,13 +957,14 @@ enum ShortcutAPI {
         return decoded.categories.map { ShortcutCategory(response: $0) }
     }
 
-    static func start(taskName: String, typeId: String? = nil) async throws {
+    static func start(taskName: String, typeId: String? = nil, clientId: String? = nil) async throws {
         let requestBody = StartTimeEntryRequest(
             taskName: taskName,
             typeId: typeId.flatMap { Int($0) },
             startedAt: Date().apiISOString,
             source: "mobile",
-            note: nil
+            note: nil,
+            clientId: clientId
         )
         do {
             try await post(url: startURL, body: requestBody)
@@ -969,7 +975,8 @@ enum ShortcutAPI {
                 typeId: nil,
                 startedAt: Date().apiISOString,
                 source: "mobile",
-                note: nil
+                note: nil,
+                clientId: clientId
             )
             try await post(url: startURL, body: fallbackBody)
         }
@@ -1061,6 +1068,9 @@ private struct StartTimeEntryRequest: Encodable {
     var startedAt: String?
     var source: String?
     var note: String?
+    /// Idempotency key: the persisted queue-operation id, stable across retries,
+    /// so the backend replays the same entry instead of 409-ing a retried start.
+    var clientId: String?
 }
 
 private struct ShortcutCategoriesResponse: Decodable {
