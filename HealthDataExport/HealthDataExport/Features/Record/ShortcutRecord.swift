@@ -344,14 +344,19 @@ final class ShortcutRecordStore: ObservableObject {
         events.insert(ShortcutEvent(task: task, kind: .started, note: "开始了"), at: 0)
         saveActiveSession()
         saveEvents()
-        replaceSyncQueue(
-            wasRunning
-                ? [
-                    ShortcutSyncOperation(kind: .end),
-                    ShortcutSyncOperation(kind: .start, taskName: task.name, typeId: task.subtypeId)
-                ]
-                : [ShortcutSyncOperation(kind: .start, taskName: task.name, typeId: task.subtypeId)]
-        )
+        let startOp = ShortcutSyncOperation(kind: .start, taskName: task.name, typeId: task.subtypeId)
+        // Preserve an `end` that was queued (e.g. by a 结束 tapped moments ago) but
+        // hasn't been delivered yet. Blindly replacing the queue would strand the
+        // previous entry as RUNNING on the backend, so the fresh start would 409
+        // with "a time entry is already running". Carrying the end over (with its
+        // note) keeps the server consistent.
+        if let pendingEnd = pendingSync.first(where: { $0.kind == .end }) {
+            replaceSyncQueue([pendingEnd, startOp])
+        } else if wasRunning {
+            replaceSyncQueue([ShortcutSyncOperation(kind: .end), startOp])
+        } else {
+            replaceSyncQueue([startOp])
+        }
     }
 
     func stop(note: String) {
@@ -449,7 +454,25 @@ final class ShortcutRecordStore: ObservableObject {
             do {
                 switch operation.kind {
                 case .start:
-                    try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId)
+                    do {
+                        try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId)
+                    } catch {
+                        // A 409 "already running" means the backend still has a
+                        // running entry our local state lost track of (e.g. a
+                        // previous end never landed). Retrying the same start is
+                        // futile — it will 409 forever and, because pendingSync
+                        // never empties, syncRunningSession can never self-heal.
+                        // Reconcile instead: if it's already our task, we're done;
+                        // otherwise end it first, then start ours.
+                        guard Self.isAlreadyRunningError(error) else { throw error }
+                        let running = try await ShortcutAPI.running()
+                        if running?.taskName != operation.taskName {
+                            if running != nil {
+                                try? await ShortcutAPI.end(note: "")
+                            }
+                            try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId)
+                        }
+                    }
                 case .end:
                     do {
                         try await ShortcutAPI.end(note: operation.note)
@@ -615,6 +638,27 @@ final class ShortcutRecordStore: ObservableObject {
                 || body.contains("没有进行")
                 || body.contains("没有正在")
                 || body.isEmpty
+        }
+        return false
+    }
+
+    /// A start rejected because the backend already has a running entry (409
+    /// CONFLICT / "a time entry is already running"). Signals that we should
+    /// reconcile rather than blindly retry the identical, permanently-failing
+    /// request.
+    private static func isAlreadyRunningError(_ error: Error) -> Bool {
+        if let apiError = error as? ShortcutAPIError {
+            let normalized = apiError.message.lowercased()
+            return apiError.statusCode == 409
+                || normalized.contains("already running")
+                || normalized.contains("正在进行")
+                || normalized.contains("已有")
+        }
+        if let httpError = error as? HTTPClientError,
+           case let .httpFailure(statusCode, data) = httpError {
+            if statusCode == 409 { return true }
+            let body = (String(data: data, encoding: .utf8) ?? "").lowercased()
+            return body.contains("already running")
         }
         return false
     }

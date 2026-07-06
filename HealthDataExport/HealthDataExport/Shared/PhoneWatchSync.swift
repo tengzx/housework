@@ -310,7 +310,17 @@ final class PhoneWatchSync: NSObject {
         guard session.activationState == .activated else { return }
         let ctx = mergedContext()
         guard ctx["teStamp"] != nil else { return }
-        session.transferUserInfo(ctx)
+        // A complication transfer has a dedicated daily budget and takes priority
+        // in waking the watch to refresh the face. This matters overnight / under
+        // Sleep Focus: watchOS won't relaunch a suspended watch app for a plain
+        // `transferUserInfo`, so the App Group the complication reads never gets
+        // rewritten and the face freezes until the watch app is opened. Prefer the
+        // complication transfer while budget remains, and fall back otherwise.
+        if session.isComplicationEnabled, session.remainingComplicationUserInfoTransfers > 0 {
+            session.transferCurrentComplicationUserInfo(ctx)
+        } else {
+            session.transferUserInfo(ctx)
+        }
     }
 
     /// Ask the watch to delete the Apple Health workout it saved for `sessionId`.
