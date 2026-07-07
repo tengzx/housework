@@ -50,11 +50,12 @@ struct WatchTimeTrackerView: View {
                     .padding(.top, 6)
 
                     Text(timerText(from: session.startedAt, now: timeline.date))
-                        .font(.system(size: 52, weight: .bold, design: .rounded))
+                        .font(.system(size: timerFontSize(from: session.startedAt, now: timeline.date), weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                        .minimumScaleFactor(0.5)
+                        .allowsTightening(true)
                         .padding(.top, 8)
 
                     Spacer(minLength: 28)
@@ -313,6 +314,14 @@ struct WatchTimeTrackerView: View {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: date)
+    }
+
+    /// The MM:SS layout fits comfortably at 52pt, but HH:MM:SS is two glyphs
+    /// wider and gets clipped ("01:40:..."). Drop the point size once an hour
+    /// rolls over so the full timer stays on one line.
+    private func timerFontSize(from startDate: Date, now: Date) -> CGFloat {
+        let seconds = max(0, Int(now.timeIntervalSince(startDate)))
+        return seconds >= 3600 ? 40 : 52
     }
 
     private func timerText(from startDate: Date, now: Date) -> String {

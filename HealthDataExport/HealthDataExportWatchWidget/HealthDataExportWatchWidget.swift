@@ -45,6 +45,13 @@ struct ActiveActivityProvider: TimelineProvider {
 /// time-tracker (the in-progress screen).
 private let openTimeTrackerURL = URL(string: "zhixing://time")
 
+/// Formats the session start time as `HH:mm` for the "开始于" subtitle.
+private let startedAtFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "HH:mm"
+    return formatter
+}()
+
 struct ActiveActivityWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: ActiveActivityEntry
@@ -79,31 +86,64 @@ struct ActiveActivityWidgetView: View {
         }
     }
 
-    // Wide rectangular slot: status + name + a live counting-up timer.
+    // Wide rectangular slot: a status header, the icon beside the name + a live
+    // counting-up timer, the start time, and an elapsed progress bar.
     @ViewBuilder
     private var rectangular: some View {
         if let activity = entry.activity {
-            HStack(spacing: 8) {
-                Image(systemName: activity.symbolName)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .widgetAccentable()
-                    .frame(width: 26)
-
-                VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
+                // Header: status dot + label, with a chevron hinting it's tappable.
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(tint)
+                        .frame(width: 6, height: 6)
+                        .widgetAccentable()
                     Text("进行中")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    Text(activity.name)
-                        .font(.system(size: 15, weight: .semibold))
-                        .lineLimit(1)
-                    Text(activity.startedAt, style: .timer)
-                        .font(.system(size: 14, weight: .bold))
-                        .monospacedDigit()
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+
+                // Main: activity glyph beside the name and the live timer.
+                HStack(spacing: 7) {
+                    Image(systemName: activity.symbolName)
+                        .font(.system(size: 21, weight: .semibold))
                         .foregroundStyle(tint)
                         .widgetAccentable()
+                        .frame(width: 24)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(activity.name)
+                            .font(.system(size: 14, weight: .semibold))
+                            .lineLimit(1)
+                        Text(activity.startedAt, style: .timer)
+                            .font(.system(size: 18, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(tint)
+                            .widgetAccentable()
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+
+                Text("开始于 \(startedAtFormatter.string(from: activity.startedAt))")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+
+                // Elapsed bar: fills toward a 2-hour reference window. It refreshes
+                // with the timeline rather than live, so it's a coarse indicator.
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.18))
+                        Capsule()
+                            .fill(tint)
+                            .frame(width: geo.size.width * elapsedFraction(for: activity))
+                            .widgetAccentable()
+                    }
+                }
+                .frame(height: 4)
+                .padding(.top, 1)
             }
         } else {
             HStack(spacing: 8) {
@@ -121,6 +161,13 @@ struct ActiveActivityWidgetView: View {
                 Spacer(minLength: 0)
             }
         }
+    }
+
+    /// How full the elapsed bar is: 0 → just started, 1 → running ≥ 2 hours.
+    private func elapsedFraction(for activity: SharedActiveActivity) -> Double {
+        let window: TimeInterval = 2 * 60 * 60
+        let elapsed = Date().timeIntervalSince(activity.startedAt)
+        return min(max(elapsed / window, 0.04), 1)
     }
 }
 

@@ -14,6 +14,7 @@ struct WatchActiveWorkoutView: View {
     // view is torn down (on completion, or when the phone ends the workout).
     @ObservedObject private var workout = WatchWorkoutManager.shared
     @ObservedObject private var activeStore = WatchActiveWorkoutStore.shared
+    @ObservedObject private var onset = SetOnsetDetector.shared
 
     /// Selected page: a set's `sessionSetId`, a per-set controls tag, or `finishTag`.
     @State private var selection: Int = 0
@@ -33,6 +34,9 @@ struct WatchActiveWorkoutView: View {
     /// this view disappear/reappear, which re-fires `.task` — without this the
     /// workout session (and countdown) would restart on every sheet dismiss.
     @State private var didBegin = false
+    /// Set the detector just auto-started (no confirm tap). Drives the transient
+    /// "已开始 · 撤销" banner; nil when nothing to undo.
+    @State private var autoStarted: OnsetSuggestion?
 
     private static let finishTag = -1
     private static func controlsTag(for setId: Int) -> Int { -1_000_000 - setId }
@@ -68,6 +72,10 @@ struct WatchActiveWorkoutView: View {
                 if editingSetId == nil && !showRating && !showDiscardConfirm {
                     workout.end()
                 }
+                onset.disarm()
+            }
+            .onChange(of: armTarget, initial: true) { _, target in
+                if let target { onset.arm(target) } else { onset.disarm() }
             }
             .onChange(of: activeStore.reloadTick) { _, _ in
                 Task {
@@ -82,7 +90,20 @@ struct WatchActiveWorkoutView: View {
                 }
             }
             .onChange(of: workout.heartRate) { _, bpm in
-                if bpm > 0 { WatchAuthSync.shared.broadcastHeartRate(bpm, sessionId: sessionId) }
+                if bpm > 0 {
+                    WatchAuthSync.shared.broadcastHeartRate(bpm, sessionId: sessionId)
+                    WorkoutSessionRecorder.shared.logHeartRate(bpm)
+                }
+            }
+            .onChange(of: onset.suggestion) { _, s in
+                guard let s else { return }
+                // Auto-start on detection — no confirm tap. The transient undo
+                // banner below is the safety net for the rare false positive.
+                WorkoutSessionRecorder.shared.logSuggest(setId: s.setId)
+                WorkoutSessionRecorder.shared.logConfirm(setId: s.setId)
+                onset.disarm()
+                Task { await vm.startSet(s.setId) }
+                withAnimation(.easeOut(duration: 0.2)) { autoStarted = s }
             }
             .sheet(item: editingContext) { context in
                 WatchSetEditorView(
@@ -144,6 +165,25 @@ struct WatchActiveWorkoutView: View {
                         .transition(.opacity)
                 }
             }
+            .overlay(alignment: .bottom) {
+                if let started = autoStarted {
+                    OnsetAutoStartBanner(
+                        suggestion: started,
+                        onUndo: {
+                            WorkoutSessionRecorder.shared.logIgnore(setId: started.setId)
+                            onset.dismissSuggestion()   // 15s cooldown so it won't instantly re-fire
+                            Task { await vm.reopenSet(started.setId) }
+                            withAnimation(.easeOut(duration: 0.2)) { autoStarted = nil }
+                        },
+                        onDismiss: {
+                            withAnimation(.easeOut(duration: 0.2)) { autoStarted = nil }
+                        }
+                    )
+                    .id(started.setId)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: autoStarted)
     }
 
     /// On a freshly started session (nothing completed or running yet), play a
@@ -191,6 +231,9 @@ struct WatchActiveWorkoutView: View {
             }
         } else {
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                // Rest remaining for the set we're about to do; `nil` once rest
+                // is over. Tracked here so the falling edge (→ nil) can buzz.
+                let restNow = vm.nextTarget.flatMap { vm.restRemaining(for: $0, now: timeline.date) }
                 TabView(selection: $selection) {
                     ForEach(vm.orderedContexts) { context in
                         SetPageView(
@@ -235,8 +278,33 @@ struct WatchActiveWorkoutView: View {
                         selection = Self.finishTag
                     }
                 }
+                .onChange(of: restNow) { old, new in
+                    // Rest timer expired: it counted down to the end and cleared.
+                    // Buzz so the wrist notices even when the screen is asleep.
+                    // Guard on a small `old` so manually starting the next set
+                    // early (which also clears rest, but from a larger value)
+                    // doesn't fire the buzz.
+                    if let old, old <= 2, new == nil {
+                        Haptics.notify(success: true)
+                    }
+                }
             }
         }
+    }
+
+    /// The set the onset detector should watch for: the next pending set, but
+    /// only when nothing else is going on (no set running, no sheet/dialog/pre-roll).
+    /// `nil` disarms the detector.
+    private var armTarget: OnsetSuggestion? {
+        guard !isPreparing, countdown == nil, editingSetId == nil,
+              !showRating, !showDiscardConfirm,
+              vm.runningContext == nil, let next = vm.nextTarget else { return nil }
+        return OnsetSuggestion(
+            setId: next.set.sessionSetId,
+            exerciseName: next.exercise.name,
+            setIndex: next.exerciseSetIndex,
+            setCount: next.exerciseSetCount
+        )
     }
 
     private var editingContext: Binding<WatchWorkoutViewModel.SetContext?> {
@@ -291,6 +359,50 @@ private struct CountdownOverlay: View {
                 .foregroundStyle(WK.orange)
                 .id(value)
                 .transition(.scale(scale: 0.5).combined(with: .opacity))
+        }
+    }
+}
+
+// MARK: - Onset auto-start banner
+
+/// Glanceable confirmation that the detector just auto-started a set, with a
+/// single [撤销] to revert the rare false positive. Auto-dismisses if untouched.
+private struct OnsetAutoStartBanner: View {
+    let suggestion: OnsetSuggestion
+    let onUndo: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("已开始")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(WK.green)
+                Text("\(suggestion.exerciseName) 第\(suggestion.setIndex + 1)组")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: onUndo) {
+                Text("撤销")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WK.bg)
+                    .padding(.horizontal, 14)
+                    .frame(height: 34)
+                    .background(WK.green, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(WK.green.opacity(0.6), lineWidth: 1))
+        .padding(.horizontal, 8)
+        .task {
+            // The undo window: banner fades on its own if the user does nothing.
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            onDismiss()
         }
     }
 }
@@ -517,6 +629,8 @@ private struct ControlsPageView: View {
     let onPauseToggle: () -> Void
     let onDelete: () -> Void
 
+    @ObservedObject private var recorder = WorkoutSessionRecorder.shared
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
@@ -548,6 +662,12 @@ private struct ControlsPageView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
+
+                // Debug: continuous capture status (auto rep-detection).
+                Text(recorder.debugStatus)
+                    .font(.system(size: 11))
+                    .foregroundStyle(WK.muted)
+                    .padding(.top, 6)
             }
             .padding(.horizontal, 14)
             .padding(.top, 6)

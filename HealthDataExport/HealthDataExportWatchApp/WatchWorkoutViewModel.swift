@@ -136,6 +136,13 @@ final class WatchWorkoutViewModel: ObservableObject {
     func startSet(_ setId: Int) async {
         guard !busySetIds.contains(setId) else { return }
         if await refreshShowsSetCompleted(setId) { return }
+        if let context = orderedContexts.first(where: { $0.id == setId }) {
+            WorkoutSessionRecorder.shared.logSetStart(
+                setId: setId,
+                exercise: context.exercise.name,
+                setIndex: context.exerciseSetIndex
+            )
+        }
         let operation = makeOperation(type: "start_set", setId: setId)
         applyOptimistic(operation)
         broadcastCurrentSnapshot()
@@ -151,6 +158,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         actualDistanceMeters: Double?
     ) async {
         guard !busySetIds.contains(setId) else { return }
+        WorkoutSessionRecorder.shared.logSetComplete(setId: setId, reps: actualReps, weightKg: actualWeightKg)
         if await refreshShowsSetCompleted(setId) { return }
         let operation = makeOperation(
             type: "complete_set",

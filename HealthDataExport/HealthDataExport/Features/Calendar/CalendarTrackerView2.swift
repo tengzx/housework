@@ -110,12 +110,12 @@ struct CalendarTrackerView2: View {
                         showMonthPicker.toggle()
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
                         Text(monthText)
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .font(.system(size: 30, weight: .bold, design: .rounded))
                             .foregroundStyle(Calendar2Style.text)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Calendar2Style.muted)
                             .rotationEffect(.degrees(showMonthPicker ? 180 : 0))
                     }
@@ -144,7 +144,7 @@ struct CalendarTrackerView2: View {
                 }
             } label: {
                 Image(systemName: "iphone")
-                    .font(.system(size: 15, weight: showMobileAppEvents ? .bold : .regular))
+                    .font(.system(size: 20, weight: showMobileAppEvents ? .bold : .regular))
                     .foregroundStyle(showMobileAppEvents ? Calendar2Style.accent : Calendar2Style.muted)
                     .padding(4)
             }
@@ -155,7 +155,7 @@ struct CalendarTrackerView2: View {
                 draftEvent = store.makeDraftEvent(dayOffset: min(0, anchorOffset + 2))
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(Calendar2Style.accent)
                     .padding(4)
             }
@@ -168,7 +168,7 @@ struct CalendarTrackerView2: View {
                     }
                 } label: {
                     Text("今天")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Calendar2Style.accent)
                         .padding(4)
                 }

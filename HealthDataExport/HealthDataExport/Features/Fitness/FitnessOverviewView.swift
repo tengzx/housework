@@ -374,13 +374,13 @@ struct FitnessOverviewView: View {
 
             HStack(spacing: 0) {
                 sessionMetric(
-                    value: session.totalVolumeKg >= 1000
-                        ? String(format: "%.1ft", session.totalVolumeKg / 1000)
-                        : "\(Int(session.totalVolumeKg))kg",
+                    value: session.totalVolumeKg.map {
+                        $0 >= 1000 ? String(format: "%.1ft", $0 / 1000) : "\(Int($0))kg"
+                    } ?? "--",
                     label: "总量"
                 )
                 Divider().frame(height: 28)
-                sessionMetric(value: "\(session.totalSets)", label: "组数")
+                sessionMetric(value: session.totalSets.map { "\($0)" } ?? "--", label: "组数")
                 Divider().frame(height: 28)
                 sessionMetric(value: "\(session.totalExercises)", label: "动作")
                 if let dur = session.durationSeconds {

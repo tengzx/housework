@@ -3,12 +3,15 @@ import SwiftUI
 @MainActor
 struct RecordView: View {
     @ObservedObject var calendarStore: TimeCalendarStore
+    @ObservedObject var dashboardVM: TimeDashboardViewModel
     @ObservedObject private var store = ShortcutRecordStore.shared
     @State private var text = ""
     @State private var isAdding = false
     @State private var isManagingShortcuts = false
     @State private var editingTask: ShortcutTask?
     @State private var statusMessage = ""
+    @State private var showCalendar = false
+    @State private var showDashboard = false
     @FocusState private var isInputFocused: Bool
 
     private let columns = [
@@ -72,6 +75,12 @@ struct RecordView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(.white)
         }
+        .sheet(isPresented: $showCalendar) {
+            CalendarTrackerView2(store: calendarStore)
+        }
+        .sheet(isPresented: $showDashboard) {
+            TimeDashboardView(viewModel: dashboardVM)
+        }
         .task {
             await refreshRunningSession()
             await store.refreshTasks()
@@ -79,13 +88,36 @@ struct RecordView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center) {
             Text(Self.todayText)
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundStyle(Design.text)
 
             Spacer()
+
+            HStack(spacing: 10) {
+                headerIconButton(symbol: "calendar") {
+                    isInputFocused = false
+                    showCalendar = true
+                }
+                headerIconButton(symbol: "chart.bar.fill") {
+                    isInputFocused = false
+                    showDashboard = true
+                }
+            }
         }
+    }
+
+    private func headerIconButton(symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Design.icon)
+                .frame(width: 40, height: 40)
+                .background(Design.surface, in: Circle())
+                .overlay(Circle().stroke(Design.line, lineWidth: 1))
+        }
+        .buttonStyle(PressButtonStyle())
     }
 
     private var activeCard: some View {

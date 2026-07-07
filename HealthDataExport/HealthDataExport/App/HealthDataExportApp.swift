@@ -16,6 +16,7 @@ struct HealthDataExportApp: App {
                         .environmentObject(dependencies.fitnessSessionEvents)
                         .task {
                             dependencies.healthObserverSyncManager.start()
+                            await FocusReminderNotifier.requestAuthorization()
                         }
                 } else {
                     LoginView()

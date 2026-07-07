@@ -294,10 +294,16 @@ struct FitnessSessionSummary: Decodable, Identifiable {
     let startedAt: Date
     let endedAt: Date?
     let durationSeconds: Int?
-    let totalVolumeKg: Double
+    // Volume / set counts are null for external workouts synced from Apple
+    // Health (e.g. cycling, running), which the listing endpoint now merges in.
+    let totalVolumeKg: Double?
     let totalExercises: Int
-    let totalSets: Int
+    let totalSets: Int?
     let hasAnalysis: Bool?
+    /// True when the record originates outside the app (e.g. Apple Health).
+    let isExternal: Bool?
+    /// Origin of the record, e.g. "apple_health".
+    let source: String?
 }
 
 struct FitnessSessionsPage: Decodable {

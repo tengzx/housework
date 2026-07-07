@@ -1,6 +1,9 @@
 import Foundation
 import Combine
 import HealthKit
+import os
+
+private let workoutLog = Logger(subsystem: "HealthDataExportWatchApp", category: "workout")
 
 /// Drives an `HKWorkoutSession` for the duration of a strength workout so the watch
 /// can surface live heart rate and active energy, and the workout is recorded to
@@ -31,13 +34,29 @@ final class WatchWorkoutManager: NSObject, ObservableObject {
     private var startDate: Date?
     private static let minimumSaveSeconds: TimeInterval = 10
 
+    /// Set by `end()` and run once the session's delegate reports `.ended`.
+    /// `finishWorkout` must not be called until the session has actually ended,
+    /// otherwise the save intermittently fails and the workout never lands in
+    /// HealthKit. Nil unless a finish is pending.
+    private var pendingFinish: (() -> Void)?
+
     private static var readTypes: Set<HKObjectType> {
         [
             HKQuantityType(.heartRate),
             HKQuantityType(.activeEnergyBurned)
         ]
     }
-    private static var shareTypes: Set<HKSampleType> { [HKQuantityType.workoutType()] }
+    /// `finishWorkout` saves the samples the live data source collected (heart
+    /// rate, active energy) as part of the workout, so we need *write* access to
+    /// those types too — not just the workout type. Without it the whole save
+    /// silently fails and nothing lands in Apple Health / Fitness.
+    private static var shareTypes: Set<HKSampleType> {
+        [
+            HKQuantityType.workoutType(),
+            HKQuantityType(.heartRate),
+            HKQuantityType(.activeEnergyBurned)
+        ]
+    }
 
     /// Ask for the HealthKit permissions the live session needs, once at app
     /// launch so the confirmation is out of the way before the user starts a
@@ -88,6 +107,8 @@ final class WatchWorkoutManager: NSObject, ObservableObject {
             startDate = start
             session.startActivity(with: start)
             builder.beginCollection(withStart: start) { _, _ in }
+            // Continuous IMU capture + live onset detection for the whole workout.
+            WorkoutSessionRecorder.shared.startSession(sessionId: sessionId)
             // Reset live metrics from any previous session (singleton is reused).
             heartRate = 0
             activeEnergyKcal = 0
@@ -110,6 +131,7 @@ final class WatchWorkoutManager: NSObject, ObservableObject {
     }
 
     func end() {
+        WorkoutSessionRecorder.shared.endSession(save: true)
         guard let session, let builder else {
             isRunning = false
             return
@@ -121,31 +143,56 @@ final class WatchWorkoutManager: NSObject, ObservableObject {
         self.builder = nil
         isRunning = false
 
-        session.end()
-
         // Too short to be a real workout — discard rather than save 0:00 junk.
         let elapsed = startDate.map { Date().timeIntervalSince($0) } ?? 0
         startDate = nil
         guard elapsed >= Self.minimumSaveSeconds else {
+            session.end()
             builder.discardWorkout()
             return
         }
 
         let metadata: [String: Any] = sessionId.map { [Self.sessionMetadataKey: $0] } ?? [:]
-        let finish: () -> Void = {
-            builder.endCollection(withEnd: Date()) { _, _ in
-                builder.finishWorkout { _, _ in
-                    // Retain the session until the save completes so it isn't
-                    // torn down mid-write.
-                    withExtendedLifetime(session) {}
+        let end = Date()
+        // Defer the actual save until the session reaches `.ended` (see the
+        // session delegate). Calling endCollection/finishWorkout while the
+        // session is still stopping intermittently drops the workout.
+        pendingFinish = {
+            builder.endCollection(withEnd: end) { _, endError in
+                if let endError { workoutLog.error("endCollection failed: \(endError.localizedDescription, privacy: .public)") }
+                let save = {
+                    builder.finishWorkout { workout, finishError in
+                        if let finishError {
+                            workoutLog.error("finishWorkout failed: \(finishError.localizedDescription, privacy: .public)")
+                        } else if workout == nil {
+                            workoutLog.error("finishWorkout returned no workout")
+                        } else {
+                            workoutLog.info("workout saved to HealthKit")
+                        }
+                        // Retain the session until the save completes so it
+                        // isn't torn down mid-write.
+                        withExtendedLifetime(session) {}
+                    }
+                }
+                if metadata.isEmpty {
+                    save()
+                } else {
+                    builder.addMetadata(metadata) { _, metaError in
+                        if let metaError { workoutLog.error("addMetadata failed: \(metaError.localizedDescription, privacy: .public)") }
+                        save()
+                    }
                 }
             }
         }
-        if metadata.isEmpty {
-            finish()
-        } else {
-            builder.addMetadata(metadata) { _, _ in finish() }
-        }
+        session.end()
+    }
+
+    /// Run the deferred save once, if one is pending. Called from the session
+    /// delegate when the session reaches `.ended`.
+    fileprivate func runPendingFinish() {
+        guard let finish = pendingFinish else { return }
+        pendingFinish = nil
+        finish()
     }
 
     /// Delete the HKWorkout saved for `sessionId`. Only the watch app can delete
@@ -172,6 +219,8 @@ final class WatchWorkoutManager: NSObject, ObservableObject {
     }
 
     func discard() {
+        WorkoutSessionRecorder.shared.endSession(save: false)
+        pendingFinish = nil
         session?.end()
         builder?.discardWorkout()
         session = nil
@@ -203,7 +252,10 @@ extension WatchWorkoutManager: HKWorkoutSessionDelegate {
         didChangeTo toState: HKWorkoutSessionState,
         from fromState: HKWorkoutSessionState,
         date: Date
-    ) {}
+    ) {
+        guard toState == .ended else { return }
+        Task { @MainActor in self.runPendingFinish() }
+    }
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
         Task { @MainActor in self.isRunning = false }

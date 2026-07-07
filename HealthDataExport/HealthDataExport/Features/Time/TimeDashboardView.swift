@@ -152,6 +152,16 @@ struct TrendPoint: Decodable {
     var totalMinutes: Int
 }
 
+// MARK: - Daily Review Models
+
+struct DailyReviewResponse: Decodable, Identifiable {
+    var id: Int
+    var userId: Int
+    var reviewDate: String
+    var reviewText: String
+    var modelName: String?
+}
+
 // MARK: - Mobile App Usage Models
 
 struct MobileAppSummaryResponse: Decodable {
@@ -221,6 +231,13 @@ private enum TimeDashboardAPI {
         ])
     }
 
+    static func dailyReviews(from: String, to: String) async throws -> [DailyReviewResponse] {
+        try await get([DailyReviewResponse].self, path: "daily-reviews", params: [
+            "from": from,
+            "to": to
+        ])
+    }
+
     private static func get<T: Decodable>(_ type: T.Type, path: String, params: [String: String]) async throws -> T {
         var components = URLComponents(url: base.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         components.queryItems = params.sorted(by: { $0.key < $1.key }).map { URLQueryItem(name: $0.key, value: $0.value) }
@@ -251,6 +268,11 @@ final class TimeDashboardViewModel: ObservableObject {
     @Published var isLoadingComposition = false
     @Published var isLoadingTrend = false
     @Published var errorMessage = ""
+
+    @Published var showReviewSheet = false
+    @Published var dailyReviews: [DailyReviewResponse] = []
+    @Published var isLoadingReviews = false
+    @Published var reviewErrorMessage = ""
 
     var taskID: String { "\(granularity.rawValue)-\(anchorDate.dashboardDateString)" }
 
@@ -318,6 +340,8 @@ final class TimeDashboardViewModel: ObservableObject {
         compositionMap = [:]
         trendMap = [:]
         mobileAppSummary = nil
+        dailyReviews = []
+        reviewErrorMessage = ""
         isLoadingOverview = true
         errorMessage = ""
         defer { isLoadingOverview = false }
@@ -329,6 +353,15 @@ final class TimeDashboardViewModel: ObservableObject {
             errorMessage = error.localizedDescription
         }
         mobileAppSummary = try? await mobileResult
+        // 每日复盘仅在“日”维度提供；预取以决定卡片是否可点击。
+        if granularity == .day {
+            await loadDailyReviews()
+        }
+    }
+
+    /// 存在复盘记录时，顶部“今日方向”卡片才可点击查看。
+    var hasDailyReview: Bool {
+        granularity == .day && !dailyReviews.isEmpty
     }
 
     func loadComposition(for card: DashboardCard) async {
@@ -352,6 +385,24 @@ final class TimeDashboardViewModel: ObservableObject {
             trendMap[card.loadKind] = result
         } catch {
             // Trend is supplementary; silently ignore errors
+        }
+    }
+
+    /// 复盘弹框标题（仅“日”维度提供每日复盘）。
+    var reviewSheetTitle: String { "今日复盘" }
+
+    func loadDailyReviews() async {
+        // 每日复盘按日期查询，from/to 需为 yyyy-MM-dd（服务端 range 是带时区的 ISO datetime，不能直接用）。
+        let day = anchorDate.dashboardDateString
+        isLoadingReviews = true
+        reviewErrorMessage = ""
+        defer { isLoadingReviews = false }
+        do {
+            let result = try await TimeDashboardAPI.dailyReviews(from: day, to: day)
+            dailyReviews = result
+        } catch {
+            dailyReviews = []
+            reviewErrorMessage = error.localizedDescription
         }
     }
 
@@ -390,9 +441,15 @@ struct TimeDashboardView: View {
                     .padding(.bottom, 18)
 
                 if let overview = viewModel.overview {
-                    VerdictCardView(overview: overview)
+                    VerdictCardView(overview: overview, showReviewHint: viewModel.hasDailyReview)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            guard viewModel.hasDailyReview else { return }
+                            Haptics.tap()
+                            viewModel.showReviewSheet = true
+                        }
 
                     HStack {
                         Text("四类负载")
@@ -475,6 +532,16 @@ struct TimeDashboardView: View {
                 _ = await (comp, trnd)
             }
         }
+        .sheet(isPresented: $viewModel.showReviewSheet) {
+            DailyReviewSheetView(
+                title: viewModel.reviewSheetTitle,
+                reviews: viewModel.dailyReviews,
+                isLoading: viewModel.isLoadingReviews,
+                errorMessage: viewModel.reviewErrorMessage
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private var topBar: some View {
@@ -551,6 +618,7 @@ struct TimeDashboardView: View {
 
 private struct VerdictCardView: View {
     let overview: DashboardOverviewResponse
+    var showReviewHint: Bool = false
 
     private var eyebrow: String {
         switch overview.granularity {
@@ -583,7 +651,14 @@ private struct VerdictCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 14)
 
-                trendBadge
+                HStack(spacing: 8) {
+                    trendBadge
+                    if showReviewHint {
+                        Text("查看复盘 ›")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color(hex: "A6A29C"))
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.trailing, 110)
@@ -861,6 +936,184 @@ struct CompositionSheetView: View {
             + Text(comp.summary.deltaLabel).fontWeight(.bold).foregroundStyle(Color(hex: "1C1B1A"))
         )
         .font(.system(size: 14))
+    }
+}
+
+// MARK: - Daily Review Sheet
+
+struct DailyReviewSheetView: View {
+    let title: String
+    let reviews: [DailyReviewResponse]
+    let isLoading: Bool
+    let errorMessage: String
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Color(hex: "E8743B"))
+                    Text(title)
+                        .font(.system(size: 20, weight: .heavy))
+                        .foregroundStyle(Color(hex: "1C1B1A"))
+                    Spacer()
+                }
+                .padding(.bottom, 18)
+
+                if isLoading {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                    .padding(.top, 40)
+                } else if !reviews.isEmpty {
+                    ForEach(reviews) { review in
+                        DailyReviewRowView(review: review, showDate: reviews.count > 1)
+                    }
+                } else {
+                    emptyState
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 48)
+        }
+        .background(Color.white)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: errorMessage.isEmpty ? "text.badge.checkmark" : "exclamationmark.triangle")
+                .font(.system(size: 30))
+                .foregroundStyle(Color(hex: "C6C2BB"))
+            Text(errorMessage.isEmpty ? "暂无复盘记录" : errorMessage)
+                .font(.system(size: 14))
+                .foregroundStyle(Color(hex: "A6A29C"))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 48)
+        .padding(.horizontal, 24)
+    }
+}
+
+private struct DailyReviewRowView: View {
+    let review: DailyReviewResponse
+    let showDate: Bool
+
+    private var dateLabel: String {
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM-dd"
+        guard let date = parser.date(from: review.reviewDate) else { return review.reviewDate }
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "M月d日 · EEEE"
+        return fmt.string(from: date)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if showDate {
+                Text(dateLabel)
+                    .font(.system(size: 12, weight: .bold))
+                    .tracking(0.5)
+                    .foregroundStyle(Color(hex: "A6A29C"))
+                    .padding(.bottom, 8)
+            }
+
+            MarkdownContentView(markdown: review.reviewText)
+
+            if let model = review.modelName, !model.isEmpty {
+                Text(model)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color(hex: "C6C2BB"))
+                    .padding(.top, 10)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(hex: "F7F5F0"))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.bottom, 12)
+    }
+}
+
+// MARK: - Lightweight Markdown Renderer
+
+/// 复盘正文以 Markdown 存储（# 标题、## 小节、- 列表），此处按块渲染，
+/// 而不是直接 Text 显示原始 # 符号。行内 **加粗**/*斜体* 交给系统解析。
+private struct MarkdownContentView: View {
+    let markdown: String
+
+    private enum Block {
+        case heading(level: Int, text: String)
+        case bullet(text: String)
+        case paragraph(text: String)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                switch block {
+                case let .heading(level, text):
+                    Text(inline(text))
+                        .font(.system(size: level == 1 ? 18 : (level == 2 ? 16 : 14), weight: .heavy))
+                        .foregroundStyle(Color(hex: "1C1B1A"))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, level <= 2 ? 6 : 0)
+                case let .bullet(text):
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("•")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color(hex: "A6A29C"))
+                        Text(inline(text))
+                            .font(.system(size: 15))
+                            .lineSpacing(4)
+                            .foregroundStyle(Color(hex: "3A3936"))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                case let .paragraph(text):
+                    Text(inline(text))
+                        .font(.system(size: 15))
+                        .lineSpacing(5)
+                        .foregroundStyle(Color(hex: "3A3936"))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var blocks: [Block] {
+        var result: [Block] = []
+        let lines = markdown
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: "\n")
+        for rawLine in lines {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { continue }
+            if line.hasPrefix("### ") {
+                result.append(.heading(level: 3, text: String(line.dropFirst(4))))
+            } else if line.hasPrefix("## ") {
+                result.append(.heading(level: 2, text: String(line.dropFirst(3))))
+            } else if line.hasPrefix("# ") {
+                result.append(.heading(level: 1, text: String(line.dropFirst(2))))
+            } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
+                result.append(.bullet(text: String(line.dropFirst(2))))
+            } else {
+                result.append(.paragraph(text: line))
+            }
+        }
+        return result
+    }
+
+    private func inline(_ raw: String) -> AttributedString {
+        (try? AttributedString(
+            markdown: raw,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(raw)
     }
 }
 

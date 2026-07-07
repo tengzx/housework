@@ -139,7 +139,13 @@ enum AppSessionAPI {
             source: "iphone-automation",
             note: note.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         )
-        try await post(url: startURL, body: body)
+        let response = try await post(url: startURL, body: body)
+        // If the backend detected that this phone use interrupted a running focus
+        // task, it returns a reminder for us to surface as a local notification.
+        if let reminder = try? JSONDecoder().decode(StartAppSessionResponse.self, from: response.data).focusReminder,
+           reminder.isActionable {
+            await FocusReminderNotifier.present(reminder)
+        }
     }
 
     static func end(note: String? = nil, endReason: String? = nil) async throws {
@@ -154,12 +160,13 @@ enum AppSessionAPI {
             note: note.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 },
             source: "iphone-automation"
         )
-        try await post(url: endURL, body: body)
+        _ = try await post(url: endURL, body: body)
     }
 
-    private static func post<T: Encodable>(url: URL, body: T) async throws {
+    @discardableResult
+    private static func post<T: Encodable>(url: URL, body: T) async throws -> HTTPClientResponse {
         do {
-            _ = try await HTTPClient.shared.data(url: url, method: .post, body: body)
+            return try await HTTPClient.shared.data(url: url, method: .post, body: body)
         } catch let error as HTTPClientError {
             if case let .httpFailure(statusCode, data) = error {
                 let message = (try? JSONDecoder().decode(AppSessionErrorResponse.self, from: data))?.error ?? "请求失败"
@@ -168,6 +175,10 @@ enum AppSessionAPI {
             throw error
         }
     }
+}
+
+private struct StartAppSessionResponse: Decodable {
+    var focusReminder: FocusReminderPayload?
 }
 
 private struct StartAppSessionRequest: Encodable {

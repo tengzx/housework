@@ -35,7 +35,7 @@ final class FitnessTemplateListViewModel: ObservableObject {
         var map: [Date: Double] = [:]
         for session in sessionsInRange {
             let day = calendar.startOfDay(for: session.startedAt)
-            map[day, default: 0] += session.totalVolumeKg
+            map[day, default: 0] += session.totalVolumeKg ?? 0
         }
         return map
     }
@@ -92,15 +92,22 @@ final class FitnessTemplateListViewModel: ObservableObject {
                 pageSize: range.sessionPageSize
             )
 
-            do {
-                let volume = try await volumeTask
-                let sessions = try await sessionsTask
-                strengthVolume = volume
-                sessionsInRange = sessions.items
-            } catch {
-                statsErrorMessage = "统计分析加载失败"
-                sessionsErrorMessage = "训练记录加载失败"
-            }
+            // Fetch both concurrently but keep their failures independent, then
+            // commit all state in one batch below so the card height changes once.
+            // (Previously a sessions failure also discarded a successfully fetched
+            // volume result, making the muscle chart show a bogus error too.)
+            var fetchedVolume: FitnessStrengthVolumeResponse?
+            var volumeFailed = false
+            do { fetchedVolume = try await volumeTask } catch { volumeFailed = true }
+
+            var fetchedSessions: [FitnessSessionSummary]?
+            var sessionsFailed = false
+            do { fetchedSessions = try await sessionsTask.items } catch { sessionsFailed = true }
+
+            if let fetchedVolume { strengthVolume = fetchedVolume }
+            statsErrorMessage = volumeFailed ? "统计分析加载失败" : nil
+            if let fetchedSessions { sessionsInRange = fetchedSessions }
+            sessionsErrorMessage = sessionsFailed ? "训练记录加载失败" : nil
 
             isStatsLoading = false
             isSessionsLoading = false

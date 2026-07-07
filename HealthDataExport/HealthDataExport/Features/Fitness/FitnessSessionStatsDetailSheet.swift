@@ -136,7 +136,7 @@ struct FitnessSessionStatsDetailSheet: View {
     private var metricGrid: some View {
         let summary = vm.summary?.session
         let duration = summary?.durationSeconds ?? session.durationSeconds
-        let volume = summary?.totalVolumeKg ?? session.totalVolumeKg
+        let volume = summary?.totalVolumeKg ?? session.totalVolumeKg ?? 0
         let calories = vm.summary?.activeEnergyKcal ?? vm.summary?.totalEnergyKcal ?? summary?.activeEnergyKcal ?? summary?.totalEnergyKcal
         let avgHeartRate = vm.heartRate?.summary.avgBpm
 

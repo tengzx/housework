@@ -308,8 +308,20 @@ final class PhoneWatchSync: NSObject {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         guard session.activationState == .activated else { return }
-        let ctx = mergedContext()
-        guard ctx["teStamp"] != nil else { return }
+        // Build a MINIMAL, dedicated payload — only the time-entry keys. The full
+        // `mergedContext()` also carries `wkSnapshotDetail` (a whole session's JSON,
+        // several KB), which once broadcast lingers on this singleton for the app's
+        // lifetime. A complication transfer has a strict size limit, so bundling
+        // that heavy data risks the transfer silently failing — meaning a *stop*
+        // never reaches the watch and the face keeps counting until the app is
+        // opened. Keep this transfer tiny so it reliably lands.
+        lock.lock()
+        let stamp = teStamp
+        let data = teData
+        lock.unlock()
+        guard stamp > 0 else { return }
+        var payload: [String: Any] = ["teStamp": stamp]
+        if let data { payload["teData"] = data }
         // A complication transfer has a dedicated daily budget and takes priority
         // in waking the watch to refresh the face. This matters overnight / under
         // Sleep Focus: watchOS won't relaunch a suspended watch app for a plain
@@ -317,9 +329,9 @@ final class PhoneWatchSync: NSObject {
         // rewritten and the face freezes until the watch app is opened. Prefer the
         // complication transfer while budget remains, and fall back otherwise.
         if session.isComplicationEnabled, session.remainingComplicationUserInfoTransfers > 0 {
-            session.transferCurrentComplicationUserInfo(ctx)
+            session.transferCurrentComplicationUserInfo(payload)
         } else {
-            session.transferUserInfo(ctx)
+            session.transferUserInfo(payload)
         }
     }
 

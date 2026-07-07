@@ -321,107 +321,15 @@ private struct WorkoutAccessoryBar: View {
 private struct RecordWorkspaceView: View {
     @StateObject private var calendarStore = TimeCalendarStore()
     @StateObject private var dashboardVM = TimeDashboardViewModel()
-    @State private var selection = 0
-    private let switcherHeight: CGFloat = 40
-    private let switcherTopPadding: CGFloat = 0
-    private let switcherBottomPadding: CGFloat = 8
-    private var switcherContainerHeight: CGFloat {
-        switcherHeight + switcherTopPadding + switcherBottomPadding
-    }
 
     var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .top) {
-                ZStack {
-                    switch selection {
-                    case 1:
-                        CalendarTrackerView2(store: calendarStore)
-                    case 2:
-                        TimeDashboardView(viewModel: dashboardVM)
-                    default:
-                        RecordView(calendarStore: calendarStore)
-                    }
-                }
-                .frame(
-                    width: proxy.size.width,
-                    height: max(proxy.size.height - switcherContainerHeight, 0)
-                )
-                .offset(y: switcherContainerHeight)
-                .transaction { transaction in
-                    transaction.disablesAnimations = true
-                }
-
-                RecordWorkspaceSwitcher(selection: $selection)
-                    .padding(.horizontal, 18)
-                    .padding(.top, switcherTopPadding)
-                    .padding(.bottom, switcherBottomPadding)
-                    .frame(width: proxy.size.width)
-                    .frame(height: switcherContainerHeight, alignment: .top)
-                    .zIndex(1)
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-        }
-        .ignoresSafeArea(.keyboard)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color(hex: "F5F6F8").ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
+        RecordView(calendarStore: calendarStore, dashboardVM: dashboardVM)
+            .ignoresSafeArea(.keyboard)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Color(hex: "F5F6F8").ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
     }
 }
-
-private struct RecordWorkspaceSwitcher: View {
-    @Binding var selection: Int
-    private let height: CGFloat = 40
-    private let buttonHeight: CGFloat = 32
-
-    var body: some View {
-        HStack(spacing: 4) {
-            switchButton(title: "记录", symbol: "timer", tag: 0)
-            switchButton(title: "日历", symbol: "calendar", tag: 1)
-            switchButton(title: "报表", symbol: "chart.bar.fill", tag: 2)
-        }
-        .padding(4)
-        .frame(height: height)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
-        )
-        .frame(width: 300, height: height)
-    }
-
-    private func switchButton(title: String, symbol: String, tag: Int) -> some View {
-        let isOn = selection == tag
-        return Button {
-            endEditingIfAvailable()
-            selection = tag
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 15, height: 15)
-
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .foregroundStyle(isOn ? .white : Color(hex: "8A8F9C"))
-            .frame(maxWidth: .infinity)
-            .frame(height: buttonHeight)
-            .background(isOn ? Color(hex: "FF7847") : .clear, in: Capsule())
-            .animation(.spring(response: 0.28, dampingFraction: 0.82), value: isOn)
-        }
-        .buttonStyle(HapticButtonStyle())
-    }
-}
-
-#if canImport(UIKit)
-private func endEditingIfAvailable() {
-    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-}
-#else
-private func endEditingIfAvailable() {}
-#endif
 
 extension View {
     /// Lets the tab bar minimize on scroll even when a screen's content is shorter

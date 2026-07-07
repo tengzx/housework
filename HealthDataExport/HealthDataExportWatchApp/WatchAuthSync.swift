@@ -320,9 +320,14 @@ final class WatchAuthSync: NSObject, ObservableObject {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
         guard session.activationState == .activated else { return }
-        let msg = workoutMessage()
-        guard msg["teStamp"] != nil else { return }
-        session.transferUserInfo(msg)
+        // Minimal, dedicated payload — only the time-entry keys, so the transfer
+        // stays small and reliable rather than carrying the whole `workoutMessage()`
+        // (which may include a several-KB session snapshot). The phone's receiver
+        // reads only `teStamp`/`teData`, so this is fully compatible.
+        guard teStamp > 0 else { return }
+        var payload: [String: Any] = ["teStamp": teStamp]
+        if let data = teData { payload["teData"] = data }
+        session.transferUserInfo(payload)
     }
 }
 

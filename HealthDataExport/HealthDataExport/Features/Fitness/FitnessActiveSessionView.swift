@@ -430,9 +430,26 @@ struct FitnessActiveSessionView: View {
                 }
                 .buttonStyle(.borderless)
 
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color(hex: "A8A8AD"))
+                // Live heart rate from the watch — same source the collapsed
+                // floating bar uses. Falls back to a dim placeholder heart when
+                // no reading has arrived yet, so the layout stays stable.
+                if let bpm = workout.remoteHeartRate {
+                    HStack(spacing: 4) {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.red)
+                        Text("\(bpm)")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(hex: "1C1C1E"))
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                    }
+                    .transition(.opacity)
+                } else {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Color(hex: "A8A8AD"))
+                }
 
                 Button {
                     Haptics.tap()

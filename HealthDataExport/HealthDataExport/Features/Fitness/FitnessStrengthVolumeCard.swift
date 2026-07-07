@@ -344,6 +344,18 @@ private struct WorkoutCheckinGrid: View {
 private struct FitnessSessionHistoryRow: View {
     let session: FitnessSessionSummary
 
+    private var isExternal: Bool { session.isExternal == true }
+
+    /// 副标题：日期 · 训练量（仅内部记录有）· 时长。
+    private var subtitle: String {
+        var parts = [formatSessionDate(session.startedAt)]
+        if let volume = session.totalVolumeKg {
+            parts.append(formatVolume(volume))
+        }
+        parts.append(formatDuration(session.durationSeconds))
+        return parts.joined(separator: " · ")
+    }
+
     var body: some View {
         HStack(spacing: 14) {
             ZStack(alignment: .bottomLeading) {
@@ -351,22 +363,25 @@ private struct FitnessSessionHistoryRow: View {
                     .fill(Color(hex: "FFF2EA"))
                     .frame(width: 52, height: 52)
                     .overlay(
-                        Image(systemName: "dumbbell")
+                        Image(systemName: isExternal ? "figure.run" : "dumbbell")
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(Color(hex: "FF7A3D"))
                     )
 
-                Text("\(session.totalSets)")
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .frame(height: 23)
-                    .background(Color(hex: "FF7A3D"), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white, lineWidth: 2)
-                    )
-                    .offset(x: -5, y: 5)
+                // 组数徽标只对应用内力量训练有意义；外部（Apple 健康）记录无组数。
+                if let totalSets = session.totalSets {
+                    Text("\(totalSets)")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .frame(height: 23)
+                        .background(Color(hex: "FF7A3D"), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.white, lineWidth: 2)
+                        )
+                        .offset(x: -5, y: 5)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -374,7 +389,7 @@ private struct FitnessSessionHistoryRow: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(Color(hex: "26252F"))
                     .lineLimit(1)
-                Text("\(formatSessionDate(session.startedAt)) · \(formatVolume(session.totalVolumeKg)) · \(formatDuration(session.durationSeconds))")
+                Text(subtitle)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(hex: "A3A2AC"))
                     .lineLimit(1)
