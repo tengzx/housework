@@ -1,15 +1,31 @@
+import Foundation
 import SwiftUI
 
 @MainActor
 struct WatchTimeTrackerView: View {
+    enum DisplayMode: Equatable {
+        case automatic
+        case shortcutListOnly
+    }
+
+    let displayMode: DisplayMode
+
     @ObservedObject private var store = ShortcutRecordStore.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var todayIntentions: [WatchDailyIntention] = []
+    @State private var isLoadingIntentions = false
+    @State private var intentionStatusMessage = ""
     @State private var shortcutTasks: [ShortcutTask] = []
     @State private var isLoadingShortcuts = false
     @State private var statusMessage = ""
 
+    init(displayMode: DisplayMode = .automatic) {
+        self.displayMode = displayMode
+    }
+
     var body: some View {
         Group {
-            if store.activeSession != nil {
+            if displayMode == .automatic, store.activeSession != nil {
                 activeSessionView
             } else {
                 shortcutList
@@ -20,7 +36,9 @@ struct WatchTimeTrackerView: View {
         .background(WatchDesign.stage.ignoresSafeArea())
         .task {
             await refreshRunningSession()
-            await refreshShortcuts()
+            async let intentions: Void = refreshIntentions()
+            async let shortcuts: Void = refreshShortcuts()
+            _ = await (intentions, shortcuts)
         }
     }
 
@@ -81,34 +99,27 @@ struct WatchTimeTrackerView: View {
     private var shortcutList: some View {
         ScrollView {
             VStack(spacing: 8) {
-                Text("选择一个活动，快速开始记录")
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(WatchDesign.muted)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 2)
+                sectionTitle("今日意图")
 
-                if shortcutTasks.isEmpty && !isLoadingShortcuts {
-                    VStack(spacing: 8) {
-                        Image(systemName: "bolt.slash")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(WatchDesign.muted)
-                        Text("暂无快捷指令")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white)
-                        Text(statusMessage.isEmpty ? "下拉刷新" : statusMessage)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(WatchDesign.muted)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                            .minimumScaleFactor(0.75)
+                if isLoadingIntentions && todayIntentions.isEmpty {
+                    sectionPlaceholder("正在读取…")
+                } else if todayIntentions.isEmpty {
+                    sectionPlaceholder(intentionStatusMessage.isEmpty ? "今天还没有意图" : intentionStatusMessage)
+                } else {
+                    ForEach(todayIntentions) { intention in
+                        shortcutRow(task(for: intention), tint: WatchDesign.accent)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
+                }
+
+                sectionTitle("快捷开始")
+
+                if isLoadingShortcuts && shortcutTasks.isEmpty {
+                    sectionPlaceholder("正在读取…")
+                } else if shortcutTasks.isEmpty {
+                    sectionPlaceholder("暂无快捷指令")
                 } else {
                     ForEach(shortcutTasks) { task in
-                        shortcutRow(task)
+                        shortcutRow(task, tint: task.color)
                     }
                 }
 
@@ -126,11 +137,44 @@ struct WatchTimeTrackerView: View {
             .padding(.bottom, 8)
         }
         .scrollIndicators(.hidden)
-        .refreshable { await refreshShortcuts() }
+        .refreshable {
+            async let intentions: Void = refreshIntentions()
+            async let shortcuts: Void = refreshShortcuts()
+            _ = await (intentions, shortcuts)
+        }
         .navigationTitle("快捷开始")
     }
 
-    private func shortcutRow(_ task: ShortcutTask) -> some View {
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(WatchDesign.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+            .padding(.top, 2)
+    }
+
+    private func sectionPlaceholder(_ message: String) -> some View {
+        Text(message)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(WatchDesign.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .background(WatchDesign.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func task(for intention: WatchDailyIntention) -> ShortcutTask {
+        store.tasks.first(where: { $0.name == intention.name })
+            ?? ShortcutTask(
+                name: intention.name,
+                symbolName: "target",
+                colorHex: WatchDesign.accentHex,
+                categoryName: "今日意图"
+            )
+    }
+
+    private func shortcutRow(_ task: ShortcutTask, tint: Color) -> some View {
         Button {
             startTask(task)
         } label: {
@@ -139,7 +183,7 @@ struct WatchTimeTrackerView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
-                    .background(task.color.gradient, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .background(tint.gradient, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(task.name)
@@ -159,9 +203,9 @@ struct WatchTimeTrackerView: View {
 
                 Image(systemName: "play.fill")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(task.color)
+                    .foregroundStyle(tint)
                     .frame(width: 32, height: 32)
-                    .background(task.color.opacity(0.22), in: Circle())
+                    .background(tint.opacity(0.22), in: Circle())
             }
             .padding(.horizontal, 10)
             .frame(height: 62)
@@ -206,6 +250,9 @@ struct WatchTimeTrackerView: View {
         #if os(watchOS)
         WatchAuthSync.shared.broadcastTimeEntry(store.sharedActiveActivity())
         #endif
+        if displayMode == .shortcutListOnly {
+            dismiss()
+        }
     }
 
     private func stopActiveSession() {
@@ -249,6 +296,25 @@ struct WatchTimeTrackerView: View {
                 shortcutTasks = store.tasks
             }
             statusMessage = "快捷指令读取失败"
+        }
+    }
+
+    private func refreshIntentions() async {
+        guard !isLoadingIntentions else { return }
+        isLoadingIntentions = true
+        defer { isLoadingIntentions = false }
+
+        do {
+            todayIntentions = try await WatchDailyIntentionAPI.listToday()
+                .filter { !$0.completed }
+                .sorted { $0.sortOrder < $1.sortOrder }
+            intentionStatusMessage = ""
+        } catch {
+            if case let HTTPClientError.httpFailure(statusCode, _) = error {
+                intentionStatusMessage = "读取失败（HTTP \(statusCode)）"
+            } else {
+                intentionStatusMessage = "读取失败，请下拉重试"
+            }
         }
     }
 
@@ -337,6 +403,33 @@ struct WatchTimeTrackerView: View {
     }
 }
 
+private struct WatchDailyIntention: Decodable, Identifiable {
+    let id: Int
+    let name: String
+    let sortOrder: Int
+    let completed: Bool
+}
+
+private enum WatchDailyIntentionAPI {
+    private struct Envelope: Decodable {
+        let intentions: [WatchDailyIntention]
+    }
+
+    static func listToday() async throws -> [WatchDailyIntention] {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        let baseURL = AppEnvironment.apiURL("mobile/daily-intentions")
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "date", value: formatter.string(from: .now))]
+        let response = try await HTTPClient.shared.data(url: components?.url ?? baseURL, method: .get)
+        return try JSONDecoder().decode(Envelope.self, from: response.data).intentions
+    }
+}
+
 private struct WatchPressButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -373,7 +466,7 @@ private enum WatchDesign {
     static let line = Color(hex: "2C2C2E")
     static let muted = Color(hex: "8A8F9C")
     static let brand = Color(hex: "5A5E68")
-    static let accentHex = "FF7847"
+    static let accentHex = "0A84FF"
     static let accent = Color(hex: accentHex)
     static let green = Color(hex: "22C55E")
     static let stop = Color(hex: "FF453A")

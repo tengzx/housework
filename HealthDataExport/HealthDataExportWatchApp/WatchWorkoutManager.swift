@@ -87,8 +87,15 @@ final class WatchWorkoutManager: NSObject, ObservableObject {
     }
 
     func start(sessionId: Int) {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        // Takeover: a stale prior session (never cleanly ended — e.g. a
+        // cross-device end that hadn't reached the watch) must be closed first,
+        // else the `session == nil` guard would silently no-op and leave both the
+        // HK session and the recorder running under the old workout. end() nils
+        // session/builder synchronously, so the guard below then passes.
+        if session != nil, self.sessionId != sessionId { end() }
+        guard session == nil else { return }
         self.sessionId = sessionId
-        guard HKHealthStore.isHealthDataAvailable(), session == nil else { return }
         let config = HKWorkoutConfiguration()
         config.activityType = .traditionalStrengthTraining
         config.locationType = .indoor

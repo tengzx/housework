@@ -14,7 +14,14 @@ struct RecordView: View {
     @State private var showIdealDay = false
     @State private var showDashboard = false
     @ObservedObject private var idealDayStore = IdealDayStore.shared
+    @ObservedObject private var intentionStore = DailyIntentionStore.shared
+    @State private var showAllIntentions = false
+    @State private var isAddingIntention = false
+    @State private var newIntentionName = ""
     @FocusState private var isInputFocused: Bool
+
+    /// How many intentions the collapsed list shows.
+    private static let collapsedIntentionCount = 2
 
     private let columns = [
         GridItem(.flexible(), spacing: 10),
@@ -34,6 +41,9 @@ struct RecordView: View {
                         .padding(.bottom, 18)
 
                     inputBar
+                        .padding(.bottom, 18)
+
+                    intentionsSection
                         .padding(.bottom, 18)
 
                     sectionHeader
@@ -86,12 +96,26 @@ struct RecordView: View {
         .sheet(isPresented: $showDashboard) {
             TimeDashboardView(viewModel: dashboardVM)
         }
+        .alert("新增今日意图", isPresented: $isAddingIntention) {
+            TextField("今天想做什么？", text: $newIntentionName)
+            Button("添加") {
+                intentionStore.add(name: newIntentionName)
+                newIntentionName = ""
+            }
+            Button("取消", role: .cancel) {
+                newIntentionName = ""
+            }
+        } message: {
+            Text("只列今天的，做完自动划掉")
+        }
         .task {
             await refreshRunningSession()
             await store.refreshTasks()
+            await intentionStore.refresh()
             await idealDayStore.load()
             await IdealDayReminderScheduler.reschedule(profile: idealDayStore.profile)
         }
+        .tint(Design.accent)
     }
 
     private var header: some View {
@@ -298,6 +322,156 @@ struct RecordView: View {
         .shadow(color: .black.opacity(0.04), radius: 24, y: 8)
     }
 
+    // MARK: - 今日意图
+
+    private var intentionsSection: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("今日意图")
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(2)
+                    .foregroundStyle(Design.muted)
+
+                Spacer()
+
+                Button {
+                    isInputFocused = false
+                    newIntentionName = ""
+                    isAddingIntention = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("添加")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundStyle(Design.accent)
+                    .padding(4)
+                }
+                .buttonStyle(PressButtonStyle())
+            }
+
+            let all = intentionStore.sortedItems
+            if all.isEmpty {
+                Text("列出今天最想完成的几件事，点开始就计时")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(Design.muted.opacity(0.85))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(Design.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Design.line, lineWidth: 1)
+                    )
+            } else {
+                let visible = showAllIntentions ? all : Array(all.prefix(Self.collapsedIntentionCount))
+                VStack(spacing: 8) {
+                    ForEach(visible) { item in
+                        intentionRow(item)
+                    }
+                }
+
+                if all.count > Self.collapsedIntentionCount {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showAllIntentions.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(showAllIntentions ? "收起" : "查看全部 (\(all.count))")
+                                .font(.system(size: 13, weight: .semibold))
+                            Image(systemName: showAllIntentions ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundStyle(Design.muted)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PressButtonStyle())
+                }
+            }
+        }
+    }
+
+    private func intentionRow(_ item: DailyIntentionItem) -> some View {
+        let isRunning = intentionStore.activeIntentionId == item.id && store.activeSession != nil
+        return HStack(spacing: 12) {
+            // Tapping the circle toggles completion without touching the timer.
+            Button {
+                isInputFocused = false
+                intentionStore.setCompleted(item, !item.isCompleted)
+            } label: {
+                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(item.isCompleted ? Design.green : Design.muted.opacity(0.55))
+            }
+            .buttonStyle(PressButtonStyle())
+
+            Text(item.name)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(item.isCompleted ? Design.muted : (isRunning ? Design.accent : Design.text))
+                .strikethrough(item.isCompleted, color: Design.muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Spacer(minLength: 0)
+
+            if item.isCompleted {
+                Text("已完成")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Design.muted.opacity(0.82))
+            } else if isRunning {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Design.green)
+                        .frame(width: 8, height: 8)
+                    Text("进行中")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Design.accent)
+                }
+            } else {
+                Button {
+                    isInputFocused = false
+                    startIntention(item)
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Design.accent, in: Circle())
+                }
+                .buttonStyle(PressButtonStyle())
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 58)
+        .background(isRunning ? Design.accentSoft : Design.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isRunning ? Design.accent : Design.line, lineWidth: 1)
+        )
+        .opacity(item.isCompleted ? 0.65 : 1)
+        .contextMenu {
+            Button(role: .destructive) {
+                intentionStore.remove(item)
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+        }
+        .shadow(color: .black.opacity(0.04), radius: 3, y: 1)
+    }
+
+    /// 开始 an intention: run it through the normal shortcut/time-entry flow
+    /// (reusing a same-named shortcut's category when one exists) and remember
+    /// the link so stopping the timer completes the intention.
+    private func startIntention(_ item: DailyIntentionItem) {
+        let task = store.tasks.first { $0.name == item.name }
+            ?? ShortcutTask(name: item.name, symbolName: "target", colorHex: Design.accentHex)
+        startTask(task)
+        intentionStore.linkActive(item)
+    }
+
     private var sectionHeader: some View {
         HStack {
             Text("快捷开始")
@@ -451,6 +625,9 @@ struct RecordView: View {
 
     private func startTask(_ task: ShortcutTask) {
         statusMessage = ""
+        // Starting anything detaches the previous intention link; startIntention
+        // re-links right after when the start came from an intention row.
+        intentionStore.clearActiveLink()
         calendarStore.clearMobileAppEvents()
         store.start(task)
         PhoneWatchSync.shared.broadcastTimeEntry(store.sharedActiveActivity())
@@ -468,6 +645,8 @@ struct RecordView: View {
         statusMessage = ""
         calendarStore.clearMobileAppEvents()
         store.stop(note: "")
+        // Ending the timer completes the intention that started it (if any).
+        intentionStore.completeActiveLink()
         PhoneWatchSync.shared.broadcastTimeEntry(nil)
     }
 
@@ -933,9 +1112,9 @@ private enum Design {
     static let iconSurface = Color(hex: "F7F8FA")
     static let iconLine = Color(hex: "EEF0F3")
     // Prototype primary is blue; the 结束 button is dark navy.
-    static let accentHex = "4C6EF5"
+    static let accentHex = "0A84FF"
     static let accent = Color(hex: accentHex)
-    static let accentSoft = Color(hex: "EEF2FE")
+    static let accentSoft = Color(hex: "EAF4FF")
     // "结束" button: muted blue-gray slate with a white label.
     static let stopFill = Color(hex: "5A6479")
     static let green = Color(hex: "22C55E")

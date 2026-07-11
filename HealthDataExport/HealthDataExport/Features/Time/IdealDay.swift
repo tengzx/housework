@@ -58,9 +58,9 @@ struct IdealDayProfile: Codable, Equatable {
     static let defaultProfile = IdealDayProfile(
         allocations: [
             .init(kind: .proactive, targetMinutes: 360),
-            .init(kind: .obligation, targetMinutes: 360),
-            .init(kind: .recovery, targetMinutes: 600),
-            .init(kind: .distraction, targetMinutes: 120)
+            .init(kind: .obligation, targetMinutes: 240),
+            .init(kind: .recovery, targetMinutes: 540),
+            .init(kind: .distraction, targetMinutes: 60)
         ],
         checkTimes: ["12:00", "18:00"],
         remindersEnabled: true
@@ -128,6 +128,9 @@ final class IdealDayStore: ObservableObject {
     @Published private(set) var todayActualMinutes: [IdealDayKind: Int] = [:]
 
     private let cacheKey = "ideal-day.profile.v1"
+    private let exceededSignatureKey = "ideal-day.last-exceeded-signature.v1"
+    private let forcedReminderPrefix = "ideal-day.forced-reminder."
+    private let forcedReminderCooldown: TimeInterval = 30 * 60
     private init() {
         if let data = UserDefaults.standard.data(forKey: cacheKey),
            let cached = try? JSONDecoder().decode(IdealDayProfile.self, from: data) {
@@ -150,12 +153,34 @@ final class IdealDayStore: ObservableObject {
         await loadTodayComparison()
     }
 
-    func loadTodayComparison() async {
+    func loadTodayComparison(forceReminder: Bool = false) async {
         guard let deviations = try? await IdealDayAPI.comparison() else { return }
         todayActualMinutes = Dictionary(uniqueKeysWithValues: deviations.map { ($0.kind, $0.actualMinutes) })
         guard profile.remindersEnabled else { return }
         let exceeded = deviations.filter { $0.status == "EXCEEDED" }
-        if !exceeded.isEmpty {
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "yyyy-MM-dd"
+        let signature = dayFormatter.string(from: .now) + ":" + exceeded.map(\.kind.rawValue).sorted().joined(separator: ",")
+        let defaults = UserDefaults.standard
+        let previousSignature = defaults.string(forKey: exceededSignatureKey)
+        if forceReminder {
+            let now = Date().timeIntervalSince1970
+            let eligible = exceeded.filter { deviation in
+                let last = defaults.double(forKey: forcedReminderPrefix + deviation.kind.rawValue)
+                return last == 0 || now - last >= forcedReminderCooldown
+            }
+            guard !eligible.isEmpty else { return }
+            for deviation in eligible {
+                defaults.set(now, forKey: forcedReminderPrefix + deviation.kind.rawValue)
+            }
+            defaults.set(signature, forKey: exceededSignatureKey)
+            await IdealDayReminderScheduler.presentExceeded(eligible)
+        } else if !exceeded.isEmpty, signature != previousSignature {
+            let now = Date().timeIntervalSince1970
+            defaults.set(signature, forKey: exceededSignatureKey)
+            for deviation in exceeded {
+                defaults.set(now, forKey: forcedReminderPrefix + deviation.kind.rawValue)
+            }
             await IdealDayReminderScheduler.presentExceeded(exceeded)
         }
     }
@@ -245,7 +270,6 @@ struct IdealDayView: View {
                     allocationRing.frame(width: 230, height: 230).padding(.top, 10)
                     allocationCard
                     flexibleCard
-                    actualTodayCard
                     reminderCard
                     Text("💡 理想一天是你的方向盘。系统会把实际记录与其对比，超出目标及时提醒，并在中午 12 点、晚上 6 点检查不足。")
                         .font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(6)
@@ -253,6 +277,7 @@ struct IdealDayView: View {
                 }
                 .padding(.horizontal, 16).padding(.bottom, 32)
             }
+            .refreshable { await store.loadTodayComparison() }
             .background(Color(hex: "F7F8FC").ignoresSafeArea())
             .navigationTitle("理想一天")
             .navigationBarTitleDisplayMode(.inline)
@@ -280,7 +305,15 @@ struct IdealDayView: View {
             } message: {
                 Text(allocationError)
             }
+            .task {
+                // Always prefer the authenticated user's Life OS record. When
+                // none exists, the backend and local model share the same
+                // sensible starter allocation.
+                await store.load()
+                draft = store.profile
+            }
         }
+        .tint(Color(hex: "0A84FF"))
     }
 
     private var allocationRing: some View {
@@ -311,24 +344,37 @@ struct IdealDayView: View {
                             Text(kind.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer()
-                        Button {
-                            editingKind = kind
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(hoursText(draft.minutes(for: kind)))
-                                Image(systemName: "pencil").font(.caption2)
+                        VStack(alignment: .trailing, spacing: 3) {
+                            Button {
+                                editingKind = kind
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(hoursText(draft.minutes(for: kind)))
+                                    Image(systemName: "pencil").font(.caption2)
+                                }
+                                .font(.system(size: 16, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(kind.color)
                             }
-                            .font(.system(size: 16, weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(kind.color)
+                            .buttonStyle(.plain)
+                            Text("实际 \(hoursAndMinutesText(store.todayActualMinutes[kind] ?? 0))")
+                                .font(.caption2).foregroundStyle(.secondary)
                         }
-                        .buttonStyle(.plain)
                     }
-                    // All four sliders use the same fixed 24-hour scale. Their
-                    // visual positions therefore stay independent when another
-                    // category changes; the setter below enforces the remaining
-                    // flexible-time budget.
-                    Slider(value: binding(for: kind), in: 0...1440, step: 30).tint(kind.color)
+                    PlanActualSlider(
+                        plannedMinutes: binding(for: kind),
+                        actualMinutes: store.todayActualMinutes[kind] ?? 0,
+                        color: kind.color
+                    )
+                    HStack(spacing: 14) {
+                        Label("计划 \(hoursText(draft.minutes(for: kind)))", systemImage: "circle.fill")
+                            .foregroundStyle(kind.color.opacity(0.48))
+                        Label("实际 \(hoursAndMinutesText(store.todayActualMinutes[kind] ?? 0))", systemImage: "circle.bottomhalf.filled")
+                            .foregroundStyle(kind.color)
+                        Spacer()
+                        Text("24h").foregroundStyle(.secondary)
+                    }
+                    .font(.caption2)
                 }
             }
         }
@@ -350,62 +396,6 @@ struct IdealDayView: View {
             Text("超过目标时提醒；目标不足会在 12:00 和 18:00 定期排查。")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
-    }
-
-    private var actualTodayCard: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("今日实际").font(.headline)
-                    Text("根据时间记录与手机使用汇总").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button {
-                    Task { await store.loadTodayComparison() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
-
-            ForEach(IdealDayKind.allCases) { kind in
-                let actual = store.todayActualMinutes[kind] ?? 0
-                let target = draft.minutes(for: kind)
-                VStack(spacing: 9) {
-                    HStack {
-                        Label(kind.title, systemImage: kind.symbol)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(kind.color)
-                        Spacer()
-                        Text(hoursAndMinutesText(actual))
-                            .font(.system(size: 15, weight: .semibold))
-                            .monospacedDigit()
-                        Text(deviationText(actual: actual, target: target))
-                            .font(.caption)
-                            .foregroundStyle(deviationColor(actual: actual, target: target, kind: kind))
-                    }
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color.secondary.opacity(0.12))
-                            Capsule().fill(kind.color)
-                                .frame(width: proxy.size.width * min(1, Double(actual) / 1440))
-                        }
-                    }
-                    .frame(height: 7)
-                    HStack {
-                        Text("0h")
-                        Spacer()
-                        Text("占全天 \(Int((Double(actual) / 1440 * 100).rounded()))%")
-                        Spacer()
-                        Text("24h")
-                    }
-                    .font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(18)
-        .background(.white, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private func binding(for kind: IdealDayKind) -> Binding<Double> {
@@ -453,17 +443,6 @@ struct IdealDayView: View {
         "\(minutes / 60)h \(minutes % 60)m"
     }
 
-    private func deviationText(actual: Int, target: Int) -> String {
-        let delta = actual - target
-        if delta == 0 { return "达标" }
-        return delta > 0 ? "超出 \(hoursAndMinutesText(delta))" : "还差 \(hoursAndMinutesText(-delta))"
-    }
-
-    private func deviationColor(actual: Int, target: Int, kind: IdealDayKind) -> Color {
-        if actual == target { return Color(hex: "3FA78A") }
-        if kind == .distraction { return actual > target ? Color(hex: "C9485B") : .secondary }
-        return actual > target ? .secondary : Color(hex: "C9485B")
-    }
 
     private func applyManualEntry(_ requestedMinutes: Int, for kind: IdealDayKind) {
         guard requestedMinutes <= 1440 else {
@@ -486,6 +465,69 @@ struct IdealDayView: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(250))
             showAllocationError = true
+        }
+    }
+}
+
+/// One shared 24-hour rail: the upper half is the editable plan and the lower
+/// half is today's read-only actual value. Only the plan owns a draggable thumb.
+private struct PlanActualSlider: View {
+    @Binding var plannedMinutes: Double
+    let actualMinutes: Int
+    let color: Color
+    @State private var dragAxis: Axis?
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let planWidth = width * min(1, max(0, plannedMinutes / 1440))
+            let actualWidth = width * min(1, max(0, Double(actualMinutes) / 1440))
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.12)).frame(height: 14)
+                VStack(alignment: .leading, spacing: 0) {
+                    Rectangle().fill(color.opacity(0.45)).frame(width: planWidth, height: 7)
+                    Rectangle().fill(color).frame(width: actualWidth, height: 7)
+                }
+                .clipShape(Capsule())
+                // Keep the two endpoints on separate vertical lanes. The whole
+                // rail remains draggable, so the visible plan handle can stay
+                // compact without reducing its touch target.
+                Circle()
+                    .fill(.white)
+                    .frame(width: 10, height: 10)
+                    .overlay(Circle().stroke(color.opacity(0.55), lineWidth: 2))
+                    .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
+                    .offset(
+                        x: min(max(0, planWidth - 5), max(0, width - 10)),
+                        y: -6
+                    )
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { gesture in
+                        if dragAxis == nil {
+                            dragAxis = abs(gesture.translation.width) > abs(gesture.translation.height) * 1.2
+                                ? .horizontal : .vertical
+                        }
+                        guard dragAxis == .horizontal else { return }
+                        let raw = min(max(0, gesture.location.x / max(width, 1)), 1) * 1440
+                        plannedMinutes = (raw / 30).rounded() * 30
+                    }
+                    .onEnded { _ in dragAxis = nil }
+            )
+        }
+        .frame(height: 30)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("计划与实际时间")
+        .accessibilityValue("计划 \(Int(plannedMinutes)) 分钟，实际 \(actualMinutes) 分钟")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: plannedMinutes = min(1440, plannedMinutes + 30)
+            case .decrement: plannedMinutes = max(0, plannedMinutes - 30)
+            @unknown default: break
+            }
         }
     }
 }

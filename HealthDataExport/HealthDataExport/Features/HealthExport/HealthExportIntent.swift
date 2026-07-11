@@ -146,6 +146,10 @@ enum AppSessionAPI {
            reminder.isActionable {
             await FocusReminderNotifier.present(reminder)
         }
+        // Phone distraction should be actionable when the user opens the app,
+        // not after they eventually leave it. At this point the new session is
+        // persisted, and the comparison also contains all usage completed so far.
+        await IdealDayStore.shared.loadTodayComparison(forceReminder: true)
     }
 
     static func end(note: String? = nil, endReason: String? = nil) async throws {

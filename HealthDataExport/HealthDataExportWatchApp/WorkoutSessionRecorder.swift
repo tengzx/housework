@@ -37,8 +37,8 @@ final class WorkoutSessionRecorder: ObservableObject {
         return q
     }()
 
-    private static let sampleRateHz: Double = 100
-    private static let batchSize = 100          // ~1s of samples per NDJSON line
+    private static let sampleRateHz: Double = 50   // reps are ~0.5Hz; 50Hz keeps waveform shape with ~half the IMU/CPU draw of 100Hz. Must stay == RepMotionMath.fs.
+    private static let batchSize = 50           // ~1s of samples per NDJSON line
     private static let keepSessions = 20        // storage cap: most recent N workouts
 
     /// A timeline entry. Types: setStart / setComplete / suggest / confirm /
@@ -118,7 +118,12 @@ final class WorkoutSessionRecorder: ObservableObject {
         }
         let start = Date().timeIntervalSince1970
         queue.addOperation { [weak self] in
-            guard let self, !self.running else { return }
+            guard let self else { return }
+            // Idempotent takeover: if a previous session is still running (the
+            // prior workout never got a clean end — e.g. a cross-device end that
+            // hadn't reached the watch), finalize it first so we don't keep the
+            // old files open or log the new workout under the old session id.
+            if self.running { self.finalizeCurrentLocked(save: true) }
             self.running = true
             self.startEpoch = start
             self.firstTimestamp = nil
@@ -150,24 +155,30 @@ final class WorkoutSessionRecorder: ObservableObject {
     func endSession(save: Bool = true) {
         manager.stopDeviceMotionUpdates()
         queue.addOperation { [weak self] in
-            guard let self, self.running else { return }
-            self.running = false
-            if self.handle != nil || self.meta != nil {
-                self.flushBatchLocked()
-                self.meta?.segments = self.buildSegmentsLocked(end: Date().timeIntervalSince1970 - self.startEpoch)
-                self.writeMetaLocked()
-                try? self.handle?.close()
-                self.handle = nil
-                if !save, let dir = self.dir {
-                    try? FileManager.default.removeItem(at: dir)
-                }
-                self.dir = nil
-                self.meta = nil
-            }
-            self.setActiveExercise = nil
-            self.setBuffer.removeAll(keepingCapacity: false)
+            self?.finalizeCurrentLocked(save: save)
         }
         report("待机")
+    }
+
+    /// Flush + close the in-flight session, if any. Runs on `queue`; a no-op when
+    /// nothing is running. Shared by `endSession` and `startSession`'s takeover.
+    private func finalizeCurrentLocked(save: Bool) {
+        guard running else { return }
+        running = false
+        if handle != nil || meta != nil {
+            flushBatchLocked()
+            meta?.segments = buildSegmentsLocked(end: Date().timeIntervalSince1970 - startEpoch)
+            writeMetaLocked()
+            try? handle?.close()
+            handle = nil
+            if !save, let dir = dir {
+                try? FileManager.default.removeItem(at: dir)
+            }
+            dir = nil
+            meta = nil
+        }
+        setActiveExercise = nil
+        setBuffer.removeAll(keepingCapacity: false)
     }
 
     // MARK: - Event logging (any thread)

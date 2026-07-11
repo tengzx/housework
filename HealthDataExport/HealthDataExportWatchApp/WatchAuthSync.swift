@@ -37,6 +37,10 @@ final class WatchAuthSync: NSObject, ObservableObject {
     private var lastSeenTeStamp: Double = 0   // newest entry received from the phone
     private var teStamp: Double = 0           // version of our own broadcasts
     private var teData: Data?
+    /// Persisted so a background relaunch (e.g. to receive a complication push)
+    /// still knows which phone states it already applied — queued transfers can
+    /// replay across process lifetimes.
+    private static let teSeenStampKey = "watchAuthSync.teStamp.lastSeen"
 
     private static let relayEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
@@ -65,6 +69,7 @@ final class WatchAuthSync: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        lastSeenTeStamp = AppGroup.defaults.double(forKey: Self.teSeenStampKey)
         let savedToken = UserDefaults.standard.string(forKey: tokenKey)
         let savedNick = UserDefaults.standard.string(forKey: nicknameKey) ?? ""
         applyToken(savedToken, nickname: savedNick)
@@ -103,11 +108,13 @@ final class WatchAuthSync: NSObject, ObservableObject {
     private func handleRemoteTimeEntry(_ dict: [String: Any]) {
         guard let stamp = dict["teStamp"] as? Double, stamp > lastSeenTeStamp else { return }
         lastSeenTeStamp = stamp
+        AppGroup.defaults.set(stamp, forKey: Self.teSeenStampKey)
+        // A queued transfer can arrive long after it was sent — never let a
+        // remote state older than our own latest local change overwrite it.
+        guard stamp > teStamp else { return }
+        teStamp = stamp
         let data = dict["teData"] as? Data
-        if stamp > teStamp {
-            teStamp = stamp
-            teData = data
-        }
+        teData = data
         let activity = data.flatMap {
             try? Self.relayDecoder.decode(SharedActiveActivity.self, from: $0)
         }
@@ -325,6 +332,11 @@ final class WatchAuthSync: NSObject, ObservableObject {
         // (which may include a several-KB session snapshot). The phone's receiver
         // reads only `teStamp`/`teData`, so this is fully compatible.
         guard teStamp > 0 else { return }
+        // Only the latest state matters — cancel queued-but-undelivered
+        // time-entry transfers so they can't replay an older start/stop.
+        for transfer in session.outstandingUserInfoTransfers where transfer.userInfo["teStamp"] != nil {
+            transfer.cancel()
+        }
         var payload: [String: Any] = ["teStamp": teStamp]
         if let data = teData { payload["teData"] = data }
         session.transferUserInfo(payload)

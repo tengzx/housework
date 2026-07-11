@@ -10,7 +10,7 @@ import Foundation
 /// the acceleration norm; matching = DTW between 60-point resampled 3-axis
 /// segments.
 enum RepMotionMath {
-    static let fs = 100.0
+    static let fs = 50.0
     static let resampleN = 60
 
     /// Split a motion buffer into per-motion (peak-to-peak) segments. Each

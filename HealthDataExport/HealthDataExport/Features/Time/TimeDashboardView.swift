@@ -24,10 +24,10 @@ enum LoadKind: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .obligation: return "义务负载"
+        case .obligation: return "必要事务"
         case .proactive: return "主动投入"
-        case .recovery: return "恢复"
-        case .distraction: return "消耗分心"
+        case .recovery: return "恢复充电"
+        case .distraction: return "分心消耗"
         }
     }
 
@@ -513,6 +513,7 @@ struct TimeDashboardView: View {
         }
         .collapsibleTabScroll()
         .background(Color(hex: "F5F6F8").ignoresSafeArea())
+        .tint(Color(hex: "0A84FF"))
         .task(id: viewModel.taskID) {
             await viewModel.load()
         }

@@ -22,7 +22,7 @@ enum Calendar2Style {
     static let line     = Color(hex: "E4E6EB")
     static let line2    = Color(hex: "E4E6EB")
     static let gridLine = Color(hex: "E4E6EB")
-    static let accent   = Color(hex: "FF7847")
+    static let accent   = Color(hex: "0A84FF")
     static let text     = Color(hex: "1A1C20")
     static let muted    = Color(hex: "8A8F9C")
     static let faint    = Color(hex: "A0A5AE")

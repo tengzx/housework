@@ -285,6 +285,10 @@ private struct WatchNumberPadView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var entry: String
+    /// The pad opens showing the current value. The first digit the user types
+    /// should replace it wholesale (overwrite), not append — so they don't have
+    /// to delete the old distance first. Cleared once any edit happens.
+    @State private var showingInitial: Bool
 
     init(title: String, unit: String, initialValue: Int, onDone: @escaping (Int) -> Void) {
         self.title = title
@@ -292,6 +296,7 @@ private struct WatchNumberPadView: View {
         self.initialValue = initialValue
         self.onDone = onDone
         _entry = State(initialValue: initialValue > 0 ? String(initialValue) : "")
+        _showingInitial = State(initialValue: initialValue > 0)
     }
 
     private var displayValue: String { entry.isEmpty ? "0" : entry }
@@ -333,6 +338,7 @@ private struct WatchNumberPadView: View {
             digitKey("\(index + 1)")
         case 9:
             actionKey(symbol: "delete.left", tint: WK.red) {
+                showingInitial = false
                 if !entry.isEmpty { entry.removeLast() }
             }
         case 10:
@@ -347,6 +353,13 @@ private struct WatchNumberPadView: View {
 
     private func digitKey(_ digit: String) -> some View {
         Button {
+            // The pad opens pre-filled with the current value; the first digit
+            // overwrites it rather than appending, so the user needn't clear it.
+            if showingInitial {
+                showingInitial = false
+                entry = digit
+                return
+            }
             // Cap length so the value stays sane and the label never overflows.
             if entry.count < 6 {
                 entry = (entry == "0" ? "" : entry) + digit

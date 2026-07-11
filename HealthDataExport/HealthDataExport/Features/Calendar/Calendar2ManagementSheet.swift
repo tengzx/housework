@@ -39,7 +39,7 @@ struct Calendar2ManagementSheet: View {
         _originalCats = State(initialValue: editableCats)
         _cats = State(initialValue: editableCats)
         let allSubs = store.categories.flatMap { cat in
-            cat.types.map { EditableSub(id: $0.id, name: $0.label, catId: cat.id, tracksFocus: $0.tracksFocus) }
+            cat.types.map { EditableSub(id: $0.id, name: $0.label, catId: cat.id, tracksFocus: $0.tracksFocus, loadKindOverride: $0.loadKindOverride) }
         }
         _originalSubs = State(initialValue: allSubs)
         _subs = State(initialValue: allSubs)
@@ -139,33 +139,31 @@ struct Calendar2ManagementSheet: View {
             ForEach($cats) { $cat in
                 VStack(spacing: 0) {
                     HStack(spacing: 12) {
-                        Button {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                expandedId = expandedId == cat.id ? nil : cat.id
-                            }
-                        } label: {
+                        ZStack {
                             RoundedRectangle(cornerRadius: 9)
                                 .fill(cat.color)
                                 .frame(width: 30, height: 30)
+
+                            ColorPicker(
+                                "选择分类颜色",
+                                selection: Binding(
+                                    get: { cat.color },
+                                    set: { cat.hexColor = Self.hexString(from: $0) }
+                                ),
+                                supportsOpacity: false
+                            )
+                            .labelsHidden()
+                            .opacity(0.02)
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(HapticButtonStyle())
+                        .accessibilityLabel("修改\(cat.name.isEmpty ? "分类" : cat.name)颜色")
 
                         TextField("分类名称", text: $cat.name)
                             .font(.system(size: 16))
                             .foregroundStyle(Color(hex: "23232A"))
 
-                        Button {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                expandedId = expandedId == cat.id ? nil : cat.id
-                            }
-                        } label: {
-                            Text("改色")
-                                .font(.system(size: 12.5))
-                                .foregroundStyle(Color(hex: "9A9AA2"))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 4)
-                        }
-                        .buttonStyle(HapticButtonStyle())
+                        loadKindMenu(selection: $cat.loadKind, inherited: nil, allowsInheritance: false)
 
                         let catId = cat.id
                         Button {
@@ -184,29 +182,6 @@ struct Calendar2ManagementSheet: View {
                     }
                     .padding(.vertical, 14)
 
-                    if expandedId == cat.id {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 10) {
-                                ForEach(paletteHex.indices, id: \.self) { i in
-                                    let hex = paletteHex[i]
-                                    Button {
-                                        cat.hexColor = hex
-                                        expandedId = nil
-                                    } label: {
-                                        Circle()
-                                            .fill(Color(hex: hex))
-                                            .frame(width: 28, height: 28)
-                                            .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
-                                    }
-                                    .buttonStyle(HapticButtonStyle())
-                                }
-                            }
-                            .padding(.leading, 42)
-                            .padding(.trailing, 20)
-                        }
-                        .padding(.bottom, 14)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
                 }
                 .padding(.horizontal, 20)
                 Divider().padding(.leading, 20)
@@ -217,7 +192,7 @@ struct Calendar2ManagementSheet: View {
                 let colorIdx = nextId % paletteHex.count
                 nextId += 1
                 withAnimation {
-                    cats.append(EditableCat(id: id, name: "", hexColor: paletteHex[colorIdx]))
+                    cats.append(EditableCat(id: id, name: "", hexColor: paletteHex[colorIdx], loadKind: nil))
                     expandedId = id
                 }
             } label: {
@@ -296,7 +271,7 @@ struct Calendar2ManagementSheet: View {
                 let id = "new_sub_\(nextId)"
                 nextId += 1
                 withAnimation {
-                    subs.append(EditableSub(id: id, name: "", catId: selectedSubCatId ?? cats.first?.id ?? "", tracksFocus: false))
+                    subs.append(EditableSub(id: id, name: "", catId: selectedSubCatId ?? cats.first?.id ?? "", tracksFocus: false, loadKindOverride: nil))
                     expandedId = id
                 }
             } label: {
@@ -321,6 +296,9 @@ struct Calendar2ManagementSheet: View {
                 TextField("小类名称", text: $subs[idx].name)
                     .font(.system(size: 16))
                     .foregroundStyle(Color(hex: "23232A"))
+
+                let inheritedKind = cats.first(where: { $0.id == subs[idx].catId })?.loadKind
+                loadKindMenu(selection: $subs[idx].loadKindOverride, inherited: inheritedKind, allowsInheritance: true)
 
                 Button {
                     subs[idx].tracksFocus.toggle()
@@ -357,6 +335,49 @@ struct Calendar2ManagementSheet: View {
 
     // MARK: - Helpers
 
+    private static func hexString(from color: Color) -> String {
+        let uiColor = UIColor(color)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: nil) else {
+            return "8A8F9C"
+        }
+        return String(
+            format: "%02X%02X%02X",
+            Int((red * 255).rounded()),
+            Int((green * 255).rounded()),
+            Int((blue * 255).rounded())
+        )
+    }
+
+    private func loadKindMenu(selection: Binding<LoadKind?>, inherited: LoadKind?, allowsInheritance: Bool) -> some View {
+        Menu {
+            if allowsInheritance {
+                Button("继承大类（\(inherited?.label ?? "未设置")）") {
+                    selection.wrappedValue = nil
+                }
+                Divider()
+            }
+            ForEach(LoadKind.allCases) { kind in
+                Button(kind.label) {
+                    selection.wrappedValue = kind
+                }
+            }
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: "chart.pie")
+                    .font(.system(size: 12, weight: .medium))
+                Text(selection.wrappedValue?.label ?? inherited?.label ?? "负载")
+                    .font(.system(size: 9))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(selection.wrappedValue == nil && inherited == nil ? Color(hex: "C6C6CC") : Calendar2Style.accent)
+            .frame(width: 48, height: 34)
+        }
+        .buttonStyle(HapticButtonStyle())
+    }
+
     private func addRowLabel(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 15, weight: .semibold))
@@ -392,12 +413,12 @@ struct Calendar2ManagementSheet: View {
         let modifiedCats = cats.filter { cat in
             guard origCatIds.contains(cat.id),
                   let orig = originalCats.first(where: { $0.id == cat.id }) else { return false }
-            return orig.name != cat.name || orig.hexColor != cat.hexColor
+            return orig.name != cat.name || orig.hexColor != cat.hexColor || orig.loadKind != cat.loadKind
         }
         let modifiedSubs = subs.filter { sub in
             guard origSubIds.contains(sub.id),
                   let orig = originalSubs.first(where: { $0.id == sub.id }) else { return false }
-            return orig.name != sub.name || orig.tracksFocus != sub.tracksFocus
+            return orig.name != sub.name || orig.tracksFocus != sub.tracksFocus || orig.loadKindOverride != sub.loadKindOverride
         }
 
         do {
@@ -414,24 +435,24 @@ struct Calendar2ManagementSheet: View {
             // 3. Create new categories; map temp IDs → server IDs for type creation
             var idMap: [String: String] = [:]
             for cat in newCats {
-                let created = try await store.createCategory(name: cat.name, hexColor: "#\(cat.hexColor)")
+                let created = try await store.createCategory(name: cat.name, hexColor: "#\(cat.hexColor)", loadKind: cat.loadKind)
                 idMap[cat.id] = created.id
             }
 
             // 4. Update modified categories
             for cat in modifiedCats {
-                try await store.updateCategory(id: cat.id, name: cat.name, hexColor: "#\(cat.hexColor)")
+                try await store.updateCategory(id: cat.id, name: cat.name, hexColor: "#\(cat.hexColor)", loadKind: cat.loadKind)
             }
 
             // 5. Create new types (resolve temp category IDs)
             for sub in newSubs {
                 let realCatId = idMap[sub.catId] ?? sub.catId
-                try await store.createType(categoryId: realCatId, name: sub.name, tracksFocus: sub.tracksFocus)
+                _ = try await store.createType(categoryId: realCatId, name: sub.name, tracksFocus: sub.tracksFocus, loadKindOverride: sub.loadKindOverride)
             }
 
             // 6. Update modified types
             for sub in modifiedSubs {
-                try await store.updateType(id: sub.id, name: sub.name, tracksFocus: sub.tracksFocus)
+                try await store.updateType(id: sub.id, name: sub.name, tracksFocus: sub.tracksFocus, loadKindOverride: sub.loadKindOverride)
             }
 
             // 7. Reload to ensure consistent state
@@ -440,7 +461,7 @@ struct Calendar2ManagementSheet: View {
             // Refresh local state from server data (keep sheet open)
             let freshCats = store.categories.map { EditableCat(from: $0) }
             let freshSubs = store.categories.flatMap { cat in
-                cat.types.map { EditableSub(id: $0.id, name: $0.label, catId: cat.id, tracksFocus: $0.tracksFocus) }
+                cat.types.map { EditableSub(id: $0.id, name: $0.label, catId: cat.id, tracksFocus: $0.tracksFocus, loadKindOverride: $0.loadKindOverride) }
             }
             cats = freshCats
             subs = freshSubs
@@ -460,18 +481,21 @@ private struct EditableCat: Identifiable {
     var id: String
     var name: String
     var hexColor: String  // without #
+    var loadKind: LoadKind?
 
     var color: Color { Color(hex: hexColor) }
 
-    init(id: String, name: String, hexColor: String) {
+    init(id: String, name: String, hexColor: String, loadKind: LoadKind?) {
         self.id = id
         self.name = name
         self.hexColor = hexColor
+        self.loadKind = loadKind
     }
 
     init(from category: Calendar2Category) {
         id = category.id
         name = category.label
+        loadKind = category.loadKind
         let uiColor = UIColor(category.color)
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
         uiColor.getRed(&r, green: &g, blue: &b, alpha: nil)
@@ -487,4 +511,5 @@ private struct EditableSub: Identifiable {
     var name: String
     var catId: String
     var tracksFocus: Bool
+    var loadKindOverride: LoadKind?
 }

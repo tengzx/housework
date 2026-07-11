@@ -7,6 +7,7 @@ import SwiftUI
 struct WatchActiveWorkoutView: View {
     let sessionId: Int
     let name: String
+    let playsStartCountdown: Bool
 
     @StateObject private var vm: WatchWorkoutViewModel
     // Shared singleton, not a view-owned @StateObject: the HK session must
@@ -24,7 +25,9 @@ struct WatchActiveWorkoutView: View {
     @State private var didAutoAdvance = false
     @State private var showDiscardConfirm = false
     /// The Apple-Workout-style "3·2·1" pre-roll; nil once it finishes. `didCountdown`
-    /// guards against re-running it when the view reappears mid-session.
+    /// guards against re-running it when the view reappears mid-session. Seeded to
+    /// `3` on a fresh start so the opaque overlay masks the very first frame — the
+    /// session detail then loads *behind* the countdown, leaving no black gap.
     @State private var countdown: Int?
     @State private var didCountdown = false
     /// While true the set pages stay hidden so the "3·2·1" pre-roll shows on a
@@ -42,25 +45,47 @@ struct WatchActiveWorkoutView: View {
     private static func controlsTag(for setId: Int) -> Int { -1_000_000 - setId }
     private static func isControlsTag(_ tag: Int) -> Bool { tag <= -1_000_000 }
 
-    init(sessionId: Int, name: String) {
+    init(sessionId: Int, name: String, playsStartCountdown: Bool = false) {
         self.sessionId = sessionId
         self.name = name
+        self.playsStartCountdown = playsStartCountdown
         _vm = StateObject(wrappedValue: WatchWorkoutViewModel(sessionId: sessionId, name: name))
+        // Seed the countdown so the opaque overlay is on screen from frame one.
+        _countdown = State(initialValue: playsStartCountdown ? 3 : nil)
     }
 
     var body: some View {
         content
-            .background(WK.bg.ignoresSafeArea())
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                LinearGradient(
+                    colors: isPreparing ? [WK.bg, WK.bg] : currentPageTint,
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+            }
             .task {
                 guard !didBegin else { return }
                 didBegin = true
                 workout.start(sessionId: sessionId)
-                await vm.load()
+                if playsStartCountdown {
+                    // Load the session detail *behind* the pre-roll: the opaque
+                    // countdown is already on screen (seeded in init), so the
+                    // network latency is fully masked — no black gap after it.
+                    async let loaded: Void = vm.load()
+                    await runStartCountdown()
+                    await loaded
+                } else {
+                    // Resumed session: no pre-roll, just load.
+                    await vm.load()
+                }
                 if let first = vm.nextTarget ?? vm.orderedContexts.first {
                     selection = first.id
                 }
-                await runStartCountdownIfNeeded()
+                withAnimation(.easeOut(duration: 0.2)) { countdown = nil }
                 isPreparing = false
+                await autoStartFirstSetIfFresh()
             }
             .onDisappear {
                 // End (and save) the HK session on a real teardown — e.g. the
@@ -186,28 +211,26 @@ struct WatchActiveWorkoutView: View {
             .animation(.easeOut(duration: 0.2), value: autoStarted)
     }
 
-    /// On a freshly started session (nothing completed or running yet), play a
-    /// "3·2·1" pre-roll, then auto-start the first set — mirroring Apple Workout.
-    private func runStartCountdownIfNeeded() async {
+    /// Play the "3·2·1" pre-roll. It's already on screen (seeded in init) so the
+    /// session detail loads behind it; this just animates the ticks. The caller
+    /// clears the countdown and auto-starts the first set once loading finishes.
+    private func runStartCountdown() async {
         guard !didCountdown else { return }
-        let contexts = vm.orderedContexts
-        guard !contexts.isEmpty,
-              contexts.allSatisfy({ !$0.set.isCompleted && $0.set.timerStatus != "running" }) else { return }
         didCountdown = true
-
         for value in stride(from: 3, through: 1, by: -1) {
             withAnimation(.easeOut(duration: 0.2)) { countdown = value }
             Haptics.tap()
             try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
-        if let first = vm.nextTarget ?? vm.orderedContexts.first {
-            selection = first.id
-        }
-        // Reveal the set pages exactly as the countdown clears, so the first set
-        // is what appears — not before the pre-roll, not after a blank gap.
-        withAnimation(.easeOut(duration: 0.2)) { countdown = nil }
-        isPreparing = false
+    }
 
+    private func autoStartFirstSetIfFresh() async {
+        let contexts = vm.orderedContexts
+        guard !contexts.isEmpty,
+              contexts.allSatisfy({ !$0.set.isCompleted && $0.set.timerStatus != "running" }),
+              let first = vm.nextTarget ?? vm.orderedContexts.first else { return }
+        selection = first.id
+        withAnimation(.easeOut(duration: 0.2)) { isPreparing = false }
         if let first = vm.nextTarget ?? vm.orderedContexts.first {
             await vm.startSet(first.id)
             Haptics.notify(success: true)
@@ -216,11 +239,10 @@ struct WatchActiveWorkoutView: View {
 
     @ViewBuilder
     private var content: some View {
-        if isPreparing {
-            // Blank pre-roll canvas; the countdown overlay draws on top of it.
-            ProgressView().tint(.white)
-        } else if vm.orderedContexts.isEmpty {
-            if vm.isLoading {
+        if vm.orderedContexts.isEmpty {
+            // Loading, or the brief pre-roll before data arrives. Any playing
+            // countdown draws its own opaque canvas on top of this.
+            if isPreparing || vm.isLoading {
                 ProgressView().tint(.white)
             } else {
                 Text(vm.errorMessage ?? "没有可训练的动作")
@@ -230,6 +252,11 @@ struct WatchActiveWorkoutView: View {
                     .padding()
             }
         } else {
+            // Mount the TabView as soon as data exists — into the already
+            // full-size container — so the first `.page` lays out at full
+            // height instead of being measured mid-transition (which left
+            // the first set not filling the screen). The countdown overlay,
+            // being opaque, hides this while a pre-roll is still playing.
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                 // Rest remaining for the set we're about to do; `nil` once rest
                 // is over. Tracked here so the falling edge (→ nil) can buzz.
@@ -246,6 +273,7 @@ struct WatchActiveWorkoutView: View {
                             onComplete: { editingSetId = context.set.sessionSetId },
                             onReopen: { Task { await vm.reopenSet(context.set.sessionSetId) } }
                         )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .tag(context.set.sessionSetId)
 
                         ControlsPageView(
@@ -257,6 +285,7 @@ struct WatchActiveWorkoutView: View {
                             onPauseToggle: { workout.isPaused ? workout.resume() : workout.pause() },
                             onDelete: { showDiscardConfirm = true }
                         )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .tag(Self.controlsTag(for: context.set.sessionSetId))
                     }
 
@@ -268,9 +297,11 @@ struct WatchActiveWorkoutView: View {
                         ) {
                             showRating = true
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .tag(Self.finishTag)
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .onChange(of: vm.isFinished) { _, finished in
                     if finished && !didAutoAdvance {
@@ -289,7 +320,31 @@ struct WatchActiveWorkoutView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                LinearGradient(
+                    colors: currentPageTint,
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+            }
         }
+    }
+
+    private var currentPageTint: [Color] {
+        if selection == Self.finishTag {
+            return [Color(hex: "1B4B36"), Color(hex: "0B2B1E")]
+        }
+        if Self.isControlsTag(selection) {
+            return [WK.bg, WK.bg]
+        }
+        guard let context = vm.orderedContexts.first(where: { $0.id == selection }) ?? vm.nextTarget ?? vm.orderedContexts.first else {
+            return [WK.bg, WK.bg]
+        }
+        if context.set.isCompleted { return [Color(hex: "1B4B36"), Color(hex: "0B2B1E")] }
+        if context.set.timerStatus == "running" { return [Color(hex: "7A1F3D"), Color(hex: "3A0E1E")] }
+        return [Color(hex: "1E3A6B"), Color(hex: "0B1B36")]
     }
 
     /// The set the onset detector should watch for: the next pending set, but
@@ -438,43 +493,44 @@ private struct SetPageView: View {
     }
 
     var body: some View {
-        ZStack {
-            LinearGradient(colors: tint, startPoint: .top, endPoint: .bottom).ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 4) {
-                topTimer
-                Text(context.exercise.name)
-                    .font(.system(size: 25, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.68)
-                if let note = context.exercise.note, !note.isEmpty {
-                    Text(note)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .lineLimit(1)
-                }
-
-                if heartRate > 0 {
-                    HStack(spacing: 4) {
-                        Text("\(heartRate)").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
-                        Image(systemName: "heart.fill").font(.system(size: 12)).foregroundStyle(WK.heart)
-                    }
-                    .padding(.top, 2)
-                }
-
-                Spacer(minLength: 4)
-
-                HStack(alignment: .bottom) {
-                    metrics
-                    Spacer()
-                    actionButton
-                }
-
-                setChip
+        VStack(alignment: .leading, spacing: 4) {
+            topTimer
+            Text(context.exercise.name)
+                .font(.system(size: 25, weight: .heavy))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.68)
+            if let note = context.exercise.note, !note.isEmpty {
+                Text(note)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+
+            if heartRate > 0 {
+                HStack(spacing: 4) {
+                    Text("\(heartRate)").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                    Image(systemName: "heart.fill").font(.system(size: 12)).foregroundStyle(WK.heart)
+                }
+                .padding(.top, 2)
+            }
+
+            Spacer(minLength: 4)
+
+            HStack(alignment: .bottom) {
+                metrics
+                Spacer()
+                actionButton
+            }
+
+            setChip
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            LinearGradient(colors: tint, startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
         }
     }
 
@@ -582,29 +638,32 @@ private struct FinishPageView: View {
     let onFinish: () -> Void
 
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [Color(hex: "1B4B36"), Color(hex: "0B2B1E")],
-                           startPoint: .top, endPoint: .bottom).ignoresSafeArea()
-            VStack(spacing: 8) {
-                Text("训练完成").font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
-                HStack(spacing: 14) {
-                    stat(WK.clock(elapsed), "时长")
-                    stat("\(sets)", "组")
-                }
-                stat(WK.weightText(volume), "总容量")
-
-                Button(action: onFinish) {
-                    Text("完成")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(WK.green, in: Capsule())
-                }
-                .buttonStyle(HapticButtonStyle())
-                .padding(.top, 6)
+        VStack(spacing: 8) {
+            Text("训练完成").font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+            HStack(spacing: 14) {
+                stat(WK.clock(elapsed), "时长")
+                stat("\(sets)", "组")
             }
-            .padding(.horizontal, 16)
+            stat(WK.weightText(volume), "总容量")
+
+            Button(action: onFinish) {
+                Text("完成")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(WK.green, in: Capsule())
+            }
+            .buttonStyle(HapticButtonStyle())
+            .padding(.top, 6)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            LinearGradient(colors: [Color(hex: "1B4B36"), Color(hex: "0B2B1E")],
+                           startPoint: .top,
+                           endPoint: .bottom)
+                .ignoresSafeArea()
         }
     }
 
@@ -632,47 +691,50 @@ private struct ControlsPageView: View {
     @ObservedObject private var recorder = WorkoutSessionRecorder.shared
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("总时间").font(.system(size: 12)).foregroundStyle(WK.muted)
-                Text(clockHMS(elapsed))
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(WK.orange)
+        ZStack {
+            WK.bg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("总时间").font(.system(size: 12)).foregroundStyle(WK.muted)
+                    Text(clockHMS(elapsed))
+                        .font(.system(size: 30, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(WK.orange)
 
-                HStack {
-                    Text("活跃").font(.system(size: 13)).foregroundStyle(WK.muted)
-                    Spacer()
-                    Text("\(Int(activeKcal.rounded())) kcal")
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                }
-                HStack {
-                    Image(systemName: "heart.fill").font(.system(size: 12)).foregroundStyle(WK.heart)
-                    Spacer()
-                    Text(heartRate > 0 ? "\(heartRate) bpm" : "-- bpm")
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                }
+                    HStack {
+                        Text("活跃").font(.system(size: 13)).foregroundStyle(WK.muted)
+                        Spacer()
+                        Text("\(Int(activeKcal.rounded())) kcal")
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white)
+                    }
+                    HStack {
+                        Image(systemName: "heart.fill").font(.system(size: 12)).foregroundStyle(WK.heart)
+                        Spacer()
+                        Text(heartRate > 0 ? "\(heartRate) bpm" : "-- bpm")
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white)
+                    }
 
-                HStack(spacing: 12) {
-                    controlButton(symbol: "xmark", fill: WK.red, action: onEnd)
-                    controlButton(symbol: isPaused ? "play.fill" : "pause.fill", fill: WK.surface, action: onPauseToggle)
-                    controlButton(symbol: "trash", fill: WK.surface, tint: WK.red, action: onDelete)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
+                    HStack(spacing: 12) {
+                        controlButton(symbol: "xmark", fill: WK.red, action: onEnd)
+                        controlButton(symbol: isPaused ? "play.fill" : "pause.fill", fill: WK.surface, action: onPauseToggle)
+                        controlButton(symbol: "trash", fill: WK.surface, tint: WK.red, action: onDelete)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
 
-                // Debug: continuous capture status (auto rep-detection).
-                Text(recorder.debugStatus)
-                    .font(.system(size: 11))
-                    .foregroundStyle(WK.muted)
-                    .padding(.top, 6)
+                    // Debug: continuous capture status (auto rep-detection).
+                    Text(recorder.debugStatus)
+                        .font(.system(size: 11))
+                        .foregroundStyle(WK.muted)
+                        .padding(.top, 6)
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 6)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
         }
-        .background(WK.bg.ignoresSafeArea())
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func controlButton(symbol: String, fill: Color, tint: Color = .white, action: @escaping () -> Void) -> some View {

@@ -34,7 +34,7 @@ final class SetOnsetDetector: ObservableObject {
 
     private static let windowS = 8.0        // trailing buffer (holds several reps)
     private static let stepS = 0.5          // re-evaluate cadence
-    private static let minMatches = 1       // on-template reps to fire (was 2; lowered to fire ~rep 2, not 3–4)
+    private static let minMatches = 2       // consecutive on-template reps to fire (needs 3 peaks). Back to 2: minMatches=1 was too trigger-happy (incidental motion fired on a single match).
     private static let threshold = 0.20     // max DTW distance for a match
     private static let cooldownS = 15.0
     /// Absolute motion floor (peak smoothed accel-norm energy, g²). Below this

@@ -4,6 +4,9 @@ import SwiftUI
 struct WatchSessionRef: Hashable, Identifiable {
     let sessionId: Int
     let name: String
+    /// Play the "3·2·1" pre-roll when the active view opens (a fresh start from
+    /// a template). False for sessions resumed from the phone.
+    var playsStartCountdown = false
     var id: Int { sessionId }
 }
 
@@ -59,6 +62,12 @@ struct WatchTemplateDetailView: View {
         }
         .background(WK.bg.ignoresSafeArea())
         .navigationTitle(name)
+        .overlay {
+            if isStarting {
+                WorkoutLaunchOverlay()
+                    .transition(.opacity)
+            }
+        }
         .task { await load() }
     }
 
@@ -78,14 +87,37 @@ struct WatchTemplateDetailView: View {
         guard !isStarting else { return }
         isStarting = true
         errorMessage = nil
-        defer { isStarting = false }
         do {
             let response = try await FitnessAPIClient.startSession(templateId: templateId, name: name)
             Haptics.notify(success: true)
-            WatchActiveWorkoutStore.shared.startLocal(WatchSessionRef(sessionId: response.sessionId, name: name))
+            // Hand off immediately: the active view owns the "3·2·1" pre-roll and
+            // plays it as an opaque loading mask, so the session detail loads
+            // behind the countdown with no black gap.
+            WatchActiveWorkoutStore.shared.startLocal(WatchSessionRef(
+                sessionId: response.sessionId,
+                name: name,
+                playsStartCountdown: true
+            ))
         } catch {
             Haptics.notify(success: false)
             errorMessage = "开始训练失败"
+        }
+        isStarting = false
+    }
+}
+
+/// Brief spinner shown while the start request is in flight, before the active
+/// view takes over with its countdown.
+private struct WorkoutLaunchOverlay: View {
+    var body: some View {
+        ZStack {
+            WK.bg.ignoresSafeArea()
+            VStack(spacing: 8) {
+                ProgressView().tint(.white)
+                Text("正在准备训练")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(WK.muted)
+            }
         }
     }
 }

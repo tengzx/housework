@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The watch app's home. Opens straight into the shortcut-based time tracker
-/// (its in-progress screen when a session is running). The workout flow is one
-/// tap away via the fitness icon in the top-right toolbar.
+/// (its in-progress screen when a session is running). Shortcut and workout
+/// lists stay one tap away via the symmetric toolbar icons.
 struct WatchRootView: View {
     @StateObject private var auth = WatchAuthSync.shared
     @StateObject private var activeWorkout = WatchActiveWorkoutStore.shared
@@ -12,7 +12,11 @@ struct WatchRootView: View {
             if let ref = activeWorkout.current {
                 // Show the workout full-screen by swapping the root (no system close
                 // button — the workout is ended via the swipe-in controls page).
-                WatchActiveWorkoutView(sessionId: ref.sessionId, name: ref.name)
+                WatchActiveWorkoutView(
+                    sessionId: ref.sessionId,
+                    name: ref.name,
+                    playsStartCountdown: ref.playsStartCountdown
+                )
                     .transition(.move(edge: .bottom))
             } else {
                 home
@@ -32,6 +36,15 @@ struct WatchRootView: View {
         NavigationStack {
             WatchTimeTrackerView()
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        NavigationLink {
+                            WatchTimeTrackerView(displayMode: .shortcutListOnly)
+                        } label: {
+                            Image(systemName: "bolt.fill")
+                        }
+                        .accessibilityLabel("快捷指令")
+                    }
+
                     // Replaces the top-right clock with a shortcut into the
                     // workout template list.
                     ToolbarItem(placement: .topBarTrailing) {
@@ -40,6 +53,7 @@ struct WatchRootView: View {
                         } label: {
                             Image(systemName: "figure.strengthtraining.traditional")
                         }
+                        .accessibilityLabel("运动")
                     }
                 }
         }

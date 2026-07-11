@@ -56,6 +56,18 @@ final class PhoneWatchSync: NSObject {
     private var teStamp: Double = 0
     private var teData: Data?
     private var lastSeenTeStamp: Double = 0
+    /// Set when a broadcast happens before the session is activated, so
+    /// activation can send the missed transfer (and only then — re-transferring
+    /// on every activation would drain the complication budget for nothing).
+    private var teTransferPending = false
+    /// Persisted so a relaunch still knows which watch states it already
+    /// applied — queued transfers can replay across process lifetimes.
+    private static let teSeenStampKey = "phoneWatchSync.teStamp.lastSeen"
+
+    private override init() {
+        super.init()
+        lastSeenTeStamp = UserDefaults.standard.double(forKey: Self.teSeenStampKey)
+    }
 
     private static let relayEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
@@ -114,6 +126,7 @@ final class PhoneWatchSync: NSObject {
         lock.lock()
         teStamp = max(teStamp + 0.001, Date().timeIntervalSince1970)
         teData = activity.flatMap { try? Self.relayEncoder.encode($0) }
+        teTransferPending = true
         lock.unlock()
         pushIfPossible()
         transferTimeEntry()
@@ -205,10 +218,12 @@ final class PhoneWatchSync: NSObject {
         lock.lock()
         guard stamp > lastSeenTeStamp else { lock.unlock(); return }
         lastSeenTeStamp = stamp
-        if stamp > teStamp {
-            teStamp = stamp
-            teData = data
-        }
+        UserDefaults.standard.set(stamp, forKey: Self.teSeenStampKey)
+        // A queued transfer can arrive long after it was sent — never let a
+        // remote state older than our own latest local change overwrite it.
+        guard stamp > teStamp else { lock.unlock(); return }
+        teStamp = stamp
+        teData = data
         lock.unlock()
         let activity = data.flatMap {
             try? Self.relayDecoder.decode(SharedActiveActivity.self, from: $0)
@@ -316,21 +331,42 @@ final class PhoneWatchSync: NSObject {
         // never reaches the watch and the face keeps counting until the app is
         // opened. Keep this transfer tiny so it reliably lands.
         lock.lock()
+        guard teTransferPending, teStamp > 0 else { lock.unlock(); return }
+        teTransferPending = false
         let stamp = teStamp
         let data = teData
         lock.unlock()
-        guard stamp > 0 else { return }
+
+        // Only the latest state matters — cancel queued-but-undelivered
+        // time-entry transfers so they can't replay an older start/stop after
+        // this one, and so stale entries don't drain the daily complication
+        // budget when they finally deliver.
+        for transfer in session.outstandingUserInfoTransfers where transfer.userInfo["teStamp"] != nil {
+            transfer.cancel()
+        }
+
         var payload: [String: Any] = ["teStamp": stamp]
         if let data { payload["teData"] = data }
-        // A complication transfer has a dedicated daily budget and takes priority
-        // in waking the watch to refresh the face. This matters overnight / under
-        // Sleep Focus: watchOS won't relaunch a suspended watch app for a plain
-        // `transferUserInfo`, so the App Group the complication reads never gets
-        // rewritten and the face freezes until the watch app is opened. Prefer the
-        // complication transfer while budget remains, and fall back otherwise.
-        if session.isComplicationEnabled, session.remainingComplicationUserInfoTransfers > 0 {
+
+        if session.isReachable {
+            // The watch app is in the foreground: the live `sendMessage` in
+            // `broadcastTimeEntry` already delivered this state and refreshed
+            // the face. Don't spend complication budget — queue a plain
+            // transfer as a durable backup in case the message was dropped
+            // (the receiver dedupes by `teStamp`, so a double-delivery is a
+            // no-op).
+            session.transferUserInfo(payload)
+        } else if session.remainingComplicationUserInfoTransfers > 0 {
+            // A complication transfer launches the watch app in the BACKGROUND
+            // to deliver the payload, so the face refreshes without the user
+            // opening the app — including overnight / under Sleep Focus. Gate on
+            // the remaining daily budget rather than `isComplicationEnabled`:
+            // the latter is unreliable for WidgetKit complications, while the
+            // budget is 0 whenever the complication isn't on the active face.
             session.transferCurrentComplicationUserInfo(payload)
         } else {
+            // No budget (or complication not on the face): fall back to a
+            // durable queued transfer, delivered next time the watch app runs.
             session.transferUserInfo(payload)
         }
     }
@@ -424,6 +460,7 @@ final class PhoneWatchSync: NSObject {
 extension PhoneWatchSync: WCSessionDelegate {
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         pushIfPossible()
+        transferTimeEntry()
         handleRemoteWorkout(session.receivedApplicationContext)
     }
 

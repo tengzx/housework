@@ -82,7 +82,7 @@ struct ShortcutTask: Codable, Identifiable, Hashable {
 }
 
 struct ShortcutEvent: Codable, Identifiable, Hashable {
-    enum Kind: String, Codable {
+    enum Kind: String, Codable, Equatable {
         case started
         case stopped
         case note
@@ -188,6 +188,9 @@ final class ShortcutRecordStore: ObservableObject {
     @Published var events: [ShortcutEvent]
     /// Non-empty while a queued start/end operation is failing and being retried.
     @Published var syncStatusMessage: String = ""
+    /// Called only after an end operation has been accepted by the backend, so
+    /// consumers can query summaries without racing the optimistic local UI.
+    var onTimeEntryEnded: (() -> Void)?
 
     private let tasksKey = "shortcutRecord.tasks"
     private let activeKey = "shortcutRecord.activeSession"
@@ -506,6 +509,9 @@ final class ShortcutRecordStore: ObservableObject {
                     pendingSync.removeFirst()
                     savePendingSync()
                     syncStatusMessage = ""
+                    if operation.kind == .end {
+                        onTimeEntryEnded?()
+                    }
                 }
             } catch {
                 guard pendingSync.first?.id == operation.id else {

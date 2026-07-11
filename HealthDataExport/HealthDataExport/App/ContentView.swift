@@ -60,6 +60,7 @@ final class ActiveWorkoutStore: ObservableObject {
 }
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var dependencies: AppDependencies
     @EnvironmentObject private var fitnessSessionEvents: FitnessSessionEventStore
     @StateObject private var workout = ActiveWorkoutStore()
@@ -133,6 +134,11 @@ struct ContentView: View {
             SharedActivityStore.onWrite = { activity in
                 PhoneWatchSync.shared.broadcastTimeEntry(activity)
             }
+            timeTracker.onTimeEntryEnded = {
+                Task { @MainActor in
+                    await IdealDayStore.shared.loadTodayComparison(forceReminder: true)
+                }
+            }
             // Catch up: if the phone already has a running entry mirrored, push it so
             // a freshly-launched watch converges. Only when non-nil — broadcasting a
             // stale `nil` here could wrongly clear a live entry on the watch.
@@ -144,6 +150,9 @@ struct ContentView: View {
             PhoneWatchSync.shared.onRemoteTimeEntry = { activity in
                 Task { @MainActor in
                     timeTracker.applyRemoteActive(activity)
+                    if activity == nil {
+                        await IdealDayStore.shared.loadTodayComparison(forceReminder: true)
+                    }
                 }
             }
             PhoneWatchSync.shared.onRemoteWorkout = { remote in
@@ -192,6 +201,10 @@ struct ContentView: View {
             if let existing = PhoneWatchSync.shared.currentWorkout() {
                 await applyRemoteWorkoutIfAvailable(existing)
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await IdealDayStore.shared.loadTodayComparison() }
         }
     }
 

@@ -98,11 +98,11 @@ final class TimeCalendarStore: ObservableObject {
     }
 
     /// 仅在本地构造一条草稿事件，不发送到服务器。
-    func makeDraftEvent(dayOffset: Int) -> Calendar2Event {
+    func makeDraftEvent(dayOffset: Int, startMinute: Int? = nil, endMinute: Int? = nil) -> Calendar2Event {
         let category = categories.first ?? Calendar2Category.fallback(for: "life")
         let type = category.types.first
-        let start = Calendar2Format.defaultStartMinute()
-        let end = min(start + 30, Calendar2Layout.dayEnd * 60)
+        let start = startMinute ?? Calendar2Format.defaultStartMinute()
+        let end = min(endMinute ?? (start + 30), Calendar2Layout.dayEnd * 60)
         return Calendar2Event(
             id: "",
             dayOffset: dayOffset,
@@ -247,14 +247,14 @@ final class TimeCalendarStore: ObservableObject {
 
     // MARK: - Category CRUD
 
-    func createCategory(name: String, hexColor: String) async throws -> Calendar2Category {
-        let category = try await TimeCalendarAPI.createCategory(name: name, color: hexColor)
+    func createCategory(name: String, hexColor: String, loadKind: LoadKind? = nil) async throws -> Calendar2Category {
+        let category = try await TimeCalendarAPI.createCategory(name: name, color: hexColor, loadKind: loadKind)
         categories.append(category)
         return category
     }
 
-    func updateCategory(id: String, name: String, hexColor: String) async throws {
-        let updated = try await TimeCalendarAPI.updateCategory(id: id, name: name, color: hexColor)
+    func updateCategory(id: String, name: String, hexColor: String, loadKind: LoadKind?) async throws {
+        let updated = try await TimeCalendarAPI.updateCategory(id: id, name: name, color: hexColor, loadKind: loadKind)
         if let idx = categories.firstIndex(where: { $0.id == id }) {
             categories[idx] = updated
         }
@@ -265,22 +265,22 @@ final class TimeCalendarStore: ObservableObject {
         categories.removeAll { $0.id == id }
     }
 
-    func createType(categoryId: String, name: String, tracksFocus: Bool = false) async throws -> Calendar2CategoryType {
-        let newType = try await TimeCalendarAPI.createType(categoryId: categoryId, name: name, tracksFocus: tracksFocus)
+    func createType(categoryId: String, name: String, tracksFocus: Bool = false, loadKindOverride: LoadKind? = nil) async throws -> Calendar2CategoryType {
+        let newType = try await TimeCalendarAPI.createType(categoryId: categoryId, name: name, tracksFocus: tracksFocus, loadKindOverride: loadKindOverride)
         if let idx = categories.firstIndex(where: { $0.id == categoryId }) {
             let cat = categories[idx]
-            categories[idx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, types: cat.types + [newType])
+            categories[idx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, icon: cat.icon, loadKind: cat.loadKind, types: cat.types + [newType])
         }
         return newType
     }
 
-    func updateType(id: String, name: String, tracksFocus: Bool) async throws {
-        let updated = try await TimeCalendarAPI.updateType(id: id, name: name, tracksFocus: tracksFocus)
+    func updateType(id: String, name: String, tracksFocus: Bool, loadKindOverride: LoadKind?) async throws {
+        let updated = try await TimeCalendarAPI.updateType(id: id, name: name, tracksFocus: tracksFocus, loadKindOverride: loadKindOverride)
         for (catIdx, cat) in categories.enumerated() {
             if let typeIdx = cat.types.firstIndex(where: { $0.id == id }) {
                 var types = cat.types
                 types[typeIdx] = updated
-                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, types: types)
+                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, icon: cat.icon, loadKind: cat.loadKind, types: types)
                 break
             }
         }
@@ -290,7 +290,7 @@ final class TimeCalendarStore: ObservableObject {
         try await TimeCalendarAPI.deleteType(id: id)
         for (catIdx, cat) in categories.enumerated() {
             if cat.types.contains(where: { $0.id == id }) {
-                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, types: cat.types.filter { $0.id != id })
+                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, icon: cat.icon, loadKind: cat.loadKind, types: cat.types.filter { $0.id != id })
                 break
             }
         }
@@ -409,22 +409,22 @@ enum TimeCalendarAPI {
         _ = try await send(DeleteTimeEventResponse.self, url: baseURL.appendingPathComponent("time-events").appendingPathComponent(id), method: "DELETE")
     }
 
-    static func createCategory(name: String, color: String?) async throws -> Calendar2Category {
+    static func createCategory(name: String, color: String?, loadKind: LoadKind?) async throws -> Calendar2Category {
         let response = try await send(
             TimeCategoryEnvelope.self,
             url: baseURL.appendingPathComponent("time-categories"),
             method: "POST",
-            body: TimeCategoryRequest(name: name, color: color)
+            body: TimeCategoryRequest(name: name, color: color, loadKind: loadKind?.rawValue)
         )
         return Calendar2Category(response: response.category)
     }
 
-    static func updateCategory(id: String, name: String, color: String?) async throws -> Calendar2Category {
+    static func updateCategory(id: String, name: String, color: String?, loadKind: LoadKind?) async throws -> Calendar2Category {
         let response = try await send(
             TimeCategoryEnvelope.self,
             url: baseURL.appendingPathComponent("time-categories").appendingPathComponent(id),
             method: "PATCH",
-            body: TimeCategoryRequest(name: name, color: color)
+            body: TimeCategoryRequest(name: name, color: color, loadKind: loadKind?.rawValue)
         )
         return Calendar2Category(response: response.category)
     }
@@ -437,26 +437,26 @@ enum TimeCalendarAPI {
         )
     }
 
-    static func createType(categoryId: String, name: String, tracksFocus: Bool = false) async throws -> Calendar2CategoryType {
+    static func createType(categoryId: String, name: String, tracksFocus: Bool = false, loadKindOverride: LoadKind?) async throws -> Calendar2CategoryType {
         let response = try await send(
             TimeTypeEnvelope.self,
             url: baseURL.appendingPathComponent("time-categories").appendingPathComponent(categoryId).appendingPathComponent("types"),
             method: "POST",
-            body: TimeTypeRequest(name: name, tracksFocus: tracksFocus)
+            body: TimeTypeRequest(name: name, tracksFocus: tracksFocus, loadKindOverride: loadKindOverride?.rawValue)
         )
         let t = response.eventType
-        return Calendar2CategoryType(id: t.id, label: t.label, color: t.color.map { Color(hex: $0) }, tracksFocus: t.tracksFocus ?? false)
+        return Calendar2CategoryType(id: t.id, label: t.label, color: t.color.map { Color(hex: $0) }, icon: t.icon, loadKindOverride: t.loadKindOverride.flatMap(LoadKind.init(rawValue:)), tracksFocus: t.tracksFocus ?? false)
     }
 
-    static func updateType(id: String, name: String, tracksFocus: Bool) async throws -> Calendar2CategoryType {
+    static func updateType(id: String, name: String, tracksFocus: Bool, loadKindOverride: LoadKind?) async throws -> Calendar2CategoryType {
         let response = try await send(
             TimeTypeEnvelope.self,
             url: baseURL.appendingPathComponent("time-types").appendingPathComponent(id),
             method: "PATCH",
-            body: TimeTypeRequest(name: name, tracksFocus: tracksFocus)
+            body: TimeTypeRequest(name: name, tracksFocus: tracksFocus, loadKindOverride: loadKindOverride?.rawValue, clearLoadKindOverride: loadKindOverride == nil)
         )
         let t = response.eventType
-        return Calendar2CategoryType(id: t.id, label: t.label, color: t.color.map { Color(hex: $0) }, tracksFocus: t.tracksFocus ?? false)
+        return Calendar2CategoryType(id: t.id, label: t.label, color: t.color.map { Color(hex: $0) }, icon: t.icon, loadKindOverride: t.loadKindOverride.flatMap(LoadKind.init(rawValue:)), tracksFocus: t.tracksFocus ?? false)
     }
 
     static func deleteType(id: String) async throws {
@@ -588,11 +588,14 @@ private struct DeleteTimeEventResponse: Decodable {
 private struct TimeCategoryRequest: Encodable {
     var name: String?
     var color: String?
+    var loadKind: String? = nil
 }
 
 private struct TimeTypeRequest: Encodable {
     var name: String?
     var tracksFocus: Bool?
+    var loadKindOverride: String? = nil
+    var clearLoadKindOverride: Bool? = nil
 }
 
 private struct TimeCategoryEnvelope: Decodable {
@@ -611,6 +614,7 @@ struct TimeCategoryResponse: Decodable {
     var label: String
     var color: String
     var icon: String?
+    var loadKind: String?
     var types: [TimeCategoryTypeResponse]
 
     private enum CodingKeys: String, CodingKey {
@@ -620,6 +624,7 @@ struct TimeCategoryResponse: Decodable {
         case title
         case color
         case icon
+        case loadKind
         case types
         case subs
         case children
@@ -631,6 +636,7 @@ struct TimeCategoryResponse: Decodable {
         label = try container.decodeFirstString(keys: [.label, .name, .title]) ?? id
         color = try container.decodeFirstString(keys: [.color]) ?? "#8A8F9C"
         icon = try container.decodeFirstString(keys: [.icon])
+        loadKind = try container.decodeFirstString(keys: [.loadKind])
         types = (
             try container.decodeIfPresent([TimeCategoryTypeResponse].self, forKey: .types)
             ?? container.decodeIfPresent([TimeCategoryTypeResponse].self, forKey: .subs)
@@ -646,6 +652,7 @@ struct TimeCategoryTypeResponse: Decodable {
     var color: String?
     var icon: String?
     var tracksFocus: Bool?
+    var loadKindOverride: String?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -655,6 +662,7 @@ struct TimeCategoryTypeResponse: Decodable {
         case color
         case icon
         case tracksFocus
+        case loadKindOverride
         case tracksFocusSnake = "tracks_focus"
     }
 
@@ -666,6 +674,7 @@ struct TimeCategoryTypeResponse: Decodable {
             color = nil
             icon = nil
             tracksFocus = nil
+            loadKindOverride = nil
             return
         }
 
@@ -676,6 +685,7 @@ struct TimeCategoryTypeResponse: Decodable {
         icon = try container.decodeFirstString(keys: [.icon])
         tracksFocus = try container.decodeIfPresent(Bool.self, forKey: .tracksFocus)
             ?? container.decodeIfPresent(Bool.self, forKey: .tracksFocusSnake)
+        loadKindOverride = try container.decodeFirstString(keys: [.loadKindOverride])
     }
 }
 
