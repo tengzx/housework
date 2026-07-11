@@ -115,7 +115,7 @@ struct WatchTimeTrackerView: View {
                     sectionPlaceholder(intentionStatusMessage.isEmpty ? "今天还没有意图" : intentionStatusMessage)
                 } else {
                     ForEach(todayIntentions) { intention in
-                        shortcutRow(task(for: intention), tint: WatchDesign.accent)
+                        shortcutRow(task(for: intention), tint: WatchDesign.accent, intentionId: intention.id)
                     }
                 }
 
@@ -182,9 +182,9 @@ struct WatchTimeTrackerView: View {
             )
     }
 
-    private func shortcutRow(_ task: ShortcutTask, tint: Color) -> some View {
+    private func shortcutRow(_ task: ShortcutTask, tint: Color, intentionId: Int? = nil) -> some View {
         Button {
-            startTask(task)
+            startTask(task, intentionId: intentionId)
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: task.symbolName)
@@ -252,9 +252,9 @@ struct WatchTimeTrackerView: View {
         .accessibilityLabel("结束当前记录")
     }
 
-    private func startTask(_ task: ShortcutTask) {
+    private func startTask(_ task: ShortcutTask, intentionId: Int? = nil) {
         statusMessage = ""
-        store.start(task)
+        store.start(task, intentionRemoteId: intentionId)
         #if os(watchOS)
         WatchAuthSync.shared.broadcastTimeEntry(store.sharedActiveActivity())
         #endif

@@ -14,6 +14,8 @@ struct Calendar2Event: Identifiable, Equatable {
     var colorHex: String?
     var source: String?
     var note: String?
+    /// 归属的目标/项目 id（服务端快照），编辑界面可改，用于按目标统计时长。
+    var goalId: Int?
     var isRunning: Bool
     var spansMultipleDays: Bool
     var isMobileApp: Bool
@@ -33,6 +35,7 @@ struct Calendar2Event: Identifiable, Equatable {
         colorHex: String? = nil,
         source: String? = nil,
         note: String? = nil,
+        goalId: Int? = nil,
         isRunning: Bool = false,
         spansMultipleDays: Bool = false,
         isMobileApp: Bool = false,
@@ -51,6 +54,7 @@ struct Calendar2Event: Identifiable, Equatable {
         self.colorHex = colorHex
         self.source = source
         self.note = note
+        self.goalId = goalId
         self.isRunning = isRunning
         self.spansMultipleDays = spansMultipleDays
         self.isMobileApp = isMobileApp
@@ -62,7 +66,8 @@ struct Calendar2Event: Identifiable, Equatable {
             id: response.id, name: response.name, categoryId: response.categoryId,
             typeId: response.typeId, colorHex: response.resolvedColor,
             startedAt: response.startedAt, endedAt: response.endedAt,
-            source: response.source, note: response.note, isMobileApp: false, now: now
+            source: response.source, note: response.note, goalId: response.goalId,
+            isMobileApp: false, now: now
         )
     }
 
@@ -72,7 +77,7 @@ struct Calendar2Event: Identifiable, Equatable {
     ) -> [Calendar2Event] {
         makeSegments(
             id: id, name: name, categoryId: categoryId, typeId: typeId, colorHex: nil,
-            startedAt: startedAt, endedAt: endedAt, source: source, note: nil,
+            startedAt: startedAt, endedAt: endedAt, source: source, note: nil, goalId: nil,
             isMobileApp: true, now: now
         )
     }
@@ -81,6 +86,7 @@ struct Calendar2Event: Identifiable, Equatable {
         id: String, name: String, categoryId: String, typeId: String?,
         colorHex: String?,
         startedAt: Date, endedAt: Date?, source: String?, note: String?,
+        goalId: Int?,
         isMobileApp: Bool, now: Date
     ) -> [Calendar2Event] {
         let calendar = Calendar.current
@@ -117,6 +123,7 @@ struct Calendar2Event: Identifiable, Equatable {
                 colorHex: colorHex,
                 source: source,
                 note: note,
+                goalId: goalId,
                 isRunning: endedAt == nil && index == segmentCount - 1,
                 spansMultipleDays: spansMultipleDays,
                 isMobileApp: isMobileApp

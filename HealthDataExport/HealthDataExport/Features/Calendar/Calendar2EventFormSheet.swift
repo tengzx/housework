@@ -30,6 +30,9 @@ struct Calendar2EventFormSheet: View {
     @State private var shortcutAlert: String?
     @State private var showManagement = false
     @State private var managementTab: ManagementTab = .category
+    /// 归属目标/项目；nil = 公共。初始取事件上已保存的 goalId。
+    @State private var pickedGoalId: Int?
+    @State private var availableGoals: [RemoteGoal] = []
     @FocusState private var isQuickEntryFocused: Bool
 
     private let quickExamples = [
@@ -66,6 +69,7 @@ struct Calendar2EventFormSheet: View {
         _start = State(initialValue: source.start)
         _end = State(initialValue: source.end)
         _draftNote = State(initialValue: source.note ?? "")
+        _pickedGoalId = State(initialValue: source.goalId)
         _quickText = State(initialValue: "")
         _quickError = State(initialValue: "")
         _showDetails = State(initialValue: {
@@ -113,6 +117,7 @@ struct Calendar2EventFormSheet: View {
                         timeCard
                         categorySection
                         subcategorySection
+                        goalSection
                         noteField
                     }
                 }
@@ -136,6 +141,9 @@ struct Calendar2EventFormSheet: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 isQuickEntryFocused = true
             }
+        }
+        .task {
+            availableGoals = (try? await GoalAPI.list()) ?? []
         }
         .sheet(isPresented: $showManagement) {
             Calendar2ManagementSheet(
@@ -459,6 +467,52 @@ struct Calendar2EventFormSheet: View {
         }
     }
 
+    // MARK: - Goal Section
+
+    /// 归属目标/项目：公共（无归属）或某个 active 目标。事件原本挂在已归档
+    /// 目标上时，所有 chip 都不高亮——不动它就保持原归属，选了才覆盖。
+    private var goalSection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            sectionLabel("归属目标 / 项目")
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
+                goalChip(id: nil, title: "公共", symbol: "tray")
+                ForEach(availableGoals) { goal in
+                    goalChip(id: goal.id, title: goal.name, symbol: goal.isProject ? "folder.fill" : "target")
+                }
+            }
+        }
+    }
+
+    private func goalChip(id: Int?, title: String, symbol: String) -> some View {
+        let isOn = pickedGoalId == id
+        return Button {
+            pickedGoalId = id
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isOn ? Calendar2Style.accent : Color(hex: "9A9AA2"))
+                Text(title)
+                    .font(.system(size: 15, weight: isOn ? .semibold : .medium))
+                    .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 44)
+            .padding(.horizontal, 14)
+            .background(
+                isOn ? Calendar2Style.accent.opacity(0.11) : Color(hex: "F5F5F7"),
+                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(isOn ? Calendar2Style.accent.opacity(0.55) : Color.clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(Calendar2PressStyle())
+    }
+
     // MARK: - Note Field
 
     private var noteField: some View {
@@ -574,7 +628,8 @@ struct Calendar2EventFormSheet: View {
             category: pickedCategory,
             typeId: pickedType,
             source: original?.source ?? "manual",
-            note: draftNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : draftNote.trimmingCharacters(in: .whitespacesAndNewlines)
+            note: draftNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : draftNote.trimmingCharacters(in: .whitespacesAndNewlines),
+            goalId: pickedGoalId
         )
         onSave(event)
         dismiss()

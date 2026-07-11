@@ -121,13 +121,21 @@ struct ShortcutSyncOperation: Codable, Identifiable {
     let taskName: String
     let typeId: String?
     let note: String
+    /// When the start came from a daily intention: its backend id if already
+    /// known, else its local id — resolved to the backend id at flush time via
+    /// `ShortcutRecordStore.intentionRemoteIdResolver`. Lets the created time
+    /// entry carry the intention/goal for per-goal time analysis.
+    var intentionRemoteId: Int?
+    var intentionLocalId: UUID?
 
-    init(id: UUID = UUID(), kind: Kind, taskName: String = "", typeId: String? = nil, note: String = "") {
+    init(id: UUID = UUID(), kind: Kind, taskName: String = "", typeId: String? = nil, note: String = "", intentionRemoteId: Int? = nil, intentionLocalId: UUID? = nil) {
         self.id = id
         self.kind = kind
         self.taskName = taskName
         self.typeId = typeId
         self.note = note
+        self.intentionRemoteId = intentionRemoteId
+        self.intentionLocalId = intentionLocalId
     }
 }
 
@@ -194,6 +202,10 @@ final class ShortcutRecordStore: ObservableObject {
     /// Called after the locally visible shortcut list changes, including
     /// optimistic edits and successful server refreshes.
     var onTasksChanged: (() -> Void)?
+    /// Resolves a daily intention's local id to its backend id at flush time.
+    /// Injected by the phone app (the watch target doesn't compile the
+    /// intention store and starts intentions with the remote id directly).
+    var intentionRemoteIdResolver: ((UUID) -> Int?)?
 
     private let tasksKey = "shortcutRecord.tasks"
     private let activeKey = "shortcutRecord.activeSession"
@@ -344,13 +356,21 @@ final class ShortcutRecordStore: ObservableObject {
         saveTasks()
     }
 
-    func start(_ task: ShortcutTask) {
+    /// `intentionRemoteId`/`intentionLocalId` tie the created time entry back to
+    /// the daily intention it was started from (for per-goal time analysis).
+    func start(_ task: ShortcutTask, intentionRemoteId: Int? = nil, intentionLocalId: UUID? = nil) {
         let wasRunning = activeSession != nil
         activeSession = ActiveShortcutSession(task: task, startedAt: .now)
         events.insert(ShortcutEvent(task: task, kind: .started, note: "开始了"), at: 0)
         saveActiveSession()
         saveEvents()
-        let startOp = ShortcutSyncOperation(kind: .start, taskName: task.name, typeId: task.subtypeId)
+        let startOp = ShortcutSyncOperation(
+            kind: .start,
+            taskName: task.name,
+            typeId: task.subtypeId,
+            intentionRemoteId: intentionRemoteId,
+            intentionLocalId: intentionLocalId
+        )
         // Preserve an `end` that was queued (e.g. by a 结束 tapped moments ago) but
         // hasn't been delivered yet. Blindly replacing the queue would strand the
         // previous entry as RUNNING on the backend, so the fresh start would 409
@@ -464,9 +484,15 @@ final class ShortcutRecordStore: ObservableObject {
                     // start already landed, the backend replays that same entry
                     // instead of 409-ing.
                     let clientId = operation.id.uuidString
+                    // Resolve the intention link: the remote id when the start
+                    // already carried one (watch), else map the local id via the
+                    // injected resolver (phone). Nil when unresolvable — the
+                    // entry is still created, just without the goal link.
+                    let intentionId = operation.intentionRemoteId
+                        ?? operation.intentionLocalId.flatMap { intentionRemoteIdResolver?($0) }
                     var serverEntry: RunningShortcutEntry?
                     do {
-                        serverEntry = try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId)
+                        serverEntry = try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId, intentionId: intentionId)
                     } catch {
                         // A 409 "already running" that idempotency didn't absorb
                         // means the backend has a *different* running entry our
@@ -484,7 +510,7 @@ final class ShortcutRecordStore: ObservableObject {
                             if running != nil {
                                 try? await ShortcutAPI.end(note: "")
                             }
-                            serverEntry = try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId)
+                            serverEntry = try await ShortcutAPI.start(taskName: operation.taskName, typeId: operation.typeId, clientId: clientId, intentionId: intentionId)
                         }
                     }
                     // Adopt the server's authoritative startedAt: a resume-merge
@@ -988,14 +1014,15 @@ enum ShortcutAPI {
     /// response is authoritative: on a resume-merge the backend keeps the original
     /// start time, so callers should adopt it rather than trusting a local `.now`.
     @discardableResult
-    static func start(taskName: String, typeId: String? = nil, clientId: String? = nil) async throws -> RunningShortcutEntry? {
+    static func start(taskName: String, typeId: String? = nil, clientId: String? = nil, intentionId: Int? = nil) async throws -> RunningShortcutEntry? {
         let requestBody = StartTimeEntryRequest(
             taskName: taskName,
             typeId: typeId.flatMap { Int($0) },
             startedAt: Date().apiISOString,
             source: "mobile",
             note: nil,
-            clientId: clientId
+            clientId: clientId,
+            intentionId: intentionId
         )
         do {
             return try await postReturningEntry(url: startURL, body: requestBody)
@@ -1007,7 +1034,8 @@ enum ShortcutAPI {
                 startedAt: Date().apiISOString,
                 source: "mobile",
                 note: nil,
-                clientId: clientId
+                clientId: clientId,
+                intentionId: intentionId
             )
             return try await postReturningEntry(url: startURL, body: fallbackBody)
         }
@@ -1118,6 +1146,8 @@ private struct StartTimeEntryRequest: Encodable {
     /// Idempotency key: the persisted queue-operation id, stable across retries,
     /// so the backend replays the same entry instead of 409-ing a retried start.
     var clientId: String?
+    /// Daily intention the entry was started from, for per-goal time analysis.
+    var intentionId: Int?
 }
 
 private struct ShortcutCategoriesResponse: Decodable {

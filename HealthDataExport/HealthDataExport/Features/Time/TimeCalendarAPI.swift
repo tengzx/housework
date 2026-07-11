@@ -132,6 +132,7 @@ final class TimeCalendarStore: ObservableObject {
             typeId: event.typeId,
             source: event.source,
             note: event.note,
+            goalId: event.goalId,
             isPending: true
         )
         events.append(optimistic)
@@ -702,6 +703,8 @@ struct TimeEventResponse: Decodable {
     var endedAt: Date?
     var source: String?
     var note: String?
+    /// 事件归属的目标/项目（快照 id），用于按目标统计时长。
+    var goalId: Int?
 
     /// 服务端下发的分段颜色：优先使用小类颜色，其次大类颜色。
     var resolvedColor: String? { typeColor ?? categoryColor }
@@ -734,6 +737,8 @@ struct TimeEventResponse: Decodable {
         case end_time
         case source
         case note
+        case goalId
+        case goal_id
     }
 
     init(from decoder: Decoder) throws {
@@ -750,6 +755,7 @@ struct TimeEventResponse: Decodable {
         endedAt = try container.decodeFirstOptionalDate(keys: [.endedAt, .ended_at, .endTime, .end_time])
         source = try container.decodeFirstString(keys: [.source])
         note = try container.decodeFirstString(keys: [.note])
+        goalId = try container.decodeFirstString(keys: [.goalId, .goal_id]).flatMap(Int.init)
     }
 }
 
@@ -760,6 +766,10 @@ private struct TimeEventRequest: Encodable {
     var startedAt: Date
     var endedAt: Date
     var note: String?
+    var goalId: Int?
+    /// PATCH semantics: goalId set → 归属该目标; clearGoal → 移除归属. The local
+    /// event carries the server's goalId, so a nil here really means "no goal".
+    var clearGoal: Bool?
 
     init(event: Calendar2Event) {
         categoryId = event.category
@@ -768,6 +778,8 @@ private struct TimeEventRequest: Encodable {
         startedAt = event.absoluteStartedAt
         endedAt = event.absoluteEndedAt ?? Calendar2Format.date(dayOffset: event.dayOffset, minute: event.end)
         note = event.note
+        goalId = event.goalId
+        clearGoal = event.goalId == nil ? true : nil
     }
 }
 

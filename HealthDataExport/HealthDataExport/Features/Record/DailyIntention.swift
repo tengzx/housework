@@ -82,7 +82,6 @@ final class DailyIntentionStore: ObservableObject {
     var onItemsChanged: (() -> Void)?
 
     private let itemsKey = "dailyIntentions.items"
-    private let dateKey = "dailyIntentions.date"
     private let pendingKey = "dailyIntentions.pendingOps"
     private let remoteIdsKey = "dailyIntentions.remoteIds"
     private let activeIdKey = "dailyIntentions.activeId"
@@ -93,36 +92,62 @@ final class DailyIntentionStore: ObservableObject {
     /// Maps a local item id to its server id once a create lands, so a later
     /// patch/delete can resolve the id even after the item left `items`.
     private var remoteIds: [UUID: Int] = [:]
-    /// The local day the persisted items belong to.
-    private var storedDay: String
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-        self.storedDay = userDefaults.string(forKey: dateKey) ?? Self.todayKey
         self.items = Self.load([DailyIntentionItem].self, key: itemsKey, from: userDefaults) ?? []
         self.pendingOps = Self.load([DailyIntentionOperation].self, key: pendingKey, from: userDefaults) ?? []
         self.remoteIds = Self.load([String: Int].self, key: remoteIdsKey, from: userDefaults)
             .map { Dictionary(uniqueKeysWithValues: $0.compactMap { key, value in UUID(uuidString: key).map { ($0, value) } }) }
             ?? [:]
         self.activeIntentionId = userDefaults.string(forKey: activeIdKey).flatMap(UUID.init(uuidString:))
-        rolloverIfNeeded()
+        // Let queued time-entry starts resolve their intention link at flush
+        // time (ShortcutRecord.swift can't reference this store directly — the
+        // watch target compiles it without this file).
+        ShortcutRecordStore.shared.intentionRemoteIdResolver = { [weak self] localId in
+            self?.remoteId(forLocal: localId)
+        }
         if !pendingOps.isEmpty {
             Task { await flush() }
         }
     }
 
-    /// The running intention pinned first, then the rest of the incomplete ones
-    /// (in user order), completed last (in completion order).
+    /// The backend id for a local intention id, once its create has landed.
+    func remoteId(forLocal id: UUID) -> Int? {
+        items.first(where: { $0.id == id })?.remoteId ?? remoteIds[id]
+    }
+
+    /// The home list: the running intention pinned first, then the rest of the
+    /// incomplete ones (in user order), then the ones completed *today* (in
+    /// completion order). Intentions completed on earlier days stay in `items`
+    /// as goal progress for the board, but drop off the home list.
     var sortedItems: [DailyIntentionItem] {
+        let dayStart = Calendar.current.startOfDay(for: .now)
         let open = items.filter { !$0.isCompleted }.sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
-        let done = items.filter(\.isCompleted).sorted { ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast) }
+        let doneToday = items
+            .filter { ($0.completedAt ?? .distantPast) >= dayStart }
+            .sorted { ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast) }
         let active = open.filter { $0.id == activeIntentionId }
         let rest = open.filter { $0.id != activeIntentionId }
-        return active + rest + done
+        return active + rest + doneToday
+    }
+
+    /// Board grouping: intentions under a goal (nil = 公共), incomplete first
+    /// (user order) then completed (most recent first).
+    func boardItems(goalId: Int?) -> [DailyIntentionItem] {
+        let group = items.filter { item in
+            if let goalId {
+                return item.goalId == goalId
+            }
+            // 公共 also absorbs intentions whose goal no longer exists.
+            return item.goalId == nil || !goals.contains { $0.id == item.goalId }
+        }
+        let open = group.filter { !$0.isCompleted }.sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+        let done = group.filter(\.isCompleted).sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+        return open + done
     }
 
     func add(name: String, goal: RemoteGoal? = nil) {
-        rolloverIfNeeded()
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let item = DailyIntentionItem(
@@ -176,15 +201,15 @@ final class DailyIntentionStore: ObservableObject {
         setCompleted(item, true)
     }
 
-    /// Load the canonical list (all incomplete + completed today) from the
-    /// backend and merge it into local state. Skipped while operations are in
-    /// flight so it never clobbers an optimistic change that hasn't synced.
+    /// Load the canonical list (all incomplete + all completed, for the board)
+    /// from the backend and merge it into local state. Skipped while operations
+    /// are in flight so it never clobbers an optimistic change that hasn't
+    /// synced.
     func refresh() async {
-        rolloverIfNeeded()
         guard pendingOps.isEmpty else { return }
         let remote: [RemoteIntention]
         do {
-            remote = try await DailyIntentionAPI.list(date: Self.todayKey)
+            remote = try await DailyIntentionAPI.list(all: true)
         } catch {
             return
         }
@@ -213,6 +238,27 @@ final class DailyIntentionStore: ObservableObject {
         return goal
     }
 
+    /// Delete a goal/project. Optimistic: the group disappears immediately and
+    /// its intentions move to 公共 (mirroring what the backend does — it
+    /// detaches them, never deletes them).
+    func deleteGoal(_ goal: RemoteGoal) {
+        goals.removeAll { $0.id == goal.id }
+        var changed = false
+        for index in items.indices where items[index].goalId == goal.id {
+            items[index].goalId = nil
+            items[index].goalName = nil
+            items[index].goalKind = nil
+            changed = true
+        }
+        if changed {
+            saveItems()
+        }
+        Task {
+            try? await GoalAPI.delete(id: goal.id)
+            await loadGoals()
+        }
+    }
+
     /// Replace local items with the server list, preserving local ids for items
     /// we already know (matched by `remoteId`) so the active link survives.
     private func merge(_ remote: [RemoteIntention]) {
@@ -234,25 +280,6 @@ final class DailyIntentionStore: ObservableObject {
                 goalName: intention.goalName,
                 goalKind: intention.goalKind
             )
-        }
-        saveItems()
-        if let activeIntentionId, !items.contains(where: { $0.id == activeIntentionId }) {
-            clearActiveLink()
-        }
-    }
-
-    /// Intentions persist until completed; only *completed* ones are day-scoped.
-    /// When the stored day rolls over, prune items finished before today —
-    /// incomplete intentions and the undelivered op queue carry across days.
-    private func rolloverIfNeeded() {
-        let today = Self.todayKey
-        guard storedDay != today else { return }
-        storedDay = today
-        userDefaults.set(today, forKey: dateKey)
-        let dayStart = Calendar.current.startOfDay(for: .now)
-        items.removeAll { item in
-            guard let completedAt = item.completedAt else { return false }
-            return completedAt < dayStart
         }
         saveItems()
         if let activeIntentionId, !items.contains(where: { $0.id == activeIntentionId }) {
@@ -353,7 +380,6 @@ final class DailyIntentionStore: ObservableObject {
 
     private func saveItems() {
         Self.save(items, key: itemsKey, to: userDefaults)
-        userDefaults.set(storedDay, forKey: dateKey)
         onItemsChanged?()
     }
 
@@ -430,9 +456,13 @@ struct RemoteGoal: Decodable, Identifiable, Hashable {
 enum DailyIntentionAPI {
     private static let baseURL = AppEnvironment.apiURL("mobile/daily-intentions")
 
-    static func list(date: String) async throws -> [RemoteIntention] {
+    /// `all` fetches every completed intention (for the board); otherwise only
+    /// the ones completed today come back alongside the incomplete list.
+    static func list(all: Bool = false) async throws -> [RemoteIntention] {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
-        components?.queryItems = [URLQueryItem(name: "date", value: date)]
+        components?.queryItems = all
+            ? [URLQueryItem(name: "all", value: "true")]
+            : [URLQueryItem(name: "date", value: DailyIntentionStore.todayKey)]
         let url = components?.url ?? baseURL
         let response = try await HTTPClient.shared.data(url: url, method: .get)
         return try JSONDecoder().decode(IntentionListEnvelope.self, from: response.data).intentions
@@ -491,6 +521,11 @@ enum GoalAPI {
         let body = CreateGoalRequest(name: name, kind: kind)
         let response = try await HTTPClient.shared.data(url: baseURL, method: .post, body: body)
         return try JSONDecoder().decode(GoalEnvelope.self, from: response.data).goal
+    }
+
+    static func delete(id: Int) async throws {
+        let url = baseURL.appendingPathComponent(String(id))
+        _ = try await HTTPClient.shared.data(url: url, method: .delete)
     }
 }
 
