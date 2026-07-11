@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct LoginView: View {
+    @EnvironmentObject private var localization: LocalizationStore
     @EnvironmentObject private var session: SessionStore
 
     @State private var nickname = ""
@@ -35,7 +36,7 @@ struct LoginView: View {
                             .foregroundStyle(.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    Text("老用户首次登录默认密码为 123456，登录成功后会保存 token。")
+                    Text(localization.text("login.hint"))
                         .font(.system(size: 12))
                         .foregroundStyle(Color(hex: "8A8F9C"))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -51,11 +52,11 @@ struct LoginView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("LIFE OS")
+            Text(localization.text("login.title"))
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .tracking(4)
                 .foregroundStyle(Color(hex: "1A1C20"))
-            Text("登录以同步你的时间与健康数据")
+            Text(localization.text("login.subtitle"))
                 .font(.system(size: 15))
                 .foregroundStyle(Color(hex: "8A8F9C"))
         }
@@ -64,29 +65,30 @@ struct LoginView: View {
 
     private var fields: some View {
         VStack(spacing: 14) {
-            field(title: "昵称", text: $nickname, isSecure: false, field: .nickname)
+            field(titleKey: "login.nickname", text: $nickname, isSecure: false, field: .nickname)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.next)
                 .onSubmit { focusedField = .password }
 
-            field(title: "密码", text: $password, isSecure: true, field: .password)
+            field(titleKey: "login.password", text: $password, isSecure: true, field: .password)
                 .submitLabel(.go)
                 .onSubmit { if canSubmit { submit() } }
         }
     }
 
     @ViewBuilder
-    private func field(title: String, text: Binding<String>, isSecure: Bool, field: Field) -> some View {
+    private func field(titleKey: String, text: Binding<String>, isSecure: Bool, field: Field) -> some View {
+        let title = localization.text(titleKey)
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(Color(hex: "9A9AA2"))
             Group {
                 if isSecure {
-                    SecureField("请输入\(title)", text: text)
+                    SecureField(localization.text("login.placeholder", title), text: text)
                 } else {
-                    TextField("请输入\(title)", text: text)
+                    TextField(localization.text("login.placeholder", title), text: text)
                 }
             }
             .font(.system(size: 16, weight: .medium))
@@ -107,7 +109,7 @@ struct LoginView: View {
                 if isSubmitting {
                     ProgressView().tint(.white)
                 }
-                Text(isSubmitting ? "登录中…" : "登录")
+                Text(isSubmitting ? localization.text("login.submitting") : localization.text("login.submit"))
                     .font(.system(size: 16, weight: .bold))
             }
             .foregroundStyle(.white)

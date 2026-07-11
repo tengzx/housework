@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct HealthDataExportApp: App {
     @StateObject private var dependencies = AppDependencies()
+    @StateObject private var localization = LocalizationStore()
     @StateObject private var session = SessionStore()
 
     var body: some Scene {
@@ -23,6 +24,8 @@ struct HealthDataExportApp: App {
                 }
             }
             .environmentObject(session)
+            .environmentObject(localization)
+            .environment(\.locale, localization.locale)
             .animation(.easeInOut(duration: 0.25), value: session.isAuthenticated)
         }
     }

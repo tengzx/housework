@@ -60,6 +60,7 @@ final class ActiveWorkoutStore: ObservableObject {
 }
 
 struct ContentView: View {
+    @EnvironmentObject private var localization: LocalizationStore
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var dependencies: AppDependencies
     @EnvironmentObject private var fitnessSessionEvents: FitnessSessionEventStore
@@ -74,14 +75,14 @@ struct ContentView: View {
             RecordWorkspaceView()
                 .tabBarMinimizeBehavior(.onScrollDown)
                 .tabItem {
-                    Label("记录", systemImage: "list.bullet.rectangle.portrait.fill")
+                    Label(localization.text("tab.record"), systemImage: "list.bullet.rectangle.portrait.fill")
                 }
                 .tag(0)
 
             FitnessTemplateListView()
                 .tabBarMinimizeBehavior(.onScrollDown)
                 .tabItem {
-                    Label("健身", systemImage: "figure.strengthtraining.traditional")
+                    Label(localization.text("tab.fitness"), systemImage: "figure.strengthtraining.traditional")
                 }
                 .tag(1)
 
@@ -91,14 +92,14 @@ struct ContentView: View {
             )
             .tabBarMinimizeBehavior(.onScrollDown)
                 .tabItem {
-                    Label("数据", systemImage: "house")
+                    Label(localization.text("tab.data"), systemImage: "house")
                 }
                 .tag(2)
 
             ProfileTabView()
                 .tabBarMinimizeBehavior(.onScrollDown)
                 .tabItem {
-                    Label("我的", systemImage: "person")
+                    Label(localization.text("tab.profile"), systemImage: "person")
                 }
                 .tag(3)
         }
@@ -366,35 +367,47 @@ extension View {
 }
 
 private struct ProfileTabView: View {
+    @EnvironmentObject private var localization: LocalizationStore
     @EnvironmentObject private var session: SessionStore
 
     var body: some View {
         NavigationStack {
             List {
                 if let user = session.session {
-                    Section("账户") {
-                        LabeledContent("昵称", value: user.nickname)
-                        LabeledContent("用户 ID", value: String(user.userId))
+                    Section(localization.text("profile.section.account")) {
+                        LabeledContent(localization.text("profile.nickname"), value: user.nickname)
+                        LabeledContent(localization.text("profile.user_id"), value: String(user.userId))
                         if let unit = user.unitSystem, !unit.isEmpty {
-                            LabeledContent("单位", value: unit)
+                            LabeledContent(localization.text("profile.unit_system"), value: unit)
                         }
                     }
+                }
+                Section(localization.text("profile.section.language")) {
+                    Picker(localization.text("profile.language.label"), selection: $localization.language) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(localization.text(language.titleKey)).tag(language)
+                        }
+                    }
+                    Text(localization.text("profile.language.help"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 Section {
                     Button(role: .destructive) {
                         Haptics.tap()
                         session.logout()
                     } label: {
-                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                        Label(localization.text("profile.logout"), systemImage: "rectangle.portrait.and.arrow.right")
                     }
                 }
             }
-            .navigationTitle("我的")
+            .navigationTitle(localization.text("profile.title"))
         }
     }
 }
 
 struct HealthExportView: View {
+    @EnvironmentObject private var localization: LocalizationStore
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: HealthExportViewModel
     @ObservedObject private var observerSyncManager: HealthObserverSyncManager
@@ -415,7 +428,7 @@ struct HealthExportView: View {
                 shortcutsSection
                 observerSection
             }
-            .navigationTitle("Health Export")
+            .navigationTitle(localization.text("health_export.title"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -423,7 +436,7 @@ struct HealthExportView: View {
                         let config = viewModel.store.addConfiguration()
                         viewModel.select(config)
                     } label: {
-                        Label("新增接口", systemImage: "plus")
+                        Label(localization.text("health_export.add_config"), systemImage: "plus")
                     }
                 }
             }
@@ -446,8 +459,8 @@ struct HealthExportView: View {
     }
 
     private var configurationSection: some View {
-        Section("接口配置") {
-            Picker("当前接口", selection: Binding(
+        Section(localization.text("health_export.section.configuration")) {
+            Picker(localization.text("health_export.current_config"), selection: Binding(
                 get: { viewModel.selectedConfigurationID ?? viewModel.draft.id },
                 set: { viewModel.selectedConfigurationID = $0 }
             )) {
@@ -456,14 +469,17 @@ struct HealthExportView: View {
                 }
             }
 
-            TextField("配置名称", text: $viewModel.draft.name)
+            TextField(localization.text("health_export.config_name"), text: $viewModel.draft.name)
                 .textInputAutocapitalization(.never)
 
             Stepper(value: $viewModel.draft.lookbackHours, in: 1...168) {
-                LabeledContent("发送窗口", value: "\(viewModel.draft.lookbackHours) 小时")
+                LabeledContent(
+                    localization.text("health_export.send_window"),
+                    value: localization.text("health_export.hours", viewModel.draft.lookbackHours)
+                )
             }
 
-            Toggle("包含最近样本明细", isOn: $viewModel.draft.includeSamples)
+            Toggle(localization.text("health_export.include_samples"), isOn: $viewModel.draft.includeSamples)
 
             Button(role: .destructive) {
                 Haptics.tap()
@@ -471,27 +487,27 @@ struct HealthExportView: View {
                 viewModel.store.delete(removed)
                 viewModel.select(viewModel.store.configurations.first ?? viewModel.store.addConfiguration())
             } label: {
-                Label("删除当前接口", systemImage: "trash")
+                Label(localization.text("health_export.delete_config"), systemImage: "trash")
             }
             .disabled(viewModel.store.configurations.count <= 1)
         }
     }
 
     private var endpointSection: some View {
-        Section("接收地址") {
+        Section(localization.text("health_export.section.endpoint")) {
             TextField(AppEnvironment.defaultHealthIngestURL, text: $viewModel.draft.endpointURL, axis: .vertical)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
 
-            SecureField("Bearer Token，可选", text: $viewModel.draft.bearerToken)
+            SecureField(localization.text("health_export.bearer_token_optional"), text: $viewModel.draft.bearerToken)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
         }
     }
 
     private var metricsSection: some View {
-        Section("健康信息") {
+        Section(localization.text("health_export.section.metrics")) {
             ForEach(MetricPriority.allCases) { priority in
                 let metrics = HealthMetric.allCases.filter { $0.priority == priority }
                 DisclosureGroup(priority.rawValue) {
@@ -516,12 +532,15 @@ struct HealthExportView: View {
     }
 
     private var sendSection: some View {
-        Section("发送") {
+        Section(localization.text("health_export.section.send")) {
             Button {
                 Haptics.tap()
                 Task { await viewModel.generatePreview() }
             } label: {
-                Label(viewModel.isGeneratingPreview ? "生成中" : "生成数据预览", systemImage: "doc.text.magnifyingglass")
+                Label(
+                    viewModel.isGeneratingPreview ? localization.text("health_export.generating_preview") : localization.text("health_export.generate_preview"),
+                    systemImage: "doc.text.magnifyingglass"
+                )
             }
             .disabled(viewModel.isGeneratingPreview || viewModel.isSending || !viewModel.draft.isReadyToPreview)
 
@@ -529,18 +548,21 @@ struct HealthExportView: View {
                 Haptics.tap()
                 Task { await viewModel.sendNow() }
             } label: {
-                Label(viewModel.isSending ? "发送中" : "发送当前预览", systemImage: "paperplane.fill")
+                Label(
+                    viewModel.isSending ? localization.text("health_export.sending") : localization.text("health_export.send_preview"),
+                    systemImage: "paperplane.fill"
+                )
             }
             .disabled(viewModel.isSending || viewModel.previewPayload == nil || !viewModel.draft.isReadyToSend)
 
             if let lastSentAt = viewModel.draft.lastSentAt {
-                LabeledContent("上次发送", value: lastSentAt.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent(localization.text("health_export.last_sent"), value: lastSentAt.formatted(date: .abbreviated, time: .shortened))
             }
 
             if let lastStatus = viewModel.draft.lastStatus, !lastStatus.isEmpty {
                 Text(lastStatus)
                     .font(.footnote)
-                    .foregroundStyle(lastStatus.contains("成功") ? .green : .red)
+                    .foregroundStyle(lastStatus.contains("成功") || lastStatus.localizedCaseInsensitiveContains("success") ? .green : .red)
             }
 
             if !viewModel.statusMessage.isEmpty {
@@ -550,7 +572,7 @@ struct HealthExportView: View {
             }
 
             if viewModel.previewPayload != nil && !viewModel.draft.isReadyToSend {
-                Text("预览已生成。填写有效的 http/https 接口地址后才能发送。")
+                Text(localization.text("health_export.preview_requires_endpoint"))
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
@@ -558,9 +580,9 @@ struct HealthExportView: View {
     }
 
     private var previewSection: some View {
-        Section("数据预览") {
+        Section(localization.text("health_export.section.preview")) {
             if viewModel.previewJSON.isEmpty {
-                Text("点击\u{201C}生成数据预览\u{201D}后，这里会显示本次将发送到接口的 JSON。")
+                Text(localization.text("health_export.preview_empty"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -579,17 +601,17 @@ struct HealthExportView: View {
     }
 
     private var shortcutsSection: some View {
-        Section("快捷指令") {
-            Label("在快捷指令 App 中添加\u{201C}发送健康数据\u{201D}动作，然后选择这里保存的接口配置。", systemImage: "timer")
+        Section(localization.text("health_export.section.shortcuts")) {
+            Label(localization.text("health_export.shortcuts_hint"), systemImage: "timer")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
     }
 
     private var observerSection: some View {
-        Section("自动同步") {
+        Section(localization.text("health_export.section.observer")) {
             VStack(alignment: .leading, spacing: 14) {
-                Toggle("启用 HealthKit Observer 自动上传", isOn: Binding(
+                Toggle(localization.text("health_export.observer_toggle"), isOn: Binding(
                     get: { observerSyncManager.isEnabled },
                     set: { observerSyncManager.setEnabled($0) }
                 ))
@@ -602,7 +624,7 @@ struct HealthExportView: View {
                         .background(Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("HealthKit Observer 已接入")
+                        Text(localization.text("health_export.observer_connected"))
                             .font(.headline)
                         Text(observerSyncManager.statusText)
                             .font(.footnote)
@@ -611,21 +633,21 @@ struct HealthExportView: View {
                 }
 
                 if let lastSyncAt = observerSyncManager.lastSyncAt {
-                    LabeledContent("最近一次自动上传", value: lastSyncAt.formatted(date: .abbreviated, time: .shortened))
+                    LabeledContent(localization.text("health_export.observer_last_sync"), value: lastSyncAt.formatted(date: .abbreviated, time: .shortened))
                 } else {
-                    Text("最近一次自动上传：暂无")
+                    Text(localization.text("health_export.observer_no_sync"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    ObserverStepRow(index: 1, title: "Watch 记录心率", detail: "手表先写入 HealthKit。")
-                    ObserverStepRow(index: 2, title: "同步到 iPhone", detail: "系统把变化送到手机。")
-                    ObserverStepRow(index: 3, title: "Observer 被触发", detail: "HKObserverQuery 收到更新事件。")
-                    ObserverStepRow(index: 4, title: "App 自动上传", detail: "直接推送到你的服务端。")
+                    ObserverStepRow(index: 1, title: localization.text("health_export.observer_step_1_title"), detail: localization.text("health_export.observer_step_1_detail"))
+                    ObserverStepRow(index: 2, title: localization.text("health_export.observer_step_2_title"), detail: localization.text("health_export.observer_step_2_detail"))
+                    ObserverStepRow(index: 3, title: localization.text("health_export.observer_step_3_title"), detail: localization.text("health_export.observer_step_3_detail"))
+                    ObserverStepRow(index: 4, title: localization.text("health_export.observer_step_4_title"), detail: localization.text("health_export.observer_step_4_detail"))
                 }
 
-                Text("延迟通常是几秒到几分钟。配置好接口后，健康数据更新会自动上传，不需要手动点发送。")
+                Text(localization.text("health_export.observer_hint"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -633,12 +655,12 @@ struct HealthExportView: View {
                     Haptics.tap()
                     Task { await observerSyncManager.refreshObservers(force: true) }
                 } label: {
-                    Label("重新注册 Observer", systemImage: "arrow.clockwise")
+                    Label(localization.text("health_export.refresh_observer"), systemImage: "arrow.clockwise")
                 }
 
                 if !observerSyncManager.logs.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("运行日志")
+                        Text(localization.text("health_export.logs"))
                             .font(.subheadline.weight(.semibold))
 
                         ForEach(observerSyncManager.logs.prefix(5)) { log in

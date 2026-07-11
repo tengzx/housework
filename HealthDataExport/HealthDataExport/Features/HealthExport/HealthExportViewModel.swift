@@ -62,7 +62,7 @@ final class HealthExportViewModel: ObservableObject {
         statusMessage = ""
         do {
             let exporter = HealthKitExporter()
-            statusMessage = "正在请求 HealthKit 权限并生成 JSON..."
+            statusMessage = L10n.tr("health_export.status.requesting")
             try await exporter.requestAuthorization(for: draft)
             let payload = try await exporter.buildPayload(for: draft)
             let data = try payload.jsonData
@@ -72,7 +72,7 @@ final class HealthExportViewModel: ObservableObject {
             previewPayload = payload
             previewSummary = previewSummaryText(for: payload)
             previewJSON = json
-            statusMessage = "预览已生成，确认无误后再发送。"
+            statusMessage = L10n.tr("health_export.status.preview_ready")
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             statusMessage = message
@@ -82,7 +82,7 @@ final class HealthExportViewModel: ObservableObject {
 
     func sendNow() async {
         guard let previewPayload else {
-            statusMessage = "请先生成数据预览。"
+            statusMessage = L10n.tr("health_export.status.generate_first")
             return
         }
         isSending = true
@@ -103,8 +103,8 @@ final class HealthExportViewModel: ObservableObject {
 
     private func previewSummaryText(for payload: HealthExportPayload) -> String {
         if payload.itemCount == 0 {
-            return "预览类型：健康指标，0 条 metrics。当前发送窗口内没有可发送指标。"
+            return L10n.tr("health_export.preview_summary_empty")
         }
-        return "预览类型：健康指标，\(payload.itemCount) 条 metrics。"
+        return L10n.tr("health_export.preview_summary_count", payload.itemCount)
     }
 }

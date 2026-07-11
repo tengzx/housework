@@ -28,10 +28,10 @@ enum AuthAPI {
 
     private static func message(from data: Data) -> String {
         if let error = try? JSONDecoder().decode(AuthErrorResponse.self, from: data) {
-            return error.message ?? error.error ?? "登录失败"
+            return error.message ?? error.error ?? L10n.tr("auth.login_failed")
         }
         let raw = String(data: data, encoding: .utf8) ?? ""
-        return raw.isEmpty ? "登录失败" : raw
+        return raw.isEmpty ? L10n.tr("auth.login_failed") : raw
     }
 }
 

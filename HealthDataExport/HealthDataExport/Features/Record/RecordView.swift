@@ -360,8 +360,9 @@ struct RecordView: View {
                 .buttonStyle(PressButtonStyle())
             }
 
-            let all = intentionStore.sortedItems
-            if all.isEmpty {
+            let quickStartItems = intentionStore.sortedItems.filter { !$0.isCompleted }
+            let totalCount = intentionStore.sortedItems.count
+            if quickStartItems.isEmpty {
                 Text("列出想推进的事，可挂到目标或项目上，点开始就计时")
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(Design.muted.opacity(0.85))
@@ -375,18 +376,18 @@ struct RecordView: View {
                     )
             } else {
                 VStack(spacing: 8) {
-                    ForEach(Array(all.prefix(Self.collapsedIntentionCount))) { item in
+                    ForEach(Array(quickStartItems.prefix(Self.collapsedIntentionCount))) { item in
                         intentionRow(item)
                     }
                 }
 
-                if all.count > Self.collapsedIntentionCount {
+                if totalCount > Self.collapsedIntentionCount {
                     Button {
                         isInputFocused = false
                         isAddingIntention = true
                     } label: {
                         HStack(spacing: 5) {
-                            Text("查看全部 (\(all.count))")
+                            Text("查看全部 (\(totalCount))")
                                 .font(.system(size: 13, weight: .semibold))
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 10, weight: .semibold))

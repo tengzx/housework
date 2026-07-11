@@ -14,19 +14,19 @@ enum ExportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .healthDataUnavailable:
-            "当前设备不支持 HealthKit，需在 iPhone 真机上运行。"
+            L10n.tr("export.health_data_unavailable")
         case .invalidEndpoint:
-            "接口地址无效。"
+            L10n.tr("export.invalid_endpoint")
         case .noMetricsSelected:
-            "至少需要选择一个健康指标。"
+            L10n.tr("export.no_metrics_selected")
         case let .httpFailure(code, body):
-            "接口返回 HTTP \(code)：\(body)"
+            L10n.tr("export.http_failure", code, body)
         case .invalidResponse:
-            "接口没有返回有效 HTTP 响应。"
+            L10n.tr("export.invalid_response")
         case .invalidPreview:
-            "预览 JSON 生成失败。"
+            L10n.tr("export.invalid_preview")
         case .protectedHealthDataUnavailable:
-            "手机锁屏时受保护的健康数据不可读取，请解锁后再运行快捷指令。"
+            L10n.tr("export.protected_data_unavailable")
         }
     }
 }
@@ -169,7 +169,7 @@ final class HealthKitExporter {
             }
         }
 
-        return "发送成功，HTTP \(response.statusCode)，\(payload.itemCount) 条数据"
+        return L10n.tr("health_export.send_success", response.statusCode, payload.itemCount)
     }
 
     // MARK: - Metric dispatch
