@@ -445,18 +445,19 @@ struct RecordView: View {
 
             Spacer(minLength: 0)
 
-            // Duplicate the intention (works on completed rows too).
-            Button {
-                isInputFocused = false
-                intentionStore.duplicate(item)
-            } label: {
-                Image(systemName: "doc.on.doc")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Design.muted)
-                    .frame(width: 32, height: 32)
-                    .background(Design.surface2, in: Circle())
+            if item.isCompleted {
+                Button {
+                    isInputFocused = false
+                    intentionStore.duplicate(item)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Design.muted)
+                        .frame(width: 32, height: 32)
+                        .background(Design.surface2, in: Circle())
+                }
+                .buttonStyle(PressButtonStyle())
             }
-            .buttonStyle(PressButtonStyle())
 
             if item.isCompleted {
                 Text("已完成")
@@ -495,10 +496,12 @@ struct RecordView: View {
         )
         .opacity(item.isCompleted ? 0.65 : 1)
         .contextMenu {
-            Button {
-                intentionStore.duplicate(item)
-            } label: {
-                Label("复制", systemImage: "doc.on.doc")
+            if item.isCompleted {
+                Button {
+                    intentionStore.duplicate(item)
+                } label: {
+                    Label("复制", systemImage: "doc.on.doc")
+                }
             }
             Button {
                 renameIntentionText = item.name
@@ -890,6 +893,9 @@ private struct IntentionBoardSheet: View {
         let doneCount = groupItems.filter(\.isCompleted).count
         let isCollapsed = collapsedGroups.contains(goalId)
         let isDraftingHere = isDrafting && draftGoalId == goalId
+        let trackedLabel = goal.flatMap { goal in
+            goal.trackedSeconds.map(formatTrackedTime)
+        }
 
         return VStack(spacing: 8) {
             HStack(spacing: 10) {
@@ -921,6 +927,12 @@ private struct IntentionBoardSheet: View {
                             Text("\(doneCount)/\(groupItems.count)")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(Color(hex: "9A9AA2"))
+                        }
+
+                        if let trackedLabel {
+                            Text(trackedLabel)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Calendar2Style.accent.opacity(0.82))
                         }
 
                         Spacer(minLength: 0)
@@ -1006,18 +1018,18 @@ private struct IntentionBoardSheet: View {
 
             Spacer(minLength: 0)
 
-            // Duplicate: same name/goal/repeating, fresh and uncompleted — works
-            // on completed rows too, so a finished intention can be redone.
-            Button {
-                store.duplicate(item)
-            } label: {
-                Image(systemName: "doc.on.doc")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(hex: "9A9AA2"))
-                    .frame(width: 30, height: 30)
-                    .background(Color(hex: "EFEFF2"), in: Circle())
+            if item.isCompleted {
+                Button {
+                    store.duplicate(item)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "9A9AA2"))
+                        .frame(width: 30, height: 30)
+                        .background(Color(hex: "EFEFF2"), in: Circle())
+                }
+                .buttonStyle(HapticButtonStyle())
             }
-            .buttonStyle(HapticButtonStyle())
 
             if isRunning {
                 HStack(spacing: 6) {
@@ -1054,10 +1066,12 @@ private struct IntentionBoardSheet: View {
         )
         .opacity(item.isCompleted ? 0.62 : 1)
         .contextMenu {
-            Button {
-                store.duplicate(item)
-            } label: {
-                Label("复制", systemImage: "doc.on.doc")
+            if item.isCompleted {
+                Button {
+                    store.duplicate(item)
+                } label: {
+                    Label("复制", systemImage: "doc.on.doc")
+                }
             }
             Button {
                 renameText = item.name
@@ -1145,6 +1159,16 @@ private struct IntentionBoardSheet: View {
         draftRepeating = false
         isDrafting = false
         isDraftFocused = false
+    }
+
+    private func formatTrackedTime(_ seconds: Int) -> String {
+        guard seconds > 0 else { return "0分" }
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        if hours > 0 {
+            return minutes > 0 ? "\(hours)小时\(minutes)分" : "\(hours)小时"
+        }
+        return "\(max(minutes, 1))分"
     }
 
     // MARK: - Inline goal creation

@@ -547,6 +547,7 @@ struct RemoteGoal: Decodable, Identifiable, Hashable {
     var sortOrder: Int
     var totalIntentions: Int
     var completedIntentions: Int
+    var trackedSeconds: Int?
 
     var isProject: Bool { kind == "project" }
 }
