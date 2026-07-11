@@ -11,7 +11,9 @@ struct RecordView: View {
     @State private var editingTask: ShortcutTask?
     @State private var statusMessage = ""
     @State private var showCalendar = false
+    @State private var showIdealDay = false
     @State private var showDashboard = false
+    @ObservedObject private var idealDayStore = IdealDayStore.shared
     @FocusState private var isInputFocused: Bool
 
     private let columns = [
@@ -78,12 +80,17 @@ struct RecordView: View {
         .sheet(isPresented: $showCalendar) {
             CalendarTrackerView2(store: calendarStore)
         }
+        .sheet(isPresented: $showIdealDay) {
+            IdealDayView(store: idealDayStore)
+        }
         .sheet(isPresented: $showDashboard) {
             TimeDashboardView(viewModel: dashboardVM)
         }
         .task {
             await refreshRunningSession()
             await store.refreshTasks()
+            await idealDayStore.load()
+            await IdealDayReminderScheduler.reschedule(profile: idealDayStore.profile)
         }
     }
 
@@ -99,6 +106,10 @@ struct RecordView: View {
                 headerIconButton(symbol: "calendar") {
                     isInputFocused = false
                     showCalendar = true
+                }
+                headerIconButton(symbol: "sun.max.fill") {
+                    isInputFocused = false
+                    showIdealDay = true
                 }
                 headerIconButton(symbol: "chart.bar.fill") {
                     isInputFocused = false
