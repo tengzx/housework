@@ -35,10 +35,11 @@ enum IdealDayKind: String, CaseIterable, Codable, Identifiable {
     }
     var color: Color {
         switch self {
-        case .proactive: Color(hex: "596AF0")
-        case .obligation: Color(hex: "FFB51B")
-        case .recovery: Color(hex: "58C99A")
-        case .distraction: Color(hex: "FF6245")
+        // Keep the same semantic palette as the Analysis dashboard.
+        case .proactive: Color(hex: "E8743B")
+        case .obligation: Color(hex: "6B7A99")
+        case .recovery: Color(hex: "3FA78A")
+        case .distraction: Color(hex: "C9485B")
         }
     }
 }
@@ -69,10 +70,20 @@ struct IdealDayProfile: Codable, Equatable {
         allocations.first(where: { $0.kind == kind })?.targetMinutes ?? 0
     }
     var allocatedMinutes: Int { allocations.reduce(0) { $0 + $1.targetMinutes } }
+    var flexibleMinutes: Int { max(0, 1440 - allocatedMinutes) }
+
+    mutating func normalize() {
+        var remaining = 1440
+        allocations = IdealDayKind.allCases.map { kind in
+            let value = min(max(0, minutes(for: kind)), remaining)
+            remaining -= value
+            return IdealDayAllocation(kind: kind, targetMinutes: value)
+        }
+    }
 }
 
 private struct IdealDayEnvelope: Codable { let profile: IdealDayProfile }
-private struct IdealDayComparison: Decodable {
+struct IdealDayComparison: Decodable {
     struct Deviation: Decodable { let kind: IdealDayKind; let targetMinutes: Int; let actualMinutes: Int; let status: String }
     let deviations: [Deviation]
 }
@@ -114,6 +125,7 @@ final class IdealDayStore: ObservableObject {
     @Published var profile: IdealDayProfile
     @Published var statusMessage = ""
     @Published var isSaving = false
+    @Published private(set) var todayActualMinutes: [IdealDayKind: Int] = [:]
 
     private let cacheKey = "ideal-day.profile.v1"
     private init() {
@@ -123,35 +135,44 @@ final class IdealDayStore: ObservableObject {
         } else {
             profile = .defaultProfile
         }
+        profile.normalize()
     }
 
     func load() async {
         do {
             profile = try await IdealDayAPI.profile()
+            profile.normalize()
             cache()
         } catch {
             // Offline-first: the editor remains useful before the backend is upgraded.
             statusMessage = "当前使用本机保存的理想配置"
         }
-        await notifyIfExceeded()
+        await loadTodayComparison()
     }
 
-    private func notifyIfExceeded() async {
-        guard profile.remindersEnabled,
-              let exceeded = try? await IdealDayAPI.comparison().filter({ $0.status == "EXCEEDED" }),
-              !exceeded.isEmpty else { return }
-        await IdealDayReminderScheduler.presentExceeded(exceeded)
+    func loadTodayComparison() async {
+        guard let deviations = try? await IdealDayAPI.comparison() else { return }
+        todayActualMinutes = Dictionary(uniqueKeysWithValues: deviations.map { ($0.kind, $0.actualMinutes) })
+        guard profile.remindersEnabled else { return }
+        let exceeded = deviations.filter { $0.status == "EXCEEDED" }
+        if !exceeded.isEmpty {
+            await IdealDayReminderScheduler.presentExceeded(exceeded)
+        }
     }
 
     func save(_ value: IdealDayProfile) async -> Bool {
-        profile = value
+        var normalized = value
+        normalized.normalize()
+        profile = normalized
         cache()
         isSaving = true
         defer { isSaving = false }
         do {
-            profile = try await IdealDayAPI.save(value)
+            profile = try await IdealDayAPI.save(normalized)
+            profile.normalize()
             cache()
             await IdealDayReminderScheduler.reschedule(profile: profile)
+            await loadTodayComparison()
             statusMessage = "已保存"
             return true
         } catch {
@@ -208,6 +229,9 @@ struct IdealDayView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var store: IdealDayStore
     @State private var draft: IdealDayProfile
+    @State private var editingKind: IdealDayKind?
+    @State private var allocationError = ""
+    @State private var showAllocationError = false
 
     init(store: IdealDayStore) {
         self.store = store
@@ -221,6 +245,7 @@ struct IdealDayView: View {
                     allocationRing.frame(width: 230, height: 230).padding(.top, 10)
                     allocationCard
                     flexibleCard
+                    actualTodayCard
                     reminderCard
                     Text("💡 理想一天是你的方向盘。系统会把实际记录与其对比，超出目标及时提醒，并在中午 12 点、晚上 6 点检查不足。")
                         .font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(6)
@@ -239,16 +264,32 @@ struct IdealDayView: View {
                     }.disabled(store.isSaving || draft.allocatedMinutes > 1440)
                 }
             }
+            .sheet(item: $editingKind) { kind in
+                ManualTimeEntrySheet(
+                    kind: kind,
+                    initialMinutes: draft.minutes(for: kind),
+                    maximumMinutes: draft.minutes(for: kind) + draft.flexibleMinutes
+                ) { requestedMinutes in
+                    applyManualEntry(requestedMinutes, for: kind)
+                }
+                .presentationDetents([.height(330)])
+                .presentationDragIndicator(.visible)
+            }
+            .alert("无法分配", isPresented: $showAllocationError) {
+                Button("知道了", role: .cancel) {}
+            } message: {
+                Text(allocationError)
+            }
         }
     }
 
     private var allocationRing: some View {
         ZStack {
-            ForEach(Array(IdealDayKind.allCases.enumerated()), id: \.element) { index, kind in
-                let start = Double(draft.allocations.prefix(index).reduce(0) { $0 + $1.targetMinutes }) / 1440
-                let end = start + Double(draft.minutes(for: kind)) / 1440
-                Circle().trim(from: start + 0.006, to: max(start + 0.006, end - 0.006))
-                    .stroke(kind.color, style: StrokeStyle(lineWidth: 28, lineCap: .round))
+            Circle()
+                .stroke(flexibleColor.opacity(0.22), lineWidth: 28)
+            ForEach(ringSegments) { segment in
+                Circle().trim(from: segment.start + ringGap, to: max(segment.start + ringGap, segment.end - ringGap))
+                    .stroke(segment.color, style: StrokeStyle(lineWidth: 28, lineCap: .butt))
                     .rotationEffect(.degrees(-90))
             }
             VStack(spacing: 3) {
@@ -270,8 +311,23 @@ struct IdealDayView: View {
                             Text(kind.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer()
-                        Text(hoursText(draft.minutes(for: kind))).font(.system(size: 16, weight: .semibold)).monospacedDigit()
+                        Button {
+                            editingKind = kind
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(hoursText(draft.minutes(for: kind)))
+                                Image(systemName: "pencil").font(.caption2)
+                            }
+                            .font(.system(size: 16, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(kind.color)
+                        }
+                        .buttonStyle(.plain)
                     }
+                    // All four sliders use the same fixed 24-hour scale. Their
+                    // visual positions therefore stay independent when another
+                    // category changes; the setter below enforces the remaining
+                    // flexible-time budget.
                     Slider(value: binding(for: kind), in: 0...1440, step: 30).tint(kind.color)
                 }
             }
@@ -281,11 +337,11 @@ struct IdealDayView: View {
 
     private var flexibleCard: some View {
         HStack {
-            Image(systemName: "hourglass").foregroundStyle(Color(hex: "6674E8"))
+            Image(systemName: "hourglass").foregroundStyle(flexibleColor)
             VStack(alignment: .leading) { Text("弹性时间").font(.headline); Text("未规划的时间，可自由分配").font(.caption).foregroundStyle(.secondary) }
             Spacer()
-            Text(hoursText(max(0, 1440 - draft.allocatedMinutes))).foregroundStyle(Color(hex: "6674E8")).font(.title3).monospacedDigit()
-        }.padding(18).background(Color(hex: "EEF1FF"), in: RoundedRectangle(cornerRadius: 20))
+            Text(hoursText(draft.flexibleMinutes)).foregroundStyle(flexibleColor).font(.title3).monospacedDigit()
+        }.padding(18).background(flexibleColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 20))
     }
 
     private var reminderCard: some View {
@@ -296,16 +352,212 @@ struct IdealDayView: View {
         }.padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
     }
 
+    private var actualTodayCard: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("今日实际").font(.headline)
+                    Text("根据时间记录与手机使用汇总").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    Task { await store.loadTodayComparison() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+
+            ForEach(IdealDayKind.allCases) { kind in
+                let actual = store.todayActualMinutes[kind] ?? 0
+                let target = draft.minutes(for: kind)
+                VStack(spacing: 9) {
+                    HStack {
+                        Label(kind.title, systemImage: kind.symbol)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(kind.color)
+                        Spacer()
+                        Text(hoursAndMinutesText(actual))
+                            .font(.system(size: 15, weight: .semibold))
+                            .monospacedDigit()
+                        Text(deviationText(actual: actual, target: target))
+                            .font(.caption)
+                            .foregroundStyle(deviationColor(actual: actual, target: target, kind: kind))
+                    }
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.secondary.opacity(0.12))
+                            Capsule().fill(kind.color)
+                                .frame(width: proxy.size.width * min(1, Double(actual) / 1440))
+                        }
+                    }
+                    .frame(height: 7)
+                    HStack {
+                        Text("0h")
+                        Spacer()
+                        Text("占全天 \(Int((Double(actual) / 1440 * 100).rounded()))%")
+                        Spacer()
+                        Text("24h")
+                    }
+                    .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(18)
+        .background(.white, in: RoundedRectangle(cornerRadius: 24))
+    }
+
     private func binding(for kind: IdealDayKind) -> Binding<Double> {
         Binding {
             Double(draft.minutes(for: kind))
         } set: { value in
             guard let index = draft.allocations.firstIndex(where: { $0.kind == kind }) else { return }
-            draft.allocations[index].targetMinutes = Int(value)
+            let otherMinutes = draft.allocatedMinutes - draft.allocations[index].targetMinutes
+            // The selected category may only consume the day's remaining budget.
+            // This invariant keeps total allocated + flexible time exactly 24 h.
+            draft.allocations[index].targetMinutes = min(Int(value), 1440 - otherMinutes)
         }
+    }
+
+    private var flexibleColor: Color { Color(hex: "C8CFDD") }
+    private var ringGap: Double { 0.003 }
+
+    private struct RingSegment: Identifiable {
+        let id: String
+        let start: Double
+        let end: Double
+        let color: Color
+    }
+
+    private var ringSegments: [RingSegment] {
+        var cursor = 0.0
+        var result = IdealDayKind.allCases.compactMap { kind -> RingSegment? in
+            let share = Double(draft.minutes(for: kind)) / 1440
+            defer { cursor += share }
+            guard share > 0 else { return nil }
+            return RingSegment(id: kind.rawValue, start: cursor, end: cursor + share, color: kind.color)
+        }
+        let flexibleShare = Double(draft.flexibleMinutes) / 1440
+        if flexibleShare > 0 {
+            result.append(RingSegment(id: "FLEXIBLE", start: cursor, end: 1, color: flexibleColor))
+        }
+        return result
     }
 
     private func hoursText(_ minutes: Int) -> String {
         minutes % 60 == 0 ? "\(minutes / 60)h" : String(format: "%.1fh", Double(minutes) / 60)
+    }
+
+    private func hoursAndMinutesText(_ minutes: Int) -> String {
+        "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    private func deviationText(actual: Int, target: Int) -> String {
+        let delta = actual - target
+        if delta == 0 { return "达标" }
+        return delta > 0 ? "超出 \(hoursAndMinutesText(delta))" : "还差 \(hoursAndMinutesText(-delta))"
+    }
+
+    private func deviationColor(actual: Int, target: Int, kind: IdealDayKind) -> Color {
+        if actual == target { return Color(hex: "3FA78A") }
+        if kind == .distraction { return actual > target ? Color(hex: "C9485B") : .secondary }
+        return actual > target ? .secondary : Color(hex: "C9485B")
+    }
+
+    private func applyManualEntry(_ requestedMinutes: Int, for kind: IdealDayKind) {
+        guard requestedMinutes <= 1440 else {
+            presentAllocationError("单个分类不能超过 24 小时。")
+            return
+        }
+        let currentMinutes = draft.minutes(for: kind)
+        let availableMinutes = currentMinutes + draft.flexibleMinutes
+        guard requestedMinutes <= availableMinutes else {
+            presentAllocationError("弹性时间不足，无法分配。请先减少其他分类的时间。")
+            return
+        }
+        guard let index = draft.allocations.firstIndex(where: { $0.kind == kind }) else { return }
+        draft.allocations[index].targetMinutes = requestedMinutes
+    }
+
+    private func presentAllocationError(_ message: String) {
+        allocationError = message
+        // Present after the input alert has finished dismissing.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            showAllocationError = true
+        }
+    }
+}
+
+private struct ManualTimeEntrySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let kind: IdealDayKind
+    let maximumMinutes: Int
+    let onConfirm: (Int) -> Void
+    @State private var hours: String
+    @State private var minutes: String
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case hours, minutes }
+
+    init(kind: IdealDayKind, initialMinutes: Int, maximumMinutes: Int, onConfirm: @escaping (Int) -> Void) {
+        self.kind = kind
+        self.maximumMinutes = maximumMinutes
+        self.onConfirm = onConfirm
+        _hours = State(initialValue: String(initialMinutes / 60))
+        _minutes = State(initialValue: String(initialMinutes % 60))
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                HStack(spacing: 16) {
+                    timeField(title: "小时", text: $hours, field: .hours)
+                    Text(":").font(.title.bold()).foregroundStyle(.secondary)
+                    timeField(title: "分钟", text: $minutes, field: .minutes)
+                }
+                Text("最多可分配 \(maximumMinutes / 60) 小时 \(maximumMinutes % 60) 分钟（包含当前弹性时间）")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
+            }
+            .padding(20)
+            .navigationTitle(kind.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("确定") {
+                        let total = min(Int(hours) ?? 0, 24) * 60 + min(Int(minutes) ?? 0, 59)
+                        dismiss()
+                        onConfirm(total)
+                    }
+                    .fontWeight(.semibold)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") { focusedField = nil }
+                }
+            }
+            .onAppear { focusedField = .hours }
+        }
+    }
+
+    private func timeField(title: String, text: Binding<String>, field: Field) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            TextField("0", text: text)
+                .keyboardType(.numberPad)
+                .focused($focusedField, equals: field)
+                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                .multilineTextAlignment(.center)
+                .padding(.vertical, 14)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                .onChange(of: text.wrappedValue) { _, newValue in
+                    text.wrappedValue = String(newValue.filter(\.isNumber).prefix(2))
+                }
+        }
+        .frame(maxWidth: .infinity)
     }
 }
