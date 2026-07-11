@@ -16,6 +16,9 @@ struct RecordView: View {
     @ObservedObject private var idealDayStore = IdealDayStore.shared
     @ObservedObject private var intentionStore = DailyIntentionStore.shared
     @State private var isAddingIntention = false
+    /// Intention being renamed from the home list (alert with a text field).
+    @State private var renamingIntention: DailyIntentionItem?
+    @State private var renameIntentionText = ""
     @FocusState private var isInputFocused: Bool
 
     /// How many intentions the collapsed list shows.
@@ -101,6 +104,19 @@ struct RecordView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationBackground(.white)
+        }
+        .alert("重命名意图", isPresented: Binding(
+            get: { renamingIntention != nil },
+            set: { if !$0 { renamingIntention = nil } }
+        ), presenting: renamingIntention) { item in
+            TextField("名称", text: $renameIntentionText)
+            Button("保存") {
+                intentionStore.rename(item, to: renameIntentionText)
+                renamingIntention = nil
+            }
+            Button("取消", role: .cancel) {
+                renamingIntention = nil
+            }
         }
         .task {
             await refreshRunningSession()
@@ -400,12 +416,20 @@ struct RecordView: View {
             .buttonStyle(PressButtonStyle())
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.name)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(item.isCompleted ? Design.muted : (isRunning ? Design.accent : Design.text))
-                    .strikethrough(item.isCompleted, color: Design.muted)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                HStack(spacing: 5) {
+                    Text(item.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(item.isCompleted ? Design.muted : (isRunning ? Design.accent : Design.text))
+                        .strikethrough(item.isCompleted, color: Design.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+
+                    if item.isRepeating {
+                        Image(systemName: "repeat")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Design.accent.opacity(0.75))
+                    }
+                }
 
                 if let goalName = item.goalName {
                     HStack(spacing: 3) {
@@ -420,6 +444,19 @@ struct RecordView: View {
             }
 
             Spacer(minLength: 0)
+
+            // Duplicate the intention (works on completed rows too).
+            Button {
+                isInputFocused = false
+                intentionStore.duplicate(item)
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Design.muted)
+                    .frame(width: 32, height: 32)
+                    .background(Design.surface2, in: Circle())
+            }
+            .buttonStyle(PressButtonStyle())
 
             if item.isCompleted {
                 Text("已完成")
@@ -458,6 +495,22 @@ struct RecordView: View {
         )
         .opacity(item.isCompleted ? 0.65 : 1)
         .contextMenu {
+            Button {
+                intentionStore.duplicate(item)
+            } label: {
+                Label("复制", systemImage: "doc.on.doc")
+            }
+            Button {
+                renameIntentionText = item.name
+                renamingIntention = item
+            } label: {
+                Label("重命名", systemImage: "pencil")
+            }
+            Button {
+                intentionStore.setRepeating(item, !item.isRepeating)
+            } label: {
+                Label(item.isRepeating ? "取消循环" : "设为循环", systemImage: "repeat")
+            }
             Button(role: .destructive) {
                 intentionStore.remove(item)
             } label: {
@@ -699,7 +752,13 @@ private struct IntentionBoardSheet: View {
     @State private var isDrafting = false
     @State private var draftGoalId: Int?
     @State private var draftText = ""
+    @State private var draftRepeating = false
     @FocusState private var isDraftFocused: Bool
+
+    /// Rename state (shared alert for intentions and goals).
+    @State private var renamingItem: DailyIntentionItem?
+    @State private var renamingGoal: RemoteGoal?
+    @State private var renameText = ""
 
     // Inline goal/project creation.
     @State private var isCreatingGoal = false
@@ -760,6 +819,32 @@ private struct IntentionBoardSheet: View {
             }
         } message: { _ in
             Text("其下的意图不会删除，会移到「公共」")
+        }
+        .alert("重命名意图", isPresented: Binding(
+            get: { renamingItem != nil },
+            set: { if !$0 { renamingItem = nil } }
+        ), presenting: renamingItem) { item in
+            TextField("名称", text: $renameText)
+            Button("保存") {
+                store.rename(item, to: renameText)
+                renamingItem = nil
+            }
+            Button("取消", role: .cancel) {
+                renamingItem = nil
+            }
+        }
+        .alert("重命名目标", isPresented: Binding(
+            get: { renamingGoal != nil },
+            set: { if !$0 { renamingGoal = nil } }
+        ), presenting: renamingGoal) { goal in
+            TextField("名称", text: $renameText)
+            Button("保存") {
+                store.renameGoal(goal, to: renameText)
+                renamingGoal = nil
+            }
+            Button("取消", role: .cancel) {
+                renamingGoal = nil
+            }
         }
     }
 
@@ -845,6 +930,12 @@ private struct IntentionBoardSheet: View {
                 .buttonStyle(HapticButtonStyle())
                 .contextMenu {
                     if let goal {
+                        Button {
+                            renameText = goal.name
+                            renamingGoal = goal
+                        } label: {
+                            Label("重命名", systemImage: "pencil")
+                        }
                         Button(role: .destructive) {
                             goalToDelete = goal
                         } label: {
@@ -907,7 +998,26 @@ private struct IntentionBoardSheet: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
 
+            if item.isRepeating {
+                Image(systemName: "repeat")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Calendar2Style.accent.opacity(0.75))
+            }
+
             Spacer(minLength: 0)
+
+            // Duplicate: same name/goal/repeating, fresh and uncompleted — works
+            // on completed rows too, so a finished intention can be redone.
+            Button {
+                store.duplicate(item)
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: "9A9AA2"))
+                    .frame(width: 30, height: 30)
+                    .background(Color(hex: "EFEFF2"), in: Circle())
+            }
+            .buttonStyle(HapticButtonStyle())
 
             if isRunning {
                 HStack(spacing: 6) {
@@ -944,6 +1054,22 @@ private struct IntentionBoardSheet: View {
         )
         .opacity(item.isCompleted ? 0.62 : 1)
         .contextMenu {
+            Button {
+                store.duplicate(item)
+            } label: {
+                Label("复制", systemImage: "doc.on.doc")
+            }
+            Button {
+                renameText = item.name
+                renamingItem = item
+            } label: {
+                Label("重命名", systemImage: "pencil")
+            }
+            Button {
+                store.setRepeating(item, !item.isRepeating)
+            } label: {
+                Label(item.isRepeating ? "取消循环" : "设为循环", systemImage: "repeat")
+            }
             Button(role: .destructive) {
                 store.remove(item)
             } label: {
@@ -953,7 +1079,8 @@ private struct IntentionBoardSheet: View {
     }
 
     /// The inline empty row the + button creates: type and hit return to save;
-    /// leave it empty and it disappears.
+    /// leave it empty and it disappears. The ↻ toggle marks it repeating
+    /// (habit-like: done only counts for the day, comes back tomorrow).
     private var draftRow: some View {
         HStack(spacing: 11) {
             Image(systemName: "circle")
@@ -970,6 +1097,20 @@ private struct IntentionBoardSheet: View {
                 .onSubmit {
                     commitDraft()
                 }
+
+            Button {
+                draftRepeating.toggle()
+            } label: {
+                Image(systemName: "repeat")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(draftRepeating ? .white : Color(hex: "9A9AA2"))
+                    .frame(width: 30, height: 30)
+                    .background(
+                        draftRepeating ? Calendar2Style.accent : Color(hex: "EFEFF2"),
+                        in: Circle()
+                    )
+            }
+            .buttonStyle(HapticButtonStyle())
         }
         .padding(.horizontal, 13)
         .frame(height: 52)
@@ -987,6 +1128,7 @@ private struct IntentionBoardSheet: View {
         }
         draftGoalId = goalId
         draftText = ""
+        draftRepeating = false
         isDrafting = true
         collapsedGroups.remove(goalId)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -997,9 +1139,10 @@ private struct IntentionBoardSheet: View {
     private func commitDraft() {
         let name = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !name.isEmpty {
-            store.add(name: name, goal: store.goals.first { $0.id == draftGoalId })
+            store.add(name: name, goal: store.goals.first { $0.id == draftGoalId }, repeating: draftRepeating)
         }
         draftText = ""
+        draftRepeating = false
         isDrafting = false
         isDraftFocused = false
     }

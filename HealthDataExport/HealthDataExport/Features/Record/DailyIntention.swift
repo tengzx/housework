@@ -18,10 +18,24 @@ struct DailyIntentionItem: Codable, Identifiable, Hashable {
     var goalId: Int?
     var goalName: String?
     var goalKind: String?
+    /// Habit-like intention: completing only counts for the day; it comes back
+    /// tomorrow. Optional so items persisted before the field existed decode.
+    var repeating: Bool?
 
-    var isCompleted: Bool { completedAt != nil }
+    var isRepeating: Bool { repeating == true }
 
-    init(id: UUID = UUID(), remoteId: Int? = nil, name: String, completedAt: Date? = nil, sortOrder: Int = 0, goalId: Int? = nil, goalName: String? = nil, goalKind: String? = nil) {
+    /// "Completed" as the UI understands it: a repeating intention only counts
+    /// as completed if it was done *today* — yesterday's completion means it's
+    /// open again.
+    var isCompleted: Bool {
+        guard let completedAt else { return false }
+        if isRepeating {
+            return completedAt >= Calendar.current.startOfDay(for: .now)
+        }
+        return true
+    }
+
+    init(id: UUID = UUID(), remoteId: Int? = nil, name: String, completedAt: Date? = nil, sortOrder: Int = 0, goalId: Int? = nil, goalName: String? = nil, goalKind: String? = nil, repeating: Bool? = nil) {
         self.id = id
         self.remoteId = remoteId
         self.name = name
@@ -30,6 +44,7 @@ struct DailyIntentionItem: Codable, Identifiable, Hashable {
         self.goalId = goalId
         self.goalName = goalName
         self.goalKind = goalKind
+        self.repeating = repeating
     }
 }
 
@@ -39,6 +54,8 @@ struct DailyIntentionOperation: Codable, Identifiable {
     enum Kind: String, Codable {
         case create
         case setCompleted
+        case rename
+        case setRepeating
         case delete
     }
 
@@ -54,8 +71,9 @@ struct DailyIntentionOperation: Codable, Identifiable {
     var dateKey: String?
     /// Goal the created intention attaches to.
     var goalId: Int?
+    var repeating: Bool?
 
-    init(id: UUID = UUID(), kind: Kind, localId: UUID, remoteId: Int? = nil, name: String? = nil, completed: Bool? = nil, dateKey: String? = nil, goalId: Int? = nil) {
+    init(id: UUID = UUID(), kind: Kind, localId: UUID, remoteId: Int? = nil, name: String? = nil, completed: Bool? = nil, dateKey: String? = nil, goalId: Int? = nil, repeating: Bool? = nil) {
         self.id = id
         self.kind = kind
         self.localId = localId
@@ -64,6 +82,7 @@ struct DailyIntentionOperation: Codable, Identifiable {
         self.completed = completed
         self.dateKey = dateKey
         self.goalId = goalId
+        self.repeating = repeating
     }
 }
 
@@ -147,7 +166,7 @@ final class DailyIntentionStore: ObservableObject {
         return open + done
     }
 
-    func add(name: String, goal: RemoteGoal? = nil) {
+    func add(name: String, goal: RemoteGoal? = nil, repeating: Bool = false) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let item = DailyIntentionItem(
@@ -155,11 +174,52 @@ final class DailyIntentionStore: ObservableObject {
             sortOrder: (items.map(\.sortOrder).max() ?? 0) + 1,
             goalId: goal?.id,
             goalName: goal?.name,
-            goalKind: goal?.kind
+            goalKind: goal?.kind,
+            repeating: repeating ? true : nil
         )
         items.append(item)
         saveItems()
-        enqueue(DailyIntentionOperation(kind: .create, localId: item.id, name: trimmed, dateKey: Self.todayKey, goalId: goal?.id))
+        enqueue(DailyIntentionOperation(kind: .create, localId: item.id, name: trimmed, dateKey: Self.todayKey, goalId: goal?.id, repeating: repeating ? true : nil))
+    }
+
+    func rename(_ item: DailyIntentionItem, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != item.name else { return }
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        items[index].name = trimmed
+        saveItems()
+        enqueue(DailyIntentionOperation(kind: .rename, localId: item.id, remoteId: items[index].remoteId, name: trimmed))
+    }
+
+    /// Duplicate an intention (completed ones included): same name and goal,
+    /// fresh and uncompleted, appended at the end of its group. The copy is
+    /// always a plain one-shot intention — the repeating flag doesn't carry
+    /// over (a repeating intention comes back by itself; a copy of it is just
+    /// an extra one-off).
+    func duplicate(_ item: DailyIntentionItem) {
+        let copy = DailyIntentionItem(
+            name: item.name,
+            sortOrder: (items.map(\.sortOrder).max() ?? 0) + 1,
+            goalId: item.goalId,
+            goalName: item.goalName,
+            goalKind: item.goalKind
+        )
+        items.append(copy)
+        saveItems()
+        enqueue(DailyIntentionOperation(
+            kind: .create,
+            localId: copy.id,
+            name: copy.name,
+            dateKey: Self.todayKey,
+            goalId: copy.goalId
+        ))
+    }
+
+    func setRepeating(_ item: DailyIntentionItem, _ repeating: Bool) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        items[index].repeating = repeating
+        saveItems()
+        enqueue(DailyIntentionOperation(kind: .setRepeating, localId: item.id, remoteId: items[index].remoteId, repeating: repeating))
     }
 
     func setCompleted(_ item: DailyIntentionItem, _ completed: Bool) {
@@ -238,6 +298,28 @@ final class DailyIntentionStore: ObservableObject {
         return goal
     }
 
+    /// Rename a goal/project. Optimistic: the group header and every intention
+    /// tag update immediately; the PATCH lands in the background.
+    func renameGoal(_ goal: RemoteGoal, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != goal.name else { return }
+        if let index = goals.firstIndex(where: { $0.id == goal.id }) {
+            goals[index].name = trimmed
+        }
+        var changed = false
+        for index in items.indices where items[index].goalId == goal.id {
+            items[index].goalName = trimmed
+            changed = true
+        }
+        if changed {
+            saveItems()
+        }
+        Task {
+            try? await GoalAPI.rename(id: goal.id, name: trimmed)
+            await loadGoals()
+        }
+    }
+
     /// Delete a goal/project. Optimistic: the group disappears immediately and
     /// its intentions move to 公共 (mirroring what the backend does — it
     /// detaches them, never deletes them).
@@ -278,7 +360,8 @@ final class DailyIntentionStore: ObservableObject {
                 sortOrder: intention.sortOrder,
                 goalId: intention.goalId,
                 goalName: intention.goalName,
-                goalKind: intention.goalKind
+                goalKind: intention.goalKind,
+                repeating: intention.repeating
             )
         }
         saveItems()
@@ -341,7 +424,21 @@ final class DailyIntentionStore: ObservableObject {
         case .setCompleted:
             guard let remoteId = resolveRemoteId(for: operation) else { return }
             do {
-                _ = try await DailyIntentionAPI.setCompleted(id: remoteId, operation.completed ?? true)
+                _ = try await DailyIntentionAPI.patch(id: remoteId, completed: operation.completed ?? true)
+            } catch {
+                guard Self.canIgnoreMissingError(error) else { throw error }
+            }
+        case .rename:
+            guard let remoteId = resolveRemoteId(for: operation), let name = operation.name else { return }
+            do {
+                _ = try await DailyIntentionAPI.patch(id: remoteId, name: name)
+            } catch {
+                guard Self.canIgnoreMissingError(error) else { throw error }
+            }
+        case .setRepeating:
+            guard let remoteId = resolveRemoteId(for: operation) else { return }
+            do {
+                _ = try await DailyIntentionAPI.patch(id: remoteId, repeating: operation.repeating ?? false)
             } catch {
                 guard Self.canIgnoreMissingError(error) else { throw error }
             }
@@ -437,6 +534,7 @@ struct RemoteIntention: Decodable {
     var goalId: Int?
     var goalName: String?
     var goalKind: String?
+    var repeating: Bool?
 }
 
 /// A goal/project as returned by `/api/mobile/goals`, with intention progress.
@@ -468,16 +566,17 @@ enum DailyIntentionAPI {
         return try JSONDecoder().decode(IntentionListEnvelope.self, from: response.data).intentions
     }
 
-    static func create(name: String, date: String, clientKey: String, goalId: Int? = nil) async throws -> RemoteIntention {
-        let body = CreateIntentionRequest(name: name, date: date, clientKey: clientKey, goalId: goalId)
+    static func create(name: String, date: String, clientKey: String, goalId: Int? = nil, repeating: Bool? = nil) async throws -> RemoteIntention {
+        let body = CreateIntentionRequest(name: name, date: date, clientKey: clientKey, goalId: goalId, repeating: repeating)
         let response = try await HTTPClient.shared.data(url: baseURL, method: .post, body: body)
         return try JSONDecoder().decode(IntentionEnvelope.self, from: response.data).intention
     }
 
+    /// General PATCH — only the fields passed are touched.
     @discardableResult
-    static func setCompleted(id: Int, _ completed: Bool) async throws -> RemoteIntention {
+    static func patch(id: Int, name: String? = nil, completed: Bool? = nil, repeating: Bool? = nil) async throws -> RemoteIntention {
         let url = baseURL.appendingPathComponent(String(id))
-        let body = PatchIntentionRequest(completed: completed)
+        let body = PatchIntentionRequest(name: name, completed: completed, repeating: repeating)
         let response = try await HTTPClient.shared.data(url: url, method: .patch, body: body)
         return try JSONDecoder().decode(IntentionEnvelope.self, from: response.data).intention
     }
@@ -501,10 +600,13 @@ private struct CreateIntentionRequest: Encodable {
     var date: String
     var clientKey: String
     var goalId: Int?
+    var repeating: Bool?
 }
 
 private struct PatchIntentionRequest: Encodable {
-    var completed: Bool
+    var name: String?
+    var completed: Bool?
+    var repeating: Bool?
 }
 
 // MARK: - Goals API (/api/mobile/goals)
@@ -523,10 +625,19 @@ enum GoalAPI {
         return try JSONDecoder().decode(GoalEnvelope.self, from: response.data).goal
     }
 
+    static func rename(id: Int, name: String) async throws {
+        let url = baseURL.appendingPathComponent(String(id))
+        _ = try await HTTPClient.shared.data(url: url, method: .patch, body: PatchGoalRequest(name: name))
+    }
+
     static func delete(id: Int) async throws {
         let url = baseURL.appendingPathComponent(String(id))
         _ = try await HTTPClient.shared.data(url: url, method: .delete)
     }
+}
+
+private struct PatchGoalRequest: Encodable {
+    var name: String
 }
 
 private struct GoalListEnvelope: Decodable {
