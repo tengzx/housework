@@ -2,9 +2,10 @@ import Combine
 import Foundation
 import SwiftUI
 
-/// A "today's intention": something the user plans to do today. Only a name —
-/// no type, duration or icon. Scoped to a single day; unfinished intentions
-/// simply don't show up the next day.
+/// An intention: something the user plans to do, optionally attached to a
+/// goal/project. Only a name — no type, duration or icon. Intentions persist
+/// until completed; completed ones show for the rest of the day, then drop
+/// off the list (they stay in the database as goal progress).
 struct DailyIntentionItem: Codable, Identifiable, Hashable {
     let id: UUID
     /// Backend `daily_intentions.id`. Nil while an optimistically-created
@@ -13,15 +14,22 @@ struct DailyIntentionItem: Codable, Identifiable, Hashable {
     var name: String
     var completedAt: Date?
     var sortOrder: Int
+    /// Goal/project this intention advances; nil = 公共 (unattached).
+    var goalId: Int?
+    var goalName: String?
+    var goalKind: String?
 
     var isCompleted: Bool { completedAt != nil }
 
-    init(id: UUID = UUID(), remoteId: Int? = nil, name: String, completedAt: Date? = nil, sortOrder: Int = 0) {
+    init(id: UUID = UUID(), remoteId: Int? = nil, name: String, completedAt: Date? = nil, sortOrder: Int = 0, goalId: Int? = nil, goalName: String? = nil, goalKind: String? = nil) {
         self.id = id
         self.remoteId = remoteId
         self.name = name
         self.completedAt = completedAt
         self.sortOrder = sortOrder
+        self.goalId = goalId
+        self.goalName = goalName
+        self.goalKind = goalKind
     }
 }
 
@@ -42,10 +50,12 @@ struct DailyIntentionOperation: Codable, Identifiable {
     var remoteId: Int?
     var name: String?
     var completed: Bool?
-    /// "yyyy-MM-dd" the create belongs to, captured at enqueue time.
+    /// "yyyy-MM-dd" the create was made on, captured at enqueue time.
     var dateKey: String?
+    /// Goal the created intention attaches to.
+    var goalId: Int?
 
-    init(id: UUID = UUID(), kind: Kind, localId: UUID, remoteId: Int? = nil, name: String? = nil, completed: Bool? = nil, dateKey: String? = nil) {
+    init(id: UUID = UUID(), kind: Kind, localId: UUID, remoteId: Int? = nil, name: String? = nil, completed: Bool? = nil, dateKey: String? = nil, goalId: Int? = nil) {
         self.id = id
         self.kind = kind
         self.localId = localId
@@ -53,6 +63,7 @@ struct DailyIntentionOperation: Codable, Identifiable {
         self.name = name
         self.completed = completed
         self.dateKey = dateKey
+        self.goalId = goalId
     }
 }
 
@@ -61,9 +72,14 @@ final class DailyIntentionStore: ObservableObject {
     static let shared = DailyIntentionStore()
 
     @Published private(set) var items: [DailyIntentionItem] = []
+    /// Active goals/projects (with progress), loaded for the add sheet.
+    @Published private(set) var goals: [RemoteGoal] = []
     /// Intention whose 开始 launched the currently-running timer; completed when
     /// the timer is stopped.
     @Published private(set) var activeIntentionId: UUID?
+    /// Called after any visible intention change so paired-device snapshots can
+    /// be updated immediately rather than waiting for the view to reopen.
+    var onItemsChanged: (() -> Void)?
 
     private let itemsKey = "dailyIntentions.items"
     private let dateKey = "dailyIntentions.date"
@@ -105,14 +121,20 @@ final class DailyIntentionStore: ObservableObject {
         return active + rest + done
     }
 
-    func add(name: String) {
+    func add(name: String, goal: RemoteGoal? = nil) {
         rolloverIfNeeded()
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let item = DailyIntentionItem(name: trimmed, sortOrder: (items.map(\.sortOrder).max() ?? 0) + 1)
+        let item = DailyIntentionItem(
+            name: trimmed,
+            sortOrder: (items.map(\.sortOrder).max() ?? 0) + 1,
+            goalId: goal?.id,
+            goalName: goal?.name,
+            goalKind: goal?.kind
+        )
         items.append(item)
         saveItems()
-        enqueue(DailyIntentionOperation(kind: .create, localId: item.id, name: trimmed, dateKey: Self.todayKey))
+        enqueue(DailyIntentionOperation(kind: .create, localId: item.id, name: trimmed, dateKey: Self.todayKey, goalId: goal?.id))
     }
 
     func setCompleted(_ item: DailyIntentionItem, _ completed: Bool) {
@@ -154,9 +176,9 @@ final class DailyIntentionStore: ObservableObject {
         setCompleted(item, true)
     }
 
-    /// Load today's canonical list from the backend and merge it into local
-    /// state. Skipped while operations are in flight so it never clobbers an
-    /// optimistic change that hasn't finished syncing.
+    /// Load the canonical list (all incomplete + completed today) from the
+    /// backend and merge it into local state. Skipped while operations are in
+    /// flight so it never clobbers an optimistic change that hasn't synced.
     func refresh() async {
         rolloverIfNeeded()
         guard pendingOps.isEmpty else { return }
@@ -168,6 +190,27 @@ final class DailyIntentionStore: ObservableObject {
         }
         guard pendingOps.isEmpty else { return }
         merge(remote)
+    }
+
+    /// Fetch the active goals/projects (with progress) for the add sheet.
+    func loadGoals() async {
+        do {
+            goals = try await GoalAPI.list()
+        } catch {
+            // Keep whatever we had; the sheet still works with 公共.
+        }
+    }
+
+    /// Create a goal/project right away (awaited by the add sheet so the new
+    /// intention can attach to a real server id).
+    func createGoal(name: String, kind: String) async throws -> RemoteGoal {
+        let goal = try await GoalAPI.create(name: name, kind: kind)
+        if let index = goals.firstIndex(where: { $0.id == goal.id }) {
+            goals[index] = goal
+        } else {
+            goals.append(goal)
+        }
+        return goal
     }
 
     /// Replace local items with the server list, preserving local ids for items
@@ -186,7 +229,10 @@ final class DailyIntentionStore: ObservableObject {
                 remoteId: intention.id,
                 name: intention.name,
                 completedAt: completedAt,
-                sortOrder: intention.sortOrder
+                sortOrder: intention.sortOrder,
+                goalId: intention.goalId,
+                goalName: intention.goalName,
+                goalKind: intention.goalKind
             )
         }
         saveItems()
@@ -195,23 +241,23 @@ final class DailyIntentionStore: ObservableObject {
         }
     }
 
-    /// Intentions are strictly per-day: when the stored day is no longer today,
-    /// drop everything (including undelivered ops for the old day's mutations —
-    /// an unfinished intention just disappears).
+    /// Intentions persist until completed; only *completed* ones are day-scoped.
+    /// When the stored day rolls over, prune items finished before today —
+    /// incomplete intentions and the undelivered op queue carry across days.
     private func rolloverIfNeeded() {
         let today = Self.todayKey
         guard storedDay != today else { return }
         storedDay = today
         userDefaults.set(today, forKey: dateKey)
-        items = []
+        let dayStart = Calendar.current.startOfDay(for: .now)
+        items.removeAll { item in
+            guard let completedAt = item.completedAt else { return false }
+            return completedAt < dayStart
+        }
         saveItems()
-        // Keep undelivered creates/completions only if they belong to today
-        // (they can't — the day changed), so clear the queue and the link.
-        pendingOps = []
-        savePending()
-        remoteIds = [:]
-        saveRemoteIds()
-        clearActiveLink()
+        if let activeIntentionId, !items.contains(where: { $0.id == activeIntentionId }) {
+            clearActiveLink()
+        }
     }
 
     // MARK: - Sync queue
@@ -256,7 +302,8 @@ final class DailyIntentionStore: ObservableObject {
             let intention = try await DailyIntentionAPI.create(
                 name: name,
                 date: operation.dateKey ?? Self.todayKey,
-                clientKey: operation.id.uuidString
+                clientKey: operation.id.uuidString,
+                goalId: operation.goalId
             )
             remoteIds[operation.localId] = intention.id
             saveRemoteIds()
@@ -307,6 +354,7 @@ final class DailyIntentionStore: ObservableObject {
     private func saveItems() {
         Self.save(items, key: itemsKey, to: userDefaults)
         userDefaults.set(storedDay, forKey: dateKey)
+        onItemsChanged?()
     }
 
     private func savePending() {
@@ -330,8 +378,8 @@ final class DailyIntentionStore: ObservableObject {
 
     // MARK: - Dates
 
-    /// The user's local calendar day, "yyyy-MM-dd" — the backend scopes
-    /// intentions by exactly this string.
+    /// The user's local calendar day, "yyyy-MM-dd" — sent to the backend as
+    /// "include intentions completed on/after this day".
     static var todayKey: String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar.current
@@ -360,6 +408,23 @@ struct RemoteIntention: Decodable {
     var sortOrder: Int
     var completed: Bool
     var completedAt: String?
+    var goalId: Int?
+    var goalName: String?
+    var goalKind: String?
+}
+
+/// A goal/project as returned by `/api/mobile/goals`, with intention progress.
+struct RemoteGoal: Decodable, Identifiable, Hashable {
+    var id: Int
+    var name: String
+    /// "goal" or "project".
+    var kind: String
+    var status: String
+    var sortOrder: Int
+    var totalIntentions: Int
+    var completedIntentions: Int
+
+    var isProject: Bool { kind == "project" }
 }
 
 enum DailyIntentionAPI {
@@ -373,8 +438,8 @@ enum DailyIntentionAPI {
         return try JSONDecoder().decode(IntentionListEnvelope.self, from: response.data).intentions
     }
 
-    static func create(name: String, date: String, clientKey: String) async throws -> RemoteIntention {
-        let body = CreateIntentionRequest(name: name, date: date, clientKey: clientKey)
+    static func create(name: String, date: String, clientKey: String, goalId: Int? = nil) async throws -> RemoteIntention {
+        let body = CreateIntentionRequest(name: name, date: date, clientKey: clientKey, goalId: goalId)
         let response = try await HTTPClient.shared.data(url: baseURL, method: .post, body: body)
         return try JSONDecoder().decode(IntentionEnvelope.self, from: response.data).intention
     }
@@ -405,8 +470,39 @@ private struct CreateIntentionRequest: Encodable {
     var name: String
     var date: String
     var clientKey: String
+    var goalId: Int?
 }
 
 private struct PatchIntentionRequest: Encodable {
     var completed: Bool
+}
+
+// MARK: - Goals API (/api/mobile/goals)
+
+enum GoalAPI {
+    private static let baseURL = AppEnvironment.apiURL("mobile/goals")
+
+    static func list() async throws -> [RemoteGoal] {
+        let response = try await HTTPClient.shared.data(url: baseURL, method: .get)
+        return try JSONDecoder().decode(GoalListEnvelope.self, from: response.data).goals
+    }
+
+    static func create(name: String, kind: String) async throws -> RemoteGoal {
+        let body = CreateGoalRequest(name: name, kind: kind)
+        let response = try await HTTPClient.shared.data(url: baseURL, method: .post, body: body)
+        return try JSONDecoder().decode(GoalEnvelope.self, from: response.data).goal
+    }
+}
+
+private struct GoalListEnvelope: Decodable {
+    var goals: [RemoteGoal]
+}
+
+private struct GoalEnvelope: Decodable {
+    var goal: RemoteGoal
+}
+
+private struct CreateGoalRequest: Encodable {
+    var name: String
+    var kind: String
 }

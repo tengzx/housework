@@ -139,6 +139,15 @@ struct ContentView: View {
                     await IdealDayStore.shared.loadTodayComparison(forceReminder: true)
                 }
             }
+            let pushTimeTrackerLists = {
+                PhoneWatchSync.shared.broadcastTimeTrackerLists(
+                    intentions: DailyIntentionStore.shared.items,
+                    shortcuts: timeTracker.tasks
+                )
+            }
+            timeTracker.onTasksChanged = pushTimeTrackerLists
+            DailyIntentionStore.shared.onItemsChanged = pushTimeTrackerLists
+            pushTimeTrackerLists()
             // Catch up: if the phone already has a running entry mirrored, push it so
             // a freshly-launched watch converges. Only when non-nil — broadcasting a
             // stale `nil` here could wrongly clear a live entry on the watch.

@@ -100,6 +100,15 @@ final class WatchAuthSync: NSObject, ObservableObject {
         handleRemoteWorkout(context)
         // Active time-tracking entry pushed from the phone → face complication.
         handleRemoteTimeEntry(context)
+        if let data = context["timeIntentionsData"] as? Data {
+            UserDefaults.standard.set(data, forKey: "watch.timeIntentions.cache")
+        }
+        if let data = context["timeShortcutsData"] as? Data {
+            UserDefaults.standard.set(data, forKey: "watch.timeShortcuts.cache")
+        }
+        if context["timeIntentionsData"] != nil || context["timeShortcutsData"] != nil {
+            NotificationCenter.default.post(name: .watchTimeTrackerListsUpdated, object: nil)
+        }
     }
 
     /// Mirror the phone's active time-tracking entry into the App Group so the
@@ -341,6 +350,10 @@ final class WatchAuthSync: NSObject, ObservableObject {
         if let data = teData { payload["teData"] = data }
         session.transferUserInfo(payload)
     }
+}
+
+extension Notification.Name {
+    static let watchTimeTrackerListsUpdated = Notification.Name("watchTimeTrackerListsUpdated")
 }
 
 private enum WatchPhoneRelayError: Error {

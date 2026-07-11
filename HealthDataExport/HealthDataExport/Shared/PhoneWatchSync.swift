@@ -55,6 +55,8 @@ final class PhoneWatchSync: NSObject {
     // Active time-tracking entry, mirrored to the watch's face complication.
     private var teStamp: Double = 0
     private var teData: Data?
+    private var timeIntentionsData: Data?
+    private var timeShortcutsData: Data?
     private var lastSeenTeStamp: Double = 0
     /// Set when a broadcast happens before the session is activated, so
     /// activation can send the missed transfer (and only then — re-transferring
@@ -130,6 +132,31 @@ final class PhoneWatchSync: NSObject {
         lock.unlock()
         pushIfPossible()
         transferTimeEntry()
+        sendWorkoutMessage()
+    }
+
+    /// Push a cacheable snapshot so the watch can render time-tracking lists
+    /// immediately, then refresh them from the server in the background.
+    func broadcastTimeTrackerLists(intentions: [DailyIntentionItem], shortcuts: [ShortcutTask]) {
+        struct IntentionPayload: Encodable {
+            let id: Int
+            let name: String
+            let sortOrder: Int
+            let completed: Bool
+        }
+        let payload = intentions.enumerated().map { index, item in
+            IntentionPayload(
+                id: item.remoteId ?? -(index + 1),
+                name: item.name,
+                sortOrder: item.sortOrder,
+                completed: item.isCompleted
+            )
+        }
+        lock.lock()
+        timeIntentionsData = try? Self.relayEncoder.encode(payload)
+        timeShortcutsData = try? Self.relayEncoder.encode(shortcuts)
+        lock.unlock()
+        pushIfPossible()
         sendWorkoutMessage()
     }
 
@@ -299,6 +326,8 @@ final class PhoneWatchSync: NSObject {
             ctx["teStamp"] = teStamp
             if let data = teData { ctx["teData"] = data }
         }
+        if let data = timeIntentionsData { ctx["timeIntentionsData"] = data }
+        if let data = timeShortcutsData { ctx["timeShortcutsData"] = data }
         return ctx
     }
 

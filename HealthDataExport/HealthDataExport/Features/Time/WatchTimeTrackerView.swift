@@ -21,6 +21,8 @@ struct WatchTimeTrackerView: View {
 
     init(displayMode: DisplayMode = .automatic) {
         self.displayMode = displayMode
+        _todayIntentions = State(initialValue: Self.cachedIntentions())
+        _shortcutTasks = State(initialValue: Self.cachedShortcuts())
     }
 
     var body: some View {
@@ -40,6 +42,12 @@ struct WatchTimeTrackerView: View {
             async let shortcuts: Void = refreshShortcuts()
             _ = await (intentions, shortcuts)
         }
+        #if os(watchOS)
+        .onReceive(NotificationCenter.default.publisher(for: .watchTimeTrackerListsUpdated)) { _ in
+            todayIntentions = Self.cachedIntentions()
+            shortcutTasks = Self.cachedShortcuts()
+        }
+        #endif
     }
 
     @ViewBuilder
@@ -283,6 +291,7 @@ struct WatchTimeTrackerView: View {
             let remoteTasks = remote.map { ShortcutTask(remote: $0) }
             if !remoteTasks.isEmpty {
                 shortcutTasks = remoteTasks
+                Self.saveCachedShortcuts(remoteTasks)
             } else {
                 // No shortcuts yet: fall back to category-derived tasks so the
                 // watch still offers something to start.
@@ -308,6 +317,7 @@ struct WatchTimeTrackerView: View {
             todayIntentions = try await WatchDailyIntentionAPI.listToday()
                 .filter { !$0.completed }
                 .sorted { $0.sortOrder < $1.sortOrder }
+            Self.saveCachedIntentions(todayIntentions)
             intentionStatusMessage = ""
         } catch {
             if case let HTTPClientError.httpFailure(statusCode, _) = error {
@@ -315,6 +325,30 @@ struct WatchTimeTrackerView: View {
             } else {
                 intentionStatusMessage = "读取失败，请下拉重试"
             }
+        }
+    }
+
+    private static func cachedIntentions() -> [WatchDailyIntention] {
+        guard let data = UserDefaults.standard.data(forKey: "watch.timeIntentions.cache") else { return [] }
+        return (try? JSONDecoder().decode([WatchDailyIntention].self, from: data))?
+            .filter { !$0.completed }
+            .sorted { $0.sortOrder < $1.sortOrder } ?? []
+    }
+
+    private static func cachedShortcuts() -> [ShortcutTask] {
+        guard let data = UserDefaults.standard.data(forKey: "watch.timeShortcuts.cache") else { return [] }
+        return (try? JSONDecoder().decode([ShortcutTask].self, from: data)) ?? []
+    }
+
+    private static func saveCachedIntentions(_ intentions: [WatchDailyIntention]) {
+        if let data = try? JSONEncoder().encode(intentions) {
+            UserDefaults.standard.set(data, forKey: "watch.timeIntentions.cache")
+        }
+    }
+
+    private static func saveCachedShortcuts(_ shortcuts: [ShortcutTask]) {
+        if let data = try? JSONEncoder().encode(shortcuts) {
+            UserDefaults.standard.set(data, forKey: "watch.timeShortcuts.cache")
         }
     }
 
@@ -403,7 +437,7 @@ struct WatchTimeTrackerView: View {
     }
 }
 
-private struct WatchDailyIntention: Decodable, Identifiable {
+private struct WatchDailyIntention: Codable, Identifiable {
     let id: Int
     let name: String
     let sortOrder: Int

@@ -191,6 +191,9 @@ final class ShortcutRecordStore: ObservableObject {
     /// Called only after an end operation has been accepted by the backend, so
     /// consumers can query summaries without racing the optimistic local UI.
     var onTimeEntryEnded: (() -> Void)?
+    /// Called after the locally visible shortcut list changes, including
+    /// optimistic edits and successful server refreshes.
+    var onTasksChanged: (() -> Void)?
 
     private let tasksKey = "shortcutRecord.tasks"
     private let activeKey = "shortcutRecord.activeSession"
@@ -724,6 +727,7 @@ final class ShortcutRecordStore: ObservableObject {
 
     private func saveTasks() {
         Self.save(tasks, key: tasksKey, to: userDefaults)
+        onTasksChanged?()
     }
 
     private func saveActiveSession() {

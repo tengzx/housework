@@ -17,7 +17,6 @@ struct RecordView: View {
     @ObservedObject private var intentionStore = DailyIntentionStore.shared
     @State private var showAllIntentions = false
     @State private var isAddingIntention = false
-    @State private var newIntentionName = ""
     @FocusState private var isInputFocused: Bool
 
     /// How many intentions the collapsed list shows.
@@ -96,17 +95,11 @@ struct RecordView: View {
         .sheet(isPresented: $showDashboard) {
             TimeDashboardView(viewModel: dashboardVM)
         }
-        .alert("新增今日意图", isPresented: $isAddingIntention) {
-            TextField("今天想做什么？", text: $newIntentionName)
-            Button("添加") {
-                intentionStore.add(name: newIntentionName)
-                newIntentionName = ""
-            }
-            Button("取消", role: .cancel) {
-                newIntentionName = ""
-            }
-        } message: {
-            Text("只列今天的，做完自动划掉")
+        .sheet(isPresented: $isAddingIntention) {
+            AddIntentionSheet(store: intentionStore)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(.white)
         }
         .task {
             await refreshRunningSession()
@@ -336,7 +329,6 @@ struct RecordView: View {
 
                 Button {
                     isInputFocused = false
-                    newIntentionName = ""
                     isAddingIntention = true
                 } label: {
                     HStack(spacing: 4) {
@@ -353,7 +345,7 @@ struct RecordView: View {
 
             let all = intentionStore.sortedItems
             if all.isEmpty {
-                Text("列出今天最想完成的几件事，点开始就计时")
+                Text("列出想推进的事，可挂到目标或项目上，点开始就计时")
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(Design.muted.opacity(0.85))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -408,12 +400,25 @@ struct RecordView: View {
             }
             .buttonStyle(PressButtonStyle())
 
-            Text(item.name)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(item.isCompleted ? Design.muted : (isRunning ? Design.accent : Design.text))
-                .strikethrough(item.isCompleted, color: Design.muted)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.name)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(item.isCompleted ? Design.muted : (isRunning ? Design.accent : Design.text))
+                    .strikethrough(item.isCompleted, color: Design.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                if let goalName = item.goalName {
+                    HStack(spacing: 3) {
+                        Image(systemName: item.goalKind == "project" ? "folder.fill" : "target")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(goalName)
+                            .font(.system(size: 11, weight: .medium))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(Design.muted.opacity(0.9))
+                }
+            }
 
             Spacer(minLength: 0)
 
@@ -445,7 +450,8 @@ struct RecordView: View {
             }
         }
         .padding(.horizontal, 14)
-        .frame(height: 58)
+        .padding(.vertical, 9)
+        .frame(minHeight: 58)
         .background(isRunning ? Design.accentSoft : Design.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -672,6 +678,299 @@ struct RecordView: View {
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.setLocalizedDateFormatFromTemplate("MMMdEEE")
         return formatter.string(from: .now)
+    }
+}
+
+/// Big add sheet for intentions: pick (or inline-create) a goal/project, type a
+/// name, save. Goals show their progress (completed/total intentions) so the
+/// sheet doubles as a progress overview.
+@MainActor
+private struct AddIntentionSheet: View {
+    @ObservedObject var store: DailyIntentionStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name = ""
+    /// nil = 公共 (no goal).
+    @State private var selectedGoalId: Int?
+    @State private var isCreatingGoal = false
+    @State private var newGoalName = ""
+    @State private var newGoalKind = "goal"
+    @State private var isSavingGoal = false
+    @State private var goalErrorMessage = ""
+    @FocusState private var isNameFocused: Bool
+    @FocusState private var isGoalNameFocused: Bool
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedGoalName: String { newGoalName.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    header
+                    nameField
+                    goalSection
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
+
+            saveBar
+        }
+        .background(Calendar2Style.sheet)
+        .ignoresSafeArea(.keyboard)
+        .task {
+            await store.loadGoals()
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                isNameFocused = true
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "target")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Calendar2Style.accent)
+            Text("新增意图")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(hex: "23232A"))
+            Spacer()
+        }
+    }
+
+    private var nameField: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            sectionLabel("想做什么")
+            TextField("例如：写完导出模块", text: $name)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .focused($isNameFocused)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color(hex: "23232A"))
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                .background(Calendar2Style.sheet, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+                )
+        }
+    }
+
+    // MARK: - Goal picker
+
+    private var goalSection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack {
+                sectionLabel("归属目标 / 项目")
+                Spacer()
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isCreatingGoal.toggle()
+                    }
+                    if isCreatingGoal {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            isGoalNameFocused = true
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: isCreatingGoal ? "chevron.up" : "plus")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(isCreatingGoal ? "收起" : "新建")
+                    }
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Calendar2Style.accent)
+                }
+                .buttonStyle(HapticButtonStyle())
+            }
+
+            if isCreatingGoal {
+                goalCreator
+            }
+
+            VStack(spacing: 10) {
+                goalChip(id: nil, title: "公共", subtitle: "不挂目标，只是今天想做", symbol: "tray")
+                ForEach(store.goals) { goal in
+                    goalChip(
+                        id: goal.id,
+                        title: goal.name,
+                        subtitle: "已推进 \(goal.completedIntentions)/\(goal.totalIntentions)",
+                        symbol: goal.isProject ? "folder.fill" : "target"
+                    )
+                }
+            }
+        }
+    }
+
+    private func goalChip(id: Int?, title: String, subtitle: String, symbol: String) -> some View {
+        let isOn = selectedGoalId == id
+        return Button {
+            selectedGoalId = id
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(isOn ? .white : Calendar2Style.accent)
+                    .frame(width: 38, height: 38)
+                    .background(
+                        isOn ? Calendar2Style.accent : Calendar2Style.accent.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color(hex: "2A2A30"))
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color(hex: "9A9AA2"))
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(isOn ? Calendar2Style.accent : Color(hex: "D9D9DE"))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 62)
+            .background(
+                isOn ? Calendar2Style.accent.opacity(0.08) : Color(hex: "F5F5F7"),
+                in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(isOn ? Calendar2Style.accent.opacity(0.5) : Color.clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(Calendar2PressStyle())
+    }
+
+    private var goalCreator: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                TextField("目标或项目名称", text: $newGoalName)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+                    .focused($isGoalNameFocused)
+                    .font(.system(size: 15, weight: .semibold))
+                    .padding(.horizontal, 14)
+                    .frame(height: 46)
+                    .background(Calendar2Style.sheet, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+                    )
+            }
+
+            HStack(spacing: 10) {
+                Picker("类型", selection: $newGoalKind) {
+                    Text("目标").tag("goal")
+                    Text("项目").tag("project")
+                }
+                .pickerStyle(.segmented)
+
+                Button {
+                    createGoal()
+                } label: {
+                    Group {
+                        if isSavingGoal {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("创建")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 72, height: 34)
+                    .background(
+                        trimmedGoalName.isEmpty ? Calendar2Style.faint : Calendar2Style.accent,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                }
+                .buttonStyle(Calendar2PressStyle())
+                .disabled(trimmedGoalName.isEmpty || isSavingGoal)
+            }
+
+            if !goalErrorMessage.isEmpty {
+                Text(goalErrorMessage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding(14)
+        .background(Color(hex: "F5F5F7"), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+
+    private func createGoal() {
+        let goalName = trimmedGoalName
+        guard !goalName.isEmpty, !isSavingGoal else { return }
+        isSavingGoal = true
+        goalErrorMessage = ""
+        Task {
+            defer { isSavingGoal = false }
+            do {
+                let goal = try await store.createGoal(name: goalName, kind: newGoalKind)
+                selectedGoalId = goal.id
+                newGoalName = ""
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isCreatingGoal = false
+                }
+            } catch {
+                goalErrorMessage = "创建失败：\(error.localizedDescription)"
+            }
+        }
+    }
+
+    // MARK: - Save
+
+    private var saveBar: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Color.black.opacity(0.05))
+                .frame(height: 1)
+            Button { save() } label: {
+                Text("保存意图")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        trimmedName.isEmpty ? Calendar2Style.faint : Calendar2Style.accent,
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    )
+                    .shadow(color: trimmedName.isEmpty ? .clear : Calendar2Style.accent.opacity(0.35), radius: 10, x: 0, y: 5)
+            }
+            .buttonStyle(Calendar2PressStyle())
+            .disabled(trimmedName.isEmpty)
+            .padding(.horizontal, 22)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
+        }
+        .background(Calendar2Style.sheet.ignoresSafeArea(edges: .bottom))
+    }
+
+    private func save() {
+        guard !trimmedName.isEmpty else { return }
+        let goal = store.goals.first { $0.id == selectedGoalId }
+        store.add(name: trimmedName, goal: goal)
+        dismiss()
+    }
+
+    private func sectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12.5, weight: .semibold))
+            .tracking(0.6)
+            .foregroundStyle(Color(hex: "9A9AA2"))
     }
 }
 
