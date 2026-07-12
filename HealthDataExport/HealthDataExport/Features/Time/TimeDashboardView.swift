@@ -304,6 +304,42 @@ struct MobileTopApp: Decodable, Identifiable {
     var id: Int { rank }
 }
 
+// MARK: - Daily Analysis Models
+
+struct DailyAnalysisResponse: Decodable {
+    var goals: [DailyGoalProgress]
+    var focus: DailyFocusQuality
+}
+
+struct DailyGoalProgress: Decodable, Identifiable {
+    var goalId: Int
+    var goalName: String
+    var color: String?
+    var totalMinutes: Int
+    var averageMinutes: Int
+    var sessionCount: Int
+    var inactiveDays: Int
+    var id: Int { goalId }
+}
+
+struct DailyFocusQuality: Decodable {
+    var longestMinutes: Int
+    var averageMinutes: Int
+    var interruptionCount: Int
+    var averageReturnSeconds: Int
+    var blocks: [DailyFocusBlock]
+}
+
+struct DailyFocusBlock: Decodable, Identifiable {
+    var id: String
+    var title: String
+    var startLabel: String
+    var endLabel: String
+    var color: String?
+    var segmentMinutes: [Int]
+    var interruptionApps: [String]
+}
+
 // MARK: - API
 
 private enum TimeDashboardAPI {
@@ -336,6 +372,13 @@ private enum TimeDashboardAPI {
         try await get(MobileAppSummaryResponse.self, path: "mobile/app-sessions/summary", params: [
             "granularity": granularity.rawValue,
             "anchorDate": anchorDate.dashboardDateString
+        ])
+    }
+
+    static func dailyAnalysis(anchorDate: Date) async throws -> DailyAnalysisResponse {
+        try await get(DailyAnalysisResponse.self, path: "time-dashboard/daily-analysis", params: [
+            "anchorDate": anchorDate.dashboardDateString,
+            "timeZone": TimeZone.current.identifier
         ])
     }
 
@@ -372,6 +415,7 @@ final class TimeDashboardViewModel: ObservableObject {
     @Published var trendMap: [String: DashboardTrendResponse] = [:]
     @Published var selectedCard: DashboardCard?
     @Published var mobileAppSummary: MobileAppSummaryResponse?
+    @Published var dailyAnalysis: DailyAnalysisResponse?
     @Published var isLoadingOverview = false
     @Published var isLoadingComposition = false
     @Published var isLoadingTrend = false
@@ -448,6 +492,7 @@ final class TimeDashboardViewModel: ObservableObject {
         compositionMap = [:]
         trendMap = [:]
         mobileAppSummary = nil
+        dailyAnalysis = nil
         dailyReviews = []
         reviewErrorMessage = ""
         isLoadingOverview = true
@@ -455,12 +500,16 @@ final class TimeDashboardViewModel: ObservableObject {
         defer { isLoadingOverview = false }
         async let overviewResult = TimeDashboardAPI.overview(granularity: granularity, anchorDate: anchorDate)
         async let mobileResult = TimeDashboardAPI.mobileAppSummary(granularity: granularity, anchorDate: anchorDate)
+        async let dailyResult: DailyAnalysisResponse? = granularity == .day
+            ? (try? await TimeDashboardAPI.dailyAnalysis(anchorDate: anchorDate))
+            : nil
         do {
             overview = try await overviewResult
         } catch {
             errorMessage = error.localizedDescription
         }
         mobileAppSummary = try? await mobileResult
+        dailyAnalysis = await dailyResult
         // 每日复盘仅在“日”维度提供；预取以决定卡片是否可点击。
         if granularity == .day {
             await loadDailyReviews()
@@ -558,6 +607,16 @@ struct TimeDashboardView: View {
                             Haptics.tap()
                             viewModel.showReviewSheet = true
                         }
+
+                    if viewModel.granularity == .day, let daily = viewModel.dailyAnalysis {
+                        DailyGoalProgressSectionView(goals: daily.goals)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 22)
+
+                        DailyFocusQualitySectionView(focus: daily.focus)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 22)
+                    }
 
                     HStack {
                         Text(SharedL10n.tr("time.dashboard.section.load_cards"))
@@ -721,6 +780,163 @@ struct TimeDashboardView: View {
             .buttonStyle(HapticButtonStyle())
         }
     }
+}
+
+// MARK: - Daily Analysis Sections
+
+private struct DailySectionTitle: View {
+    let titleKey: String
+    let hintKey: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(SharedL10n.tr(titleKey))
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(Color(hex: "1C1B1A"))
+            Spacer()
+            Text(SharedL10n.tr(hintKey))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color(hex: "A6A29C"))
+        }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 12)
+    }
+}
+
+private struct DailyGoalProgressSectionView: View {
+    let goals: [DailyGoalProgress]
+    private let palette = ["E8743B", "6B7A99", "3FA78A", "8E6CAD"]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            DailySectionTitle(titleKey: "time.dashboard.daily.goals.title", hintKey: "time.dashboard.daily.goals.hint")
+            VStack(spacing: 0) {
+                if goals.isEmpty {
+                    Text(SharedL10n.tr("time.dashboard.daily.goals.empty"))
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: "A6A29C"))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                } else {
+                    ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
+                        goalRow(goal, color: Color(hex: goal.color ?? palette[index % palette.count]))
+                        if index < goals.count - 1 { Divider().padding(.leading, 0) }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+    }
+
+    private func goalRow(_ goal: DailyGoalProgress, color: Color) -> some View {
+        let scale = max(goal.totalMinutes, goal.averageMinutes, 1)
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Circle().fill(color).frame(width: 8, height: 8)
+                Text(goal.goalName).font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Text(duration(goal.totalMinutes)).font(.system(size: 15, weight: .heavy))
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(hex: "F0F0F2"))
+                    Capsule().fill(color).frame(width: geo.size.width * CGFloat(goal.totalMinutes) / CGFloat(scale))
+                    Rectangle().fill(Color(hex: "1C1B1A")).frame(width: 2, height: 12)
+                        .offset(x: max(0, geo.size.width * CGFloat(goal.averageMinutes) / CGFloat(scale) - 1), y: -3)
+                }
+            }
+            .frame(height: 6)
+            Text(detail(goal))
+                .font(.system(size: 12))
+                .foregroundStyle(Color(hex: "8A8A8E"))
+        }
+        .padding(.vertical, 14)
+    }
+
+    private func detail(_ goal: DailyGoalProgress) -> String {
+        if goal.totalMinutes == 0 {
+            return SharedL10n.tr("time.dashboard.daily.goals.inactive", goal.inactiveDays)
+        }
+        let percent = goal.averageMinutes > 0 ? (goal.totalMinutes - goal.averageMinutes) * 100 / goal.averageMinutes : 0
+        if percent > 0 { return SharedL10n.tr("time.dashboard.daily.goals.above", goal.sessionCount, percent) }
+        if percent < 0 { return SharedL10n.tr("time.dashboard.daily.goals.below", goal.sessionCount, abs(percent)) }
+        return SharedL10n.tr("time.dashboard.daily.goals.equal", goal.sessionCount)
+    }
+}
+
+private struct DailyFocusQualitySectionView: View {
+    let focus: DailyFocusQuality
+
+    var body: some View {
+        VStack(spacing: 0) {
+            DailySectionTitle(titleKey: "time.dashboard.daily.focus.title", hintKey: "time.dashboard.daily.focus.hint")
+            VStack(alignment: .leading, spacing: 16) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 16) {
+                    metric(duration(focus.longestMinutes), "time.dashboard.daily.focus.longest", false)
+                    metric(duration(focus.averageMinutes), "time.dashboard.daily.focus.average", false)
+                    metric(SharedL10n.tr("time.dashboard.daily.focus.times", focus.interruptionCount), "time.dashboard.daily.focus.interruptions", true)
+                    metric(returnDuration(focus.averageReturnSeconds), "time.dashboard.daily.focus.return", false)
+                }
+                if !focus.blocks.isEmpty {
+                    Divider()
+                    Text(SharedL10n.tr("time.dashboard.daily.focus.blocks"))
+                        .font(.system(size: 13, weight: .bold)).foregroundStyle(Color(hex: "6E6E73"))
+                    ForEach(focus.blocks) { block in blockRow(block) }
+                    HStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 2).fill(Color(hex: "C9485B")).frame(width: 8, height: 12)
+                        Text(SharedL10n.tr("time.dashboard.daily.focus.legend"))
+                            .font(.system(size: 11)).foregroundStyle(Color(hex: "A6A29C"))
+                    }
+                }
+            }
+            .padding(16)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+    }
+
+    private func metric(_ value: String, _ key: String, _ danger: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).font(.system(size: 22, weight: .heavy)).foregroundStyle(danger ? Color(hex: "C9485B") : Color(hex: "1C1B1A"))
+            Text(SharedL10n.tr(key)).font(.system(size: 12)).foregroundStyle(Color(hex: "8A8A8E"))
+        }
+    }
+
+    private func blockRow(_ block: DailyFocusBlock) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(block.title).font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("\(block.startLabel) – \(block.endLabel)").font(.system(size: 12)).foregroundStyle(Color(hex: "8A8A8E"))
+            }
+            GeometryReader { geo in
+                let total = max(block.segmentMinutes.reduce(0, +), 1)
+                HStack(spacing: 2) {
+                    ForEach(Array(block.segmentMinutes.enumerated()), id: \.offset) { index, minutes in
+                        Color(hex: block.color ?? "6B7A99")
+                            .frame(width: max(3, (geo.size.width - CGFloat(max(0, block.segmentMinutes.count - 1)) * 6) * CGFloat(minutes) / CGFloat(total)))
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                        if index < block.segmentMinutes.count - 1 {
+                            Color(hex: "C9485B").frame(width: 4).clipShape(RoundedRectangle(cornerRadius: 2))
+                        }
+                    }
+                }
+            }.frame(height: 16)
+            let longest = block.segmentMinutes.max() ?? 0
+            Text(SharedL10n.tr("time.dashboard.daily.focus.block_detail", block.segmentMinutes.count, duration(longest), block.interruptionApps.joined(separator: " · ")))
+                .font(.system(size: 12)).foregroundStyle(Color(hex: "8A8A8E"))
+        }
+    }
+
+    private func returnDuration(_ seconds: Int) -> String {
+        if seconds < 60 { return SharedL10n.tr("time.dashboard.daily.duration.seconds", seconds) }
+        return SharedL10n.tr("time.dashboard.daily.duration.minutes_seconds", seconds / 60, seconds % 60)
+    }
+}
+
+private func duration(_ minutes: Int) -> String {
+    if minutes >= 60 { return SharedL10n.tr("time.dashboard.daily.duration.hours_minutes", minutes / 60, minutes % 60) }
+    return SharedL10n.tr("time.dashboard.daily.duration.minutes", minutes)
 }
 
 // MARK: - Verdict Card

@@ -320,6 +320,20 @@ final class DailyIntentionStore: ObservableObject {
         }
     }
 
+    /// Mark a goal/project as completed or abandoned. Unlike deletion, this
+    /// preserves its intention and time-entry associations for history.
+    func updateGoalStatus(_ goal: RemoteGoal, status: String) {
+        guard status == "completed" || status == "abandoned" else { return }
+        goals.removeAll { $0.id == goal.id }
+        Task {
+            do {
+                try await GoalAPI.updateStatus(id: goal.id, status: status)
+            } catch {
+                await loadGoals()
+            }
+        }
+    }
+
     /// Delete a goal/project. Optimistic: the group disappears immediately and
     /// its intentions move to 公共 (mirroring what the backend does — it
     /// detaches them, never deletes them).
@@ -628,7 +642,12 @@ enum GoalAPI {
 
     static func rename(id: Int, name: String) async throws {
         let url = baseURL.appendingPathComponent(String(id))
-        _ = try await HTTPClient.shared.data(url: url, method: .patch, body: PatchGoalRequest(name: name))
+        _ = try await HTTPClient.shared.data(url: url, method: .patch, body: PatchGoalRequest(name: name, status: nil))
+    }
+
+    static func updateStatus(id: Int, status: String) async throws {
+        let url = baseURL.appendingPathComponent(String(id))
+        _ = try await HTTPClient.shared.data(url: url, method: .patch, body: PatchGoalRequest(name: nil, status: status))
     }
 
     static func delete(id: Int) async throws {
@@ -638,7 +657,8 @@ enum GoalAPI {
 }
 
 private struct PatchGoalRequest: Encodable {
-    var name: String
+    var name: String?
+    var status: String?
 }
 
 private struct GoalListEnvelope: Decodable {

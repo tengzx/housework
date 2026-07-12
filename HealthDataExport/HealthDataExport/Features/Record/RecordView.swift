@@ -949,6 +949,16 @@ private struct IntentionBoardSheet: View {
                         } label: {
                             Label(SharedL10n.tr("record.action.rename"), systemImage: "pencil")
                         }
+                        Button {
+                            store.updateGoalStatus(goal, status: "completed")
+                        } label: {
+                            Label(SharedL10n.tr("record.goal.action.complete"), systemImage: "checkmark.circle")
+                        }
+                        Button {
+                            store.updateGoalStatus(goal, status: "abandoned")
+                        } label: {
+                            Label(SharedL10n.tr("record.goal.action.abandon"), systemImage: "xmark.circle")
+                        }
                         Button(role: .destructive) {
                             goalToDelete = goal
                         } label: {

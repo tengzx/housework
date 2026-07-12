@@ -50,6 +50,7 @@
 
 - The frontend app repository is `/Users/tengzx/myProject/HealthDataExport`.
 - The backend repository is `/Users/tengzx/myProject/life-os`.
+- For product feature development, treat frontend and backend implementation as one scope by default. Complete the required API, persistence/query logic, app integration, localization, and proportional tests in both repositories unless the user explicitly limits the request to one side.
 - When the user says `提交代码推送远端`, treat it as applying to both the frontend app and backend by default.
 - For that request, stage, commit, and push each repository to its own remote unless the user explicitly says otherwise.
 - After writing this rule into `AGENTS.md`, do not add extra explanation about the convention in normal follow-up replies unless the user asks for it.
