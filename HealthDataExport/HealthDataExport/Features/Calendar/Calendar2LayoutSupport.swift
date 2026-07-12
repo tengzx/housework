@@ -52,11 +52,14 @@ enum Calendar2Format {
     }
 
     static func month(_ date: Date) -> String {
+        if L10n.currentLanguage != .en {
+            let month = Calendar.current.component(.month, from: date)
+            return L10n.tr("calendar.header.month", month)
+        }
+
         let formatter = DateFormatter()
         formatter.locale = L10n.locale
-        formatter.setLocalizedDateFormatFromTemplate(
-            L10n.currentLanguage == .en ? "MMM" : "M"
-        )
+        formatter.setLocalizedDateFormatFromTemplate("MMM")
         return formatter.string(from: date)
     }
 

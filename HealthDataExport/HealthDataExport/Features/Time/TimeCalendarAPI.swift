@@ -270,18 +270,18 @@ final class TimeCalendarStore: ObservableObject {
         let newType = try await TimeCalendarAPI.createType(categoryId: categoryId, name: name, tracksFocus: tracksFocus, loadKindOverride: loadKindOverride)
         if let idx = categories.firstIndex(where: { $0.id == categoryId }) {
             let cat = categories[idx]
-            categories[idx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, icon: cat.icon, loadKind: cat.loadKind, types: cat.types + [newType])
+            categories[idx] = Calendar2Category(id: cat.id, label: cat.label, canonicalName: cat.canonicalName, color: cat.color, icon: cat.icon, loadKind: cat.loadKind, types: cat.types + [newType])
         }
         return newType
     }
 
     func updateType(id: String, name: String, tracksFocus: Bool, loadKindOverride: LoadKind?) async throws {
-        let updated = try await TimeCalendarAPI.updateType(id: id, name: name, tracksFocus: tracksFocus, loadKindOverride: loadKindOverride)
         for (catIdx, cat) in categories.enumerated() {
             if let typeIdx = cat.types.firstIndex(where: { $0.id == id }) {
+                let updated = try await TimeCalendarAPI.updateType(id: id, categoryId: cat.id, name: name, tracksFocus: tracksFocus, loadKindOverride: loadKindOverride)
                 var types = cat.types
                 types[typeIdx] = updated
-                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, icon: cat.icon, loadKind: cat.loadKind, types: types)
+                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, canonicalName: cat.canonicalName, color: cat.color, icon: cat.icon, loadKind: cat.loadKind, types: types)
                 break
             }
         }
@@ -291,7 +291,7 @@ final class TimeCalendarStore: ObservableObject {
         try await TimeCalendarAPI.deleteType(id: id)
         for (catIdx, cat) in categories.enumerated() {
             if cat.types.contains(where: { $0.id == id }) {
-                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, color: cat.color, icon: cat.icon, loadKind: cat.loadKind, types: cat.types.filter { $0.id != id })
+                categories[catIdx] = Calendar2Category(id: cat.id, label: cat.label, canonicalName: cat.canonicalName, color: cat.color, icon: cat.icon, loadKind: cat.loadKind, types: cat.types.filter { $0.id != id })
                 break
             }
         }
@@ -446,10 +446,10 @@ enum TimeCalendarAPI {
             body: TimeTypeRequest(name: name, tracksFocus: tracksFocus, loadKindOverride: loadKindOverride?.rawValue)
         )
         let t = response.eventType
-        return Calendar2CategoryType(id: t.id, label: t.label, color: t.color.map { Color(hex: $0) }, icon: t.icon, loadKindOverride: t.loadKindOverride.flatMap(LoadKind.init(rawValue:)), tracksFocus: t.tracksFocus ?? false)
+        return Calendar2CategoryType(id: t.id, label: t.label, canonicalName: t.name, categoryId: categoryId, color: t.color.map { Color(hex: $0) }, icon: t.icon, loadKindOverride: t.loadKindOverride.flatMap(LoadKind.init(rawValue:)), tracksFocus: t.tracksFocus ?? false)
     }
 
-    static func updateType(id: String, name: String, tracksFocus: Bool, loadKindOverride: LoadKind?) async throws -> Calendar2CategoryType {
+    static func updateType(id: String, categoryId: String, name: String, tracksFocus: Bool, loadKindOverride: LoadKind?) async throws -> Calendar2CategoryType {
         let response = try await send(
             TimeTypeEnvelope.self,
             url: baseURL.appendingPathComponent("time-types").appendingPathComponent(id),
@@ -457,7 +457,7 @@ enum TimeCalendarAPI {
             body: TimeTypeRequest(name: name, tracksFocus: tracksFocus, loadKindOverride: loadKindOverride?.rawValue, clearLoadKindOverride: loadKindOverride == nil)
         )
         let t = response.eventType
-        return Calendar2CategoryType(id: t.id, label: t.label, color: t.color.map { Color(hex: $0) }, icon: t.icon, loadKindOverride: t.loadKindOverride.flatMap(LoadKind.init(rawValue:)), tracksFocus: t.tracksFocus ?? false)
+        return Calendar2CategoryType(id: t.id, label: t.label, canonicalName: t.name, categoryId: categoryId, color: t.color.map { Color(hex: $0) }, icon: t.icon, loadKindOverride: t.loadKindOverride.flatMap(LoadKind.init(rawValue:)), tracksFocus: t.tracksFocus ?? false)
     }
 
     static func deleteType(id: String) async throws {
@@ -613,6 +613,8 @@ private struct TimeTypeEnvelope: Decodable {
 struct TimeCategoryResponse: Decodable {
     var id: String
     var label: String
+    /// 服务端的规范名(bootstrap 模板的中文名);label 会随请求 locale 变化,name 不变。
+    var name: String?
     var color: String
     var icon: String?
     var loadKind: String?
@@ -635,6 +637,7 @@ struct TimeCategoryResponse: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeFlexibleString(for: .id)
         label = try container.decodeFirstString(keys: [.label, .name, .title]) ?? id
+        name = try container.decodeFirstString(keys: [.name])
         color = try container.decodeFirstString(keys: [.color]) ?? "#8A8F9C"
         icon = try container.decodeFirstString(keys: [.icon])
         loadKind = try container.decodeFirstString(keys: [.loadKind])
@@ -650,6 +653,8 @@ struct TimeCategoryResponse: Decodable {
 struct TimeCategoryTypeResponse: Decodable {
     var id: String
     var label: String
+    /// 服务端的规范名(bootstrap 模板的中文名);label 会随请求 locale 变化,name 不变。
+    var name: String?
     var color: String?
     var icon: String?
     var tracksFocus: Bool?
@@ -672,6 +677,7 @@ struct TimeCategoryTypeResponse: Decodable {
            let value = try? container.decode(String.self) {
             id = value
             label = value
+            name = value
             color = nil
             icon = nil
             tracksFocus = nil
@@ -682,6 +688,7 @@ struct TimeCategoryTypeResponse: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeFlexibleString(for: .id)
         label = try container.decodeFirstString(keys: [.label, .name, .title]) ?? id
+        name = try container.decodeFirstString(keys: [.name])
         color = try container.decodeFirstString(keys: [.color])
         icon = try container.decodeFirstString(keys: [.icon])
         tracksFocus = try container.decodeIfPresent(Bool.self, forKey: .tracksFocus)
