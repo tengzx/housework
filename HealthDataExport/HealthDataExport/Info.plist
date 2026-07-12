@@ -22,6 +22,29 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>WECHAT_APP_ID</key>
+	<string>$(WECHAT_APP_ID)</string>
+	<key>WECHAT_UNIVERSAL_LINK</key>
+	<string>$(WECHAT_UNIVERSAL_LINK)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>weixin</string>
+		<string>weixinULAPI</string>
+		<string>weixinURLParamsAPI</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>weixin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(WECHAT_APP_ID)</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

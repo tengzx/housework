@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3AC0DE012FE0000000000001 /* WechatOpenSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 3AC0DE032FE0000000000003 /* WechatOpenSDK */; };
 		2A0000012FE0000000000001 /* HealthDataExportWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000022FE0000000000002 /* HealthDataExportWatchApp.swift */; };
 		2A0000032FE0000000000003 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000042FE0000000000004 /* HealthDataExport/Features/Time/WatchTimeTrackerView.swift */; };
 		2A0000052FE0000000000005 /* HealthDataExport/Features/Record/ShortcutRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000062FE0000000000006 /* HealthDataExport/Features/Record/ShortcutRecord.swift */; };
@@ -38,6 +39,8 @@
 		2A0200000000000000000012 /* HealthDataExport/Shared/SharedActiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0200000000000000000005 /* HealthDataExport/Shared/SharedActiveActivity.swift */; };
 		2A0200000000000000000013 /* HealthDataExport/Shared/Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000202FE0000000000020 /* HealthDataExport/Shared/Color+Hex.swift */; };
 		2A0200000000000000000014 /* HealthDataExportWatchWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2A0200000000000000000001 /* HealthDataExportWatchWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2A0300000000000000000001 /* HealthDataExport/Resources/I18n/en.json in Resources */ = {isa = PBXBuildFile; fileRef = 2A0300000000000000000002 /* HealthDataExport/Resources/I18n/en.json */; };
+		2A0300000000000000000003 /* HealthDataExport/Resources/I18n/zh-Hans.json in Resources */ = {isa = PBXBuildFile; fileRef = 2A0300000000000000000004 /* HealthDataExport/Resources/I18n/zh-Hans.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -131,6 +134,8 @@
 		2A0200000000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2A0200000000000000000004 /* HealthDataExportWatchWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HealthDataExportWatchWidget.entitlements; sourceTree = "<group>"; };
 		2A0200000000000000000005 /* HealthDataExport/Shared/SharedActiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDataExport/Shared/SharedActiveActivity.swift; sourceTree = SOURCE_ROOT; };
+		2A0300000000000000000002 /* HealthDataExport/Resources/I18n/en.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = HealthDataExport/Resources/I18n/en.json; sourceTree = SOURCE_ROOT; };
+		2A0300000000000000000004 /* HealthDataExport/Resources/I18n/zh-Hans.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "HealthDataExport/Resources/I18n/zh-Hans.json"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -169,6 +174,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3AC0DE012FE0000000000001 /* WechatOpenSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -233,6 +239,8 @@
 			children = (
 				2A0000222FE0000000000022 /* HealthDataExport/Shared/AppEnvironment.swift */,
 				2A0000242FE0000000000024 /* HealthDataExport/Shared/HTTPClient.swift */,
+				2A0300000000000000000002 /* HealthDataExport/Resources/I18n/en.json */,
+				2A0300000000000000000004 /* HealthDataExport/Resources/I18n/zh-Hans.json */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -300,6 +308,7 @@
 			);
 			name = HealthDataExport;
 			packageProductDependencies = (
+				3AC0DE032FE0000000000003 /* WechatOpenSDK */,
 			);
 			productName = HealthDataExport;
 			productReference = 1B38A34C2FD6D714008783FC /* HealthDataExport.app */;
@@ -429,6 +438,9 @@
 			);
 			mainGroup = 1B38A3432FD6D714008783FC;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				3AC0DE022FE0000000000002 /* XCRemoteSwiftPackageReference "WechatOpenSDK" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1B38A34D2FD6D714008783FC /* Products */;
 			projectDirPath = "";
@@ -470,6 +482,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				2A0000142FE0000000000014 /* Assets.xcassets in Resources */,
+				2A0300000000000000000001 /* HealthDataExport/Resources/I18n/en.json in Resources */,
+				2A0300000000000000000003 /* HealthDataExport/Resources/I18n/zh-Hans.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -719,7 +733,13 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					WebKit,
+				);
 				TARGETED_DEVICE_FAMILY = "1,2";
+				WECHAT_APP_ID = "";
+				WECHAT_UNIVERSAL_LINK = "https://tengzx-macbookpro11-1.tailff8088.ts.net/app/";
 				XROS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Debug;
@@ -755,7 +775,13 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					WebKit,
+				);
 				TARGETED_DEVICE_FAMILY = "1,2";
+				WECHAT_APP_ID = "";
+				WECHAT_UNIVERSAL_LINK = "https://tengzx-macbookpro11-1.tailff8088.ts.net/app/";
 				XROS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Release;
@@ -1064,6 +1090,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		3AC0DE022FE0000000000002 /* XCRemoteSwiftPackageReference "WechatOpenSDK" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/yanyin1986/WechatOpenSDK.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.7;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		3AC0DE032FE0000000000003 /* WechatOpenSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3AC0DE022FE0000000000002 /* XCRemoteSwiftPackageReference "WechatOpenSDK" */;
+			productName = WechatOpenSDK;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1B38A3442FD6D714008783FC /* Project object */;
 }

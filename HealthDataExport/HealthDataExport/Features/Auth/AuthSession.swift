@@ -120,6 +120,20 @@ final class SessionStore: ObservableObject {
         apply(newSession)
     }
 
+    /// Registers a new account; the backend signs the user in as part of registration.
+    func register(nickname: String, password: String) async throws {
+        let newSession = try await AuthAPI.register(nickname: nickname, password: password)
+        apply(newSession)
+    }
+
+    /// WeChat one-tap login: authorize in the WeChat app, then exchange the code on our backend.
+    /// First-time users are registered automatically server-side.
+    func loginWithWeChat() async throws {
+        let code = try await WeChatAuthManager.shared.authorize()
+        let newSession = try await AuthAPI.loginWithWeChat(code: code)
+        apply(newSession)
+    }
+
     func apply(_ newSession: UserSession) {
         AuthTokenStore.set(newSession.token)
         SessionPersistence.save(newSession)

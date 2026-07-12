@@ -1,7 +1,7 @@
 import Foundation
 
 enum AppEnvironment {
-    private static let defaultServerOrigin = URL(string: "http://100.67.64.11:8081")!
+    private static let defaultServerOrigin = URL(string: "https://tengzx-macbookpro11-1.tailff8088.ts.net")!
 
     static var serverOrigin: URL {
         configuredURL(for: "HEALTHDATAEXPORT_SERVER_ORIGIN") ?? defaultServerOrigin

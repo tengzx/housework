@@ -2,12 +2,27 @@ import Foundation
 
 enum AuthAPI {
     static let loginURL = AppEnvironment.apiURL("auth/login")
+    static let registerURL = AppEnvironment.apiURL("auth/register")
+    static let wechatLoginURL = AppEnvironment.apiURL("auth/wechat/login")
 
     static func login(nickname: String, password: String) async throws -> UserSession {
-        let body = LoginRequest(nickname: nickname, password: password)
+        try await performLogin(url: loginURL, body: LoginRequest(nickname: nickname, password: password))
+    }
+
+    /// Creates a new account and returns a signed-in session.
+    static func register(nickname: String, password: String) async throws -> UserSession {
+        try await performLogin(url: registerURL, body: LoginRequest(nickname: nickname, password: password))
+    }
+
+    /// Redeems a WeChat authorization code; the backend auto-creates the account on first login.
+    static func loginWithWeChat(code: String) async throws -> UserSession {
+        try await performLogin(url: wechatLoginURL, body: WeChatLoginRequest(code: code))
+    }
+
+    private static func performLogin(url: URL, body: some Encodable) async throws -> UserSession {
         let response: HTTPClientResponse
         do {
-            response = try await HTTPClient.shared.data(url: loginURL, method: .post, body: body)
+            response = try await HTTPClient.shared.data(url: url, method: .post, body: body)
         } catch let error as HTTPClientError {
             if case let .httpFailure(statusCode, data) = error {
                 throw AuthError(statusCode: statusCode, message: Self.message(from: data))
@@ -39,6 +54,10 @@ enum AuthAPI {
 private struct LoginRequest: Encodable {
     var nickname: String
     var password: String
+}
+
+private struct WeChatLoginRequest: Encodable {
+    var code: String
 }
 
 private struct LoginResponse: Decodable {
