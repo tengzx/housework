@@ -725,6 +725,10 @@ struct TimeDashboardView: View {
         .collapsibleTabScroll()
         .background(Color(hex: "F5F6F8").ignoresSafeArea())
         .tint(Color(hex: "0A84FF"))
+        // The analytics prototype currently uses a fixed light palette. Keep the
+        // entire day/week/month surface (and presented sheets) in light mode so
+        // system-dynamic text never turns white on the fixed white cards.
+        .environment(\.colorScheme, .light)
         .task(id: viewModel.taskID) {
             await viewModel.load()
         }
@@ -844,9 +848,10 @@ private struct MonthlyAnalysisSections:View{
  private var milestones:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.milestones",hintKey:"time.dashboard.month.week_bars");VStack(spacing:0){ForEach(Array(data.goals.enumerated()),id:\.element.id){index,g in HStack{VStack(alignment:.leading,spacing:6){Text(g.goalName).font(.headline);Text(duration(g.totalMinutes)).font(.title3.bold());Text(SharedL10n.tr("time.dashboard.month.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)};Spacer();MiniBars(values:g.weeklyMinutes,color:projectColor(index))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
  private var calendar:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.calendar",hintKey:"time.dashboard.month.calendar_hint");VStack(alignment:.leading,spacing:12){LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:6),count:7),spacing:6){ForEach(data.calendar){d in Text("\(d.day)").font(.caption.bold()).frame(maxWidth:.infinity).frame(height:38).background(dayColor(d),in:RoundedRectangle(cornerRadius:10))}};calendarLegend}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
  private var structure:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.structure",hintKey:"time.dashboard.month.weekly_share");VStack(alignment:.leading,spacing:12){HStack(alignment:.bottom,spacing:12){ForEach(data.structure){w in VStack(spacing:5){LoadStructureBar(percentages:w.percentages,minutes:w.minutes,color:loadColor).frame(maxWidth:.infinity).frame(height:108);Text(SharedL10n.tr("time.dashboard.month.week",w.week)).font(.caption2).foregroundStyle(.secondary)}.frame(maxWidth:.infinity)}}.frame(height:125,alignment:.bottom);structureInsight;structureLegend}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
- private var routine:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.routine",hintKey:"time.dashboard.month.range");VStack(spacing:14){HStack(alignment:.firstTextBaseline){Text(SharedL10n.tr("time.dashboard.month.score"));Spacer();VStack(alignment:.trailing,spacing:2){Text("\(data.routine.score)").font(.title.bold());Text(routineDeltaText).font(.caption.bold()).foregroundStyle((data.routine.scoreDelta ?? 0) >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"))}};Text(SharedL10n.tr("time.dashboard.month.routine_hint")).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E")).frame(maxWidth:.infinity,alignment:.leading);routineRow("time.dashboard.month.wake",data.routine.averageWakeMinute,data.routine.wakeDeviation,data.routine.previousAverageWakeMinute,Color(hex:"A8DCC5"));routineRow("time.dashboard.month.first_focus",data.routine.averageFirstFocusMinute,data.routine.firstFocusDeviation,data.routine.previousAverageFirstFocusMinute,Color(hex:"F3C9A8"));routineRow("time.dashboard.month.sleep",data.routine.averageSleepMinute,data.routine.sleepDeviation,data.routine.previousAverageSleepMinute,Color(hex:"C6CDDC"))}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private var routine:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.routine",hintKey:"time.dashboard.month.range");VStack(spacing:14){HStack(alignment:.firstTextBaseline){Text(SharedL10n.tr("time.dashboard.month.score"));Spacer();VStack(alignment:.trailing,spacing:2){Text("\(data.routine.score)").font(.title.bold());Text(routineDeltaText).font(.caption.bold()).foregroundStyle((data.routine.scoreDelta ?? 0) >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"))}};Text(SharedL10n.tr("time.dashboard.month.routine_hint")).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E")).frame(maxWidth:.infinity,alignment:.leading);routineRow("time.dashboard.month.wake",data.routine.averageWakeMinute,data.routine.wakeDeviation,data.routine.previousAverageWakeMinute,Color(hex:"A8DCC5"));routineRow("time.dashboard.month.first_focus",data.routine.averageFirstFocusMinute,data.routine.firstFocusDeviation,data.routine.previousAverageFirstFocusMinute,Color(hex:"F3C9A8"));routineRow("time.dashboard.month.sleep",data.routine.averageSleepMinute,data.routine.sleepDeviation,data.routine.previousAverageSleepMinute,Color(hex:"C6CDDC"));routineAxis}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
  private var routineDeltaText:String{guard let delta=data.routine.scoreDelta else{return SharedL10n.tr("time.dashboard.month.routine_compare.none")};if delta==0{return SharedL10n.tr("time.dashboard.month.routine_compare.flat")};return SharedL10n.tr(delta>0 ? "time.dashboard.month.routine_compare.up":"time.dashboard.month.routine_compare.down",abs(delta))}
  private func routineRow(_ key:String,_ minute:Int?,_ dev:Int?,_ previousMinute:Int?,_ color:Color)->some View{VStack(spacing:7){HStack{Text(SharedL10n.tr(key)).font(.subheadline.bold());Spacer();Text(minute.map{String(format:"%02d:%02d ±%dm",$0/60,$0%60,dev ?? 0)} ?? "—").font(.caption).foregroundStyle(.secondary)};RoutineRangeBar(minute:minute,deviation:dev,previousMinute:previousMinute,color:color).frame(height:14)}}
+ private var routineAxis:some View{HStack{Text("6:00");Spacer();Text("12:00");Spacer();Text("18:00");Spacer();Text("24:00")}.font(.system(size:10)).foregroundStyle(Color(hex:"C7C7CC"))}
  private var calendarLegend:some View{VStack(alignment:.leading,spacing:8){HStack(spacing:12){calendarLegendItem(color:Color(hex:"8ED2B6"),key:"time.dashboard.month.calendar_legend.focus");calendarLegendItem(color:Color(hex:"E9B1BD"),key:"time.dashboard.month.calendar_legend.distraction");calendarLegendItem(color:Color(hex:"ECECEE"),key:"time.dashboard.month.calendar_legend.none")};Text(SharedL10n.tr("time.dashboard.month.calendar_legend.depth")).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E"))}}
  private func calendarLegendItem(color:Color,key:String)->some View{HStack(spacing:5){RoundedRectangle(cornerRadius:3).fill(color).frame(width:14,height:10);Text(SharedL10n.tr(key)).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E")).lineLimit(1)}}
  private var structureLegend:some View{LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],alignment:.leading,spacing:8){structureLegendItem("OBLIGATION","time.dashboard.load_kind.obligation");structureLegendItem("PROACTIVE","time.dashboard.load_kind.proactive");structureLegendItem("RECOVERY","time.dashboard.load_kind.recovery");structureLegendItem("DISTRACTION","time.dashboard.load_kind.distraction")}}
@@ -958,7 +963,7 @@ private struct RoutineRangeBar: View {
 
     private func x(for minute: Int?, width: CGFloat) -> CGFloat? {
         guard let minute else { return nil }
-        return width * CGFloat(clamped(minute)) / 1439
+        return width * CGFloat(clamped(minute) - 360) / 1080
     }
 
     private func rangeFrame(width: CGFloat) -> (x: CGFloat, width: CGFloat)? {
@@ -966,13 +971,13 @@ private struct RoutineRangeBar: View {
         let dev = max(deviation ?? 0, 12)
         let start = clamped(minute - dev)
         let end = clamped(minute + dev)
-        let x = width * CGFloat(start) / 1439
-        let endX = width * CGFloat(end) / 1439
+        let x = width * CGFloat(start - 360) / 1080
+        let endX = width * CGFloat(end - 360) / 1080
         return (x, max(8, endX - x))
     }
 
     private func clamped(_ value: Int) -> Int {
-        min(1439, max(0, value))
+        min(1440, max(360, value))
     }
 }
 
