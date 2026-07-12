@@ -2,9 +2,16 @@ import SwiftUI
 
 @main
 struct HealthDataExportApp: App {
-    @StateObject private var dependencies = AppDependencies()
-    @StateObject private var localization = LocalizationStore()
-    @StateObject private var session = SessionStore()
+    @StateObject private var dependencies: AppDependencies
+    @StateObject private var localization: LocalizationStore
+    @StateObject private var session: SessionStore
+
+    init() {
+        let localizationStore = LocalizationStore()
+        _dependencies = StateObject(wrappedValue: AppDependencies())
+        _localization = StateObject(wrappedValue: localizationStore)
+        _session = StateObject(wrappedValue: SessionStore(localizationStore: localizationStore))
+    }
 
     var body: some Scene {
         WindowGroup {

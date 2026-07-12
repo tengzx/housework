@@ -9,6 +9,7 @@ struct UserSession: Codable, Equatable {
     var unitSystem: String?
     var heightCm: Double?
     var weightKg: Double?
+    var preferredLanguage: String?
     var token: String
 }
 
@@ -86,14 +87,17 @@ private enum SessionPersistence {
 @MainActor
 final class SessionStore: ObservableObject {
     @Published private(set) var session: UserSession?
+    private weak var localizationStore: LocalizationStore?
 
     var isAuthenticated: Bool { session != nil }
     var currentUserId: Int? { session?.userId }
 
-    init() {
+    init(localizationStore: LocalizationStore? = nil) {
+        self.localizationStore = localizationStore
         let restored = SessionPersistence.load()
         session = restored
         AuthTokenStore.set(restored?.token)
+        localizationStore?.applyServerLanguage(restored?.preferredLanguage)
         // Bridge the token to the paired Apple Watch so it can authenticate too.
         PhoneWatchSync.shared.activate()
         pushToWatch(restored)
@@ -120,6 +124,7 @@ final class SessionStore: ObservableObject {
         AuthTokenStore.set(newSession.token)
         SessionPersistence.save(newSession)
         session = newSession
+        localizationStore?.applyServerLanguage(newSession.preferredLanguage)
         pushToWatch(newSession)
     }
 

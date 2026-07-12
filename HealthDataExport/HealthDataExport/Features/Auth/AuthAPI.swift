@@ -22,6 +22,7 @@ enum AuthAPI {
             unitSystem: decoded.unitSystem,
             heightCm: decoded.heightCm,
             weightKg: decoded.weightKg,
+            preferredLanguage: decoded.preferredLanguage,
             token: decoded.token
         )
     }
@@ -47,6 +48,7 @@ private struct LoginResponse: Decodable {
     var unitSystem: String?
     var heightCm: Double?
     var weightKg: Double?
+    var preferredLanguage: String?
     var token: String
 }
 

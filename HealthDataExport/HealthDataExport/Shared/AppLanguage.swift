@@ -40,10 +40,16 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
 @MainActor
 final class LocalizationStore: ObservableObject {
+    private var isApplyingServerLanguage = false
+
     @Published var language: AppLanguage {
         didSet {
             guard language != oldValue else { return }
             UserDefaults.standard.set(language.rawValue, forKey: AppLanguage.storageKey)
+            guard !isApplyingServerLanguage, AuthTokenStore.token != nil else { return }
+            Task {
+                try? await UserPreferenceAPI.updatePreferredLanguage(language)
+            }
         }
     }
 
@@ -55,6 +61,16 @@ final class LocalizationStore: ObservableObject {
 
     func text(_ key: String, _ arguments: CVarArg...) -> String {
         AppLocalizer.text(key, language: language, arguments: arguments)
+    }
+
+    func applyServerLanguage(_ rawValue: String?) {
+        guard let rawValue else { return }
+        let resolved = AppLanguage(rawValue: rawValue) ?? .system
+        UserDefaults.standard.set(resolved.rawValue, forKey: AppLanguage.storageKey)
+        guard language != resolved else { return }
+        isApplyingServerLanguage = true
+        language = resolved
+        isApplyingServerLanguage = false
     }
 }
 
@@ -156,4 +172,20 @@ private enum AppLocalizer {
             return Locale(identifier: "en")
         }
     }
+}
+
+private enum UserPreferenceAPI {
+    private static let preferredLanguageURL = AppEnvironment.apiV1URL("me/language")
+
+    static func updatePreferredLanguage(_ language: AppLanguage) async throws {
+        try await HTTPClient.shared.data(
+            url: preferredLanguageURL,
+            method: .patch,
+            body: UpdatePreferredLanguageRequest(preferredLanguage: language.rawValue)
+        )
+    }
+}
+
+private struct UpdatePreferredLanguageRequest: Encodable {
+    let preferredLanguage: String
 }
