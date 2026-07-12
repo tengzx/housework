@@ -346,6 +346,11 @@ struct WeeklyGoalPace: Decodable, Identifiable { var goalId:Int; var goalName:St
 struct WeeklyRhythmDay: Decodable, Identifiable { var date:String; var focusMinutes:[Int]; var distractionMinutes:[Int]; var id:String { date } }
 struct WeeklyFocusDay: Decodable, Identifiable { var date:String; var longestMinutes:Int; var averageReturnSeconds:Int; var id:String { date } }
 struct WeeklyLoadDay: Decodable, Identifiable { var date:String; var percentages:[String:Int]; var id:String { date } }
+struct MonthlyAnalysisResponse: Decodable { var goals:[MonthlyGoal];var calendar:[MonthlyDay];var structure:[MonthlyWeek];var routine:MonthlyRoutine }
+struct MonthlyGoal:Decodable,Identifiable{var goalId:Int;var goalName:String;var totalMinutes:Int;var previousMinutes:Int;var weeklyMinutes:[Int];var id:Int{goalId}}
+struct MonthlyDay:Decodable,Identifiable{var day:Int;var focusMinutes:Int;var distractionMinutes:Int;var id:Int{day}}
+struct MonthlyWeek:Decodable,Identifiable{var week:Int;var percentages:[String:Int];var id:Int{week}}
+struct MonthlyRoutine:Decodable{var score:Int;var averageWakeMinute:Int?;var wakeDeviation:Int?;var averageFirstFocusMinute:Int?;var firstFocusDeviation:Int?;var averageSleepMinute:Int?;var sleepDeviation:Int?}
 
 // MARK: - API
 
@@ -392,6 +397,7 @@ private enum TimeDashboardAPI {
     static func weeklyAnalysis(anchorDate: Date) async throws -> WeeklyAnalysisResponse {
         try await get(WeeklyAnalysisResponse.self, path: "time-dashboard/weekly-analysis", params: ["anchorDate":anchorDate.dashboardDateString,"timeZone":TimeZone.current.identifier])
     }
+    static func monthlyAnalysis(anchorDate:Date) async throws -> MonthlyAnalysisResponse { try await get(MonthlyAnalysisResponse.self,path:"time-dashboard/monthly-analysis",params:["anchorDate":anchorDate.dashboardDateString,"timeZone":TimeZone.current.identifier]) }
 
     static func dailyReviews(from: String, to: String) async throws -> [DailyReviewResponse] {
         try await get([DailyReviewResponse].self, path: "daily-reviews", params: [
@@ -428,6 +434,7 @@ final class TimeDashboardViewModel: ObservableObject {
     @Published var mobileAppSummary: MobileAppSummaryResponse?
     @Published var dailyAnalysis: DailyAnalysisResponse?
     @Published var weeklyAnalysis: WeeklyAnalysisResponse?
+    @Published var monthlyAnalysis: MonthlyAnalysisResponse?
     @Published var allFocusBlocks: [DailyFocusBlock] = []
     @Published var showAllFocusBlocks = false
     @Published var isLoadingAllFocusBlocks = false
@@ -509,6 +516,7 @@ final class TimeDashboardViewModel: ObservableObject {
         mobileAppSummary = nil
         dailyAnalysis = nil
         weeklyAnalysis = nil
+        monthlyAnalysis = nil
         allFocusBlocks = []
         dailyReviews = []
         reviewErrorMessage = ""
@@ -521,6 +529,7 @@ final class TimeDashboardViewModel: ObservableObject {
             ? (try? await TimeDashboardAPI.dailyAnalysis(anchorDate: anchorDate))
             : nil
         async let weeklyResult: WeeklyAnalysisResponse? = granularity == .week ? (try? await TimeDashboardAPI.weeklyAnalysis(anchorDate: anchorDate)) : nil
+        async let monthlyResult: MonthlyAnalysisResponse? = granularity == .month ? (try? await TimeDashboardAPI.monthlyAnalysis(anchorDate:anchorDate)) : nil
         do {
             overview = try await overviewResult
         } catch {
@@ -529,6 +538,7 @@ final class TimeDashboardViewModel: ObservableObject {
         mobileAppSummary = try? await mobileResult
         dailyAnalysis = await dailyResult
         weeklyAnalysis = await weeklyResult
+        monthlyAnalysis = await monthlyResult
         // 每日复盘仅在“日”维度提供；预取以决定卡片是否可点击。
         if granularity == .day {
             await loadDailyReviews()
@@ -650,6 +660,7 @@ struct TimeDashboardView: View {
                     if viewModel.granularity == .week, let weekly = viewModel.weeklyAnalysis {
                         WeeklyAnalysisSections(data: weekly).padding(.horizontal,16).padding(.bottom,22)
                     }
+                    if viewModel.granularity == .month, let monthly = viewModel.monthlyAnalysis { MonthlyAnalysisSections(data:monthly).padding(.horizontal,16).padding(.bottom,22) }
 
                     HStack {
                         Text(SharedL10n.tr("time.dashboard.section.load_cards"))
@@ -826,6 +837,18 @@ struct TimeDashboardView: View {
 
 // MARK: - Daily Analysis Sections
 
+private struct MonthlyAnalysisSections:View{
+ let data:MonthlyAnalysisResponse;private let colors=["AEB9CE","F0A468","BFE3D4","EFC3CC"]
+ var body:some View{VStack(spacing:22){milestones;calendar;structure;routine}}
+ private var milestones:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.milestones",hintKey:"time.dashboard.month.week_bars");VStack(spacing:0){ForEach(data.goals){g in HStack{VStack(alignment:.leading,spacing:6){Text(g.goalName).font(.headline);Text(duration(g.totalMinutes)).font(.title3.bold());Text(SharedL10n.tr("time.dashboard.month.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)};Spacer();MiniBars(values:g.weeklyMinutes,color:Color(hex:"E5772E"))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private var calendar:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.calendar",hintKey:"time.dashboard.month.calendar_hint");LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:6),count:7),spacing:6){ForEach(data.calendar){d in Text("\(d.day)").font(.caption.bold()).frame(maxWidth:.infinity).frame(height:38).background(dayColor(d),in:RoundedRectangle(cornerRadius:10))}}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private var structure:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.structure",hintKey:"time.dashboard.month.weekly_share");HStack(alignment:.bottom,spacing:12){ForEach(data.structure){w in VStack(spacing:5){VStack(spacing:0){ForEach(["DISTRACTION","RECOVERY","PROACTIVE","OBLIGATION"],id:\.self){k in Rectangle().fill(loadColor(k)).frame(height:CGFloat(w.percentages[k] ?? 0))}}.clipShape(RoundedRectangle(cornerRadius:6));Text(SharedL10n.tr("time.dashboard.month.week",w.week)).font(.caption2).foregroundStyle(.secondary)}.frame(maxWidth:.infinity)}}.frame(height:125,alignment:.bottom).padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private var routine:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.routine",hintKey:"time.dashboard.month.range");VStack(spacing:14){HStack{Text(SharedL10n.tr("time.dashboard.month.score"));Spacer();Text("\(data.routine.score)").font(.title.bold())};routineRow("time.dashboard.month.wake",data.routine.averageWakeMinute,data.routine.wakeDeviation,Color(hex:"A8DCC5"));routineRow("time.dashboard.month.first_focus",data.routine.averageFirstFocusMinute,data.routine.firstFocusDeviation,Color(hex:"F3C9A8"));routineRow("time.dashboard.month.sleep",data.routine.averageSleepMinute,data.routine.sleepDeviation,Color(hex:"C6CDDC"))}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private func routineRow(_ key:String,_ minute:Int?,_ dev:Int?,_ color:Color)->some View{VStack(spacing:7){HStack{Text(SharedL10n.tr(key)).font(.subheadline.bold());Spacer();Text(minute.map{String(format:"%02d:%02d ±%dm",$0/60,$0%60,dev ?? 0)} ?? "—").font(.caption).foregroundStyle(.secondary)};Capsule().fill(color).frame(height:10)}}
+ private func dayColor(_ d:MonthlyDay)->Color{if d.distractionMinutes>d.focusMinutes{return Color(hex:"EFC3CC")};if d.focusMinutes==0{return Color(hex:"ECECEE")};return Color(hex:"279E77").opacity(min(0.2+Double(d.focusMinutes)/180,1))}
+ private func loadColor(_ k:String)->Color{switch k{case"PROACTIVE":Color(hex:"F0A468");case"RECOVERY":Color(hex:"CFE9DE");case"DISTRACTION":Color(hex:"EFC3CC");default:Color(hex:"C9D0DF")}}
+}
+
 private struct WeeklyAnalysisSections: View {
     let data: WeeklyAnalysisResponse
     private let days = ["time.dashboard.week.mon","time.dashboard.week.tue","time.dashboard.week.wed","time.dashboard.week.thu","time.dashboard.week.fri","time.dashboard.week.sat","time.dashboard.week.sun"]
@@ -834,11 +857,97 @@ private struct WeeklyAnalysisSections: View {
         DailySectionTitle(titleKey:"time.dashboard.week.goals",hintKey:"time.dashboard.week.goals_hint")
         VStack(spacing:0){ForEach(data.goals){g in HStack{VStack(alignment:.leading,spacing:5){Text(g.goalName).font(.system(size:15,weight:.semibold));HStack{Text(duration(g.totalMinutes)).font(.system(size:18,weight:.heavy));Text(String(format:"%+d%%",g.changePercent)).font(.caption.bold()).foregroundStyle(g.changePercent >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"));Text(SharedL10n.tr("time.dashboard.week.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)}};Spacer();MiniBars(values:g.dailyMinutes,color:Color(hex:"E8743B"))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(.white,in:RoundedRectangle(cornerRadius:20)) } }
     private var rhythm: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.rhythm",hintKey:"time.dashboard.week.rhythm_hint");VStack(spacing:7){HStack{Text("").frame(width:42);ForEach(days,id:\.self){Text(SharedL10n.tr($0)).frame(maxWidth:.infinity)}}.font(.caption2).foregroundStyle(.secondary);ForEach(0..<5,id:\.self){slot in HStack{Text(SharedL10n.tr("time.dashboard.week.slot.\(slot)")).frame(width:42,alignment:.leading);ForEach(0..<7,id:\.self){d in let f=data.rhythm.indices.contains(d) ? data.rhythm[d].focusMinutes[slot]:0;let x=data.rhythm.indices.contains(d) ? data.rhythm[d].distractionMinutes[slot]:0;RoundedRectangle(cornerRadius:6).fill(x>f ? Color(hex:"E8B7C1") : Color(hex:"3FA78A").opacity(min(0.2+Double(f)/120,1))).frame(height:26)}}}}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))} }
-    private var focusTrend: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.focus_trend",hintKey:"time.dashboard.week.shorter_better");VStack(alignment:.leading,spacing:16){Text(SharedL10n.tr("time.dashboard.daily.focus.longest")).font(.subheadline.bold());MiniBars(values:data.focusTrend.map(\.longestMinutes),color:Color(hex:"E8743B")).frame(maxWidth:.infinity);Divider();Text(SharedL10n.tr("time.dashboard.daily.focus.return")).font(.subheadline.bold());MiniBars(values:data.focusTrend.map{$0.averageReturnSeconds/60},color:Color(hex:"C9485B")).frame(maxWidth:.infinity)}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))} }
-    private var structure: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.structure",hintKey:"time.dashboard.week.daily_share");HStack(alignment:.bottom,spacing:8){ForEach(data.loadStructure){day in VStack(spacing:0){ForEach(["DISTRACTION","RECOVERY","PROACTIVE","OBLIGATION"],id:\.self){k in Rectangle().fill(color(k)).frame(height:CGFloat(day.percentages[k] ?? 0))}}.clipShape(RoundedRectangle(cornerRadius:6)).frame(maxWidth:.infinity)}}.frame(height:110,alignment:.bottom).padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))} }
-    private func color(_ k:String)->Color { switch k {case "PROACTIVE":Color(hex:"E8743B");case "RECOVERY":Color(hex:"3FA78A");case "DISTRACTION":Color(hex:"C9485B");default:Color(hex:"6B7A99")} }
+    private var focusTrend: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.focus_trend",hintKey:"time.dashboard.week.shorter_better");VStack(alignment:.leading,spacing:16){Text(SharedL10n.tr("time.dashboard.daily.focus.longest")).font(.subheadline.bold());WeeklyTrendBars(values:data.focusTrend.map(\.longestMinutes),unitKey:"time.dashboard.daily.duration.minutes",base:Color(hex:"F3C9A8"),highlight:Color(hex:"E5772E"),highIsGood:true);Divider();Text(SharedL10n.tr("time.dashboard.daily.focus.return")).font(.subheadline.bold());WeeklyTrendBars(values:data.focusTrend.map{$0.averageReturnSeconds/60},unitKey:"time.dashboard.daily.duration.minutes",base:Color(hex:"EFC3CC"),highlight:Color(hex:"C2455E"),best:Color(hex:"B3DECC"),highIsGood:false)}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))} }
+    private var structure: some View {
+        VStack(spacing: 0) {
+            DailySectionTitle(titleKey: "time.dashboard.week.structure", hintKey: "time.dashboard.week.daily_share")
+            VStack(spacing: 12) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    ForEach(Array(data.loadStructure.enumerated()), id: \.element.id) { index, day in
+                        VStack(spacing: 6) {
+                            VStack(spacing: 0) {
+                                ForEach(["DISTRACTION", "RECOVERY", "PROACTIVE", "OBLIGATION"], id: \.self) { kind in
+                                    Rectangle()
+                                        .fill(color(kind))
+                                        .frame(height: CGFloat(day.percentages[kind] ?? 0))
+                                }
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            Text(SharedL10n.tr(days[index]))
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color(hex: "B0B0B4"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(height: 122, alignment: .bottom)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
+                    loadLegend("OBLIGATION", "time.dashboard.load_kind.obligation")
+                    loadLegend("PROACTIVE", "time.dashboard.load_kind.proactive")
+                    loadLegend("RECOVERY", "time.dashboard.load_kind.recovery")
+                    loadLegend("DISTRACTION", "time.dashboard.load_kind.distraction")
+                }
+            }
+            .padding(16)
+            .background(.white, in: RoundedRectangle(cornerRadius: 20))
+        }
+    }
+    private func loadLegend(_ kind: String, _ key: String) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color(kind)).frame(width: 8, height: 8)
+            Text(SharedL10n.tr(key))
+                .font(.system(size: 10))
+                .foregroundStyle(Color(hex: "8A8A8E"))
+                .lineLimit(1)
+        }
+    }
+    private func color(_ k:String)->Color { switch k {case "PROACTIVE":Color(hex:"F0A468");case "RECOVERY":Color(hex:"BFE3D4");case "DISTRACTION":Color(hex:"EFC3CC");default:Color(hex:"AEB9CE")} }
 }
 private struct MiniBars: View { let values:[Int];let color:Color;var body:some View{HStack(alignment:.bottom,spacing:3){ForEach(Array(values.enumerated()),id:\.offset){_,v in RoundedRectangle(cornerRadius:2).fill(color.opacity(v==values.max() ? 1:0.4)).frame(width:9,height:CGFloat(max(3,min(32,v/2))))}}.frame(height:34)} }
+
+private struct WeeklyTrendBars: View {
+    let values: [Int]
+    let unitKey: String
+    let base: Color
+    let highlight: Color
+    var best: Color? = nil
+    let highIsGood: Bool
+    private let dayKeys = ["time.dashboard.week.mon","time.dashboard.week.tue","time.dashboard.week.wed","time.dashboard.week.thu","time.dashboard.week.fri","time.dashboard.week.sat","time.dashboard.week.sun"]
+
+    var body: some View {
+        let maximum = max(values.max() ?? 0, 1)
+        let positive = values.filter { $0 > 0 }
+        let minimumPositive = positive.min()
+        HStack(alignment: .bottom, spacing: 8) {
+            ForEach(Array(values.enumerated()), id: \.offset) { index, value in
+                VStack(spacing: 5) {
+                    Text(duration(value))
+                        .font(.system(size: 10, weight: value == values.max() ? .bold : .medium))
+                        .foregroundStyle(Color(hex: "8A8A8E"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(barColor(value, minimumPositive: minimumPositive))
+                        .frame(height: CGFloat(max(4, value * 54 / maximum)))
+                    Text(SharedL10n.tr(dayKeys[index]))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(hex: "B0B0B4"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(height: 88, alignment: .bottom)
+    }
+
+    private func barColor(_ value: Int, minimumPositive: Int?) -> Color {
+        if value == 0 { return Color(hex: "EFEFF1") }
+        if highIsGood, value == values.max() { return highlight }
+        if !highIsGood, value == values.max() { return highlight }
+        if !highIsGood, value == minimumPositive { return best ?? base }
+        return base
+    }
+}
 
 private struct DailySectionTitle: View {
     let titleKey: String

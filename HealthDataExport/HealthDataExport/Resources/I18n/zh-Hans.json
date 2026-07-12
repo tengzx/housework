@@ -429,6 +429,7 @@
   "time.dashboard.week.rhythm": "每日节奏", "time.dashboard.week.rhythm_hint": "颜色越深专注越长", "time.dashboard.week.focus_trend": "专注质量趋势", "time.dashboard.week.shorter_better": "越短越好", "time.dashboard.week.structure": "四类结构变化", "time.dashboard.week.daily_share": "每日占比",
   "time.dashboard.week.mon":"一", "time.dashboard.week.tue":"二", "time.dashboard.week.wed":"三", "time.dashboard.week.thu":"四", "time.dashboard.week.fri":"五", "time.dashboard.week.sat":"六", "time.dashboard.week.sun":"日",
   "time.dashboard.week.slot.0":"早晨", "time.dashboard.week.slot.1":"上午", "time.dashboard.week.slot.2":"下午", "time.dashboard.week.slot.3":"傍晚", "time.dashboard.week.slot.4":"晚上",
+  "time.dashboard.month.milestones":"目标里程碑", "time.dashboard.month.week_bars":"小柱 = 各周投入", "time.dashboard.month.previous":"上月 %@", "time.dashboard.month.calendar":"专注日历", "time.dashboard.month.calendar_hint":"绿 = 专注浓度 · 红 = 分心为主", "time.dashboard.month.structure":"结构演变", "time.dashboard.month.weekly_share":"每周占比", "time.dashboard.month.week":"第%d周", "time.dashboard.month.routine":"作息规律", "time.dashboard.month.range":"色带 = 本月波动范围", "time.dashboard.month.score":"规律分", "time.dashboard.month.wake":"起床", "time.dashboard.month.first_focus":"首次专注", "time.dashboard.month.sleep":"入睡",
   "time.dashboard.title": "负载报表",
   "time.dashboard.headline.day": "今日方向",
   "time.dashboard.headline.week": "本周方向",
