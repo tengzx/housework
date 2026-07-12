@@ -75,6 +75,12 @@ struct DashboardHealthScore: Decodable {
     var delta: Int?
 }
 
+private struct LocalizedDashboardHeadline {
+    let title: String
+    let summary: String
+    let badge: String
+}
+
 struct DashboardCard: Decodable, Identifiable {
     var loadKind: String
     var label: String
@@ -88,6 +94,108 @@ struct DashboardCard: Decodable, Identifiable {
     var sparkline: [Int]
 
     var id: String { loadKind }
+}
+
+private extension DashboardOverviewResponse {
+    var localizedHeadline: LocalizedDashboardHeadline {
+        let proactive = card(for: .proactive)
+        let recovery = card(for: .recovery)
+        let distraction = card(for: .distraction)
+        let currentProactive = proactive?.percent ?? 0
+        let previousProactive = currentProactive - (proactive?.changePercent ?? 0)
+        let proactiveDelta = proactive?.changePercent ?? 0
+
+        let currentRecovery = recovery?.percent ?? 0
+        let previousRecovery = currentRecovery - (recovery?.changePercent ?? 0)
+        let recoveryDelta = currentRecovery - previousRecovery
+
+        let currentDistraction = distraction?.percent ?? 0
+        let previousDistraction = currentDistraction - (distraction?.changePercent ?? 0)
+        let distractionDelta = currentDistraction - previousDistraction
+        let distractionDrop = previousDistraction - currentDistraction
+
+        let distractionControlled = distractionDrop > 0 || (currentDistraction == 0 && previousDistraction == 0)
+        let recoveryDominant = currentRecovery >= 70
+
+        let title: String
+        let summary: String
+
+        if proactiveDelta > 0 {
+            title = distractionDrop > 0
+                ? SharedL10n.tr("time.dashboard.headline.proactive_up_distraction_down.title")
+                : SharedL10n.tr("time.dashboard.headline.proactive_up_steady.title")
+            summary = SharedL10n.tr(
+                "time.dashboard.headline.proactive_up.summary",
+                previousProactive,
+                currentProactive,
+                localizedDistractionChange(current: currentDistraction, previous: previousDistraction, delta: distractionDelta)
+            )
+        } else if proactiveDelta < 0 && recoveryDominant && distractionControlled {
+            title = SharedL10n.tr("time.dashboard.headline.recovery_dominant.title")
+            summary = SharedL10n.tr(
+                "time.dashboard.headline.recovery_dominant.summary",
+                previousProactive,
+                currentProactive
+            )
+        } else if proactiveDelta < 0 {
+            title = distractionDrop > 0
+                ? SharedL10n.tr("time.dashboard.headline.proactive_down_distraction_down.title")
+                : SharedL10n.tr("time.dashboard.headline.proactive_down_steady.title")
+            summary = SharedL10n.tr(
+                "time.dashboard.headline.proactive_down.summary",
+                previousProactive,
+                currentProactive,
+                localizedDistractionChange(current: currentDistraction, previous: previousDistraction, delta: distractionDelta)
+            )
+        } else if recoveryDelta > 0 && recoveryDominant {
+            title = SharedL10n.tr("time.dashboard.headline.recovery_up.title")
+            summary = SharedL10n.tr(
+                "time.dashboard.headline.recovery_up.summary",
+                currentProactive,
+                currentRecovery
+            )
+        } else {
+            title = distractionDrop > 0
+                ? SharedL10n.tr("time.dashboard.headline.steady_good.title")
+                : SharedL10n.tr("time.dashboard.headline.steady_neutral.title")
+            summary = SharedL10n.tr("time.dashboard.headline.steady.summary", currentProactive)
+        }
+
+        return LocalizedDashboardHeadline(
+            title: title,
+            summary: summary,
+            badge: localizedBadge
+        )
+    }
+
+    private var localizedBadge: String {
+        let periodKey: String
+        switch granularity {
+        case "day":
+            periodKey = "day"
+        case "month":
+            periodKey = "month"
+        default:
+            periodKey = "week"
+        }
+
+        let trendKey = headline.trend == "better" ? "better" : "worse"
+        return SharedL10n.tr("time.dashboard.badge.\(periodKey).\(trendKey)")
+    }
+
+    private func localizedDistractionChange(current: Int, previous: Int, delta: Int) -> String {
+        if delta > 0 {
+            return SharedL10n.tr("time.dashboard.distraction.up", previous, current)
+        }
+        if delta < 0 {
+            return SharedL10n.tr("time.dashboard.distraction.down", previous, current)
+        }
+        return SharedL10n.tr("time.dashboard.distraction.flat", current)
+    }
+
+    private func card(for kind: LoadKind) -> DashboardCard? {
+        cards.first { $0.loadKind.uppercased() == kind.rawValue }
+    }
 }
 
 struct DashboardCompositionResponse: Decodable {
@@ -621,6 +729,10 @@ private struct VerdictCardView: View {
     let overview: DashboardOverviewResponse
     var showReviewHint: Bool = false
 
+    private var localizedHeadline: LocalizedDashboardHeadline {
+        overview.localizedHeadline
+    }
+
     private var eyebrow: String {
         switch overview.granularity {
         case "day": return SharedL10n.tr("time.dashboard.headline.day")
@@ -638,14 +750,14 @@ private struct VerdictCardView: View {
                     .foregroundStyle(Color(hex: "A6A29C"))
                     .padding(.bottom, 10)
 
-                Text(overview.headline.title)
+                Text(localizedHeadline.title)
                     .font(.system(size: 22, weight: .heavy))
                     .lineSpacing(3)
                     .foregroundStyle(Color(hex: "1C1B1A"))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 8)
 
-                Text(overview.headline.summary)
+                Text(localizedHeadline.summary)
                     .font(.system(size: 14))
                     .foregroundStyle(Color(hex: "6B6864"))
                     .lineLimit(4)
@@ -681,7 +793,7 @@ private struct VerdictCardView: View {
             if isBetter {
                 Text("▲")
             }
-            Text(overview.headline.badge)
+            Text(localizedHeadline.badge)
         }
         .font(.system(size: 13, weight: .bold))
         .foregroundStyle(Color(hex: "3FA78A"))
@@ -715,7 +827,7 @@ private struct HealthRingView: View {
                 Text("\(score.score)")
                     .font(.system(size: 20, weight: .heavy))
                     .foregroundStyle(Color(hex: "1C1B1A"))
-                Text(score.label)
+                Text(SharedL10n.tr("time.dashboard.health_score"))
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Color(hex: "A6A29C"))
             }
