@@ -349,8 +349,8 @@ struct WeeklyLoadDay: Decodable, Identifiable { var date:String; var percentages
 struct MonthlyAnalysisResponse: Decodable { var goals:[MonthlyGoal];var calendar:[MonthlyDay];var structure:[MonthlyWeek];var routine:MonthlyRoutine }
 struct MonthlyGoal:Decodable,Identifiable{var goalId:Int;var goalName:String;var totalMinutes:Int;var previousMinutes:Int;var weeklyMinutes:[Int];var id:Int{goalId}}
 struct MonthlyDay:Decodable,Identifiable{var day:Int;var focusMinutes:Int;var distractionMinutes:Int;var id:Int{day}}
-struct MonthlyWeek:Decodable,Identifiable{var week:Int;var percentages:[String:Int];var id:Int{week}}
-struct MonthlyRoutine:Decodable{var score:Int;var averageWakeMinute:Int?;var wakeDeviation:Int?;var averageFirstFocusMinute:Int?;var firstFocusDeviation:Int?;var averageSleepMinute:Int?;var sleepDeviation:Int?}
+struct MonthlyWeek:Decodable,Identifiable{var week:Int;var percentages:[String:Int];var minutes:[String:Int]?;var id:Int{week}}
+struct MonthlyRoutine:Decodable{var score:Int;var previousScore:Int?;var scoreDelta:Int?;var averageWakeMinute:Int?;var wakeDeviation:Int?;var previousAverageWakeMinute:Int?;var previousWakeDeviation:Int?;var averageFirstFocusMinute:Int?;var firstFocusDeviation:Int?;var previousAverageFirstFocusMinute:Int?;var previousFirstFocusDeviation:Int?;var averageSleepMinute:Int?;var sleepDeviation:Int?;var previousAverageSleepMinute:Int?;var previousSleepDeviation:Int?}
 
 // MARK: - API
 
@@ -838,24 +838,152 @@ struct TimeDashboardView: View {
 // MARK: - Daily Analysis Sections
 
 private struct MonthlyAnalysisSections:View{
- let data:MonthlyAnalysisResponse;private let colors=["AEB9CE","F0A468","BFE3D4","EFC3CC"]
+ let data:MonthlyAnalysisResponse
+ private let projectPalette=["A9C7E8","F2BE8D","B9DDCB","E9B9C4","C9C2EA","E9DA9B","B8D7D9","F1B8A8"]
  var body:some View{VStack(spacing:22){milestones;calendar;structure;routine}}
- private var milestones:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.milestones",hintKey:"time.dashboard.month.week_bars");VStack(spacing:0){ForEach(data.goals){g in HStack{VStack(alignment:.leading,spacing:6){Text(g.goalName).font(.headline);Text(duration(g.totalMinutes)).font(.title3.bold());Text(SharedL10n.tr("time.dashboard.month.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)};Spacer();MiniBars(values:g.weeklyMinutes,color:Color(hex:"E5772E"))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
- private var calendar:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.calendar",hintKey:"time.dashboard.month.calendar_hint");LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:6),count:7),spacing:6){ForEach(data.calendar){d in Text("\(d.day)").font(.caption.bold()).frame(maxWidth:.infinity).frame(height:38).background(dayColor(d),in:RoundedRectangle(cornerRadius:10))}}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
- private var structure:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.structure",hintKey:"time.dashboard.month.weekly_share");HStack(alignment:.bottom,spacing:12){ForEach(data.structure){w in VStack(spacing:5){VStack(spacing:0){ForEach(["DISTRACTION","RECOVERY","PROACTIVE","OBLIGATION"],id:\.self){k in Rectangle().fill(loadColor(k)).frame(height:CGFloat(w.percentages[k] ?? 0))}}.clipShape(RoundedRectangle(cornerRadius:6));Text(SharedL10n.tr("time.dashboard.month.week",w.week)).font(.caption2).foregroundStyle(.secondary)}.frame(maxWidth:.infinity)}}.frame(height:125,alignment:.bottom).padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
- private var routine:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.routine",hintKey:"time.dashboard.month.range");VStack(spacing:14){HStack{Text(SharedL10n.tr("time.dashboard.month.score"));Spacer();Text("\(data.routine.score)").font(.title.bold())};routineRow("time.dashboard.month.wake",data.routine.averageWakeMinute,data.routine.wakeDeviation,Color(hex:"A8DCC5"));routineRow("time.dashboard.month.first_focus",data.routine.averageFirstFocusMinute,data.routine.firstFocusDeviation,Color(hex:"F3C9A8"));routineRow("time.dashboard.month.sleep",data.routine.averageSleepMinute,data.routine.sleepDeviation,Color(hex:"C6CDDC"))}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
- private func routineRow(_ key:String,_ minute:Int?,_ dev:Int?,_ color:Color)->some View{VStack(spacing:7){HStack{Text(SharedL10n.tr(key)).font(.subheadline.bold());Spacer();Text(minute.map{String(format:"%02d:%02d ±%dm",$0/60,$0%60,dev ?? 0)} ?? "—").font(.caption).foregroundStyle(.secondary)};Capsule().fill(color).frame(height:10)}}
- private func dayColor(_ d:MonthlyDay)->Color{if d.distractionMinutes>d.focusMinutes{return Color(hex:"EFC3CC")};if d.focusMinutes==0{return Color(hex:"ECECEE")};return Color(hex:"279E77").opacity(min(0.2+Double(d.focusMinutes)/180,1))}
- private func loadColor(_ k:String)->Color{switch k{case"PROACTIVE":Color(hex:"F0A468");case"RECOVERY":Color(hex:"CFE9DE");case"DISTRACTION":Color(hex:"EFC3CC");default:Color(hex:"C9D0DF")}}
+ private var milestones:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.milestones",hintKey:"time.dashboard.month.week_bars");VStack(spacing:0){ForEach(Array(data.goals.enumerated()),id:\.element.id){index,g in HStack{VStack(alignment:.leading,spacing:6){Text(g.goalName).font(.headline);Text(duration(g.totalMinutes)).font(.title3.bold());Text(SharedL10n.tr("time.dashboard.month.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)};Spacer();MiniBars(values:g.weeklyMinutes,color:projectColor(index))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private var calendar:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.calendar",hintKey:"time.dashboard.month.calendar_hint");VStack(alignment:.leading,spacing:12){LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:6),count:7),spacing:6){ForEach(data.calendar){d in Text("\(d.day)").font(.caption.bold()).frame(maxWidth:.infinity).frame(height:38).background(dayColor(d),in:RoundedRectangle(cornerRadius:10))}};calendarLegend}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private var structure:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.structure",hintKey:"time.dashboard.month.weekly_share");VStack(alignment:.leading,spacing:12){HStack(alignment:.bottom,spacing:12){ForEach(data.structure){w in VStack(spacing:5){LoadStructureBar(percentages:w.percentages,minutes:w.minutes,color:loadColor).frame(maxWidth:.infinity).frame(height:108);Text(SharedL10n.tr("time.dashboard.month.week",w.week)).font(.caption2).foregroundStyle(.secondary)}.frame(maxWidth:.infinity)}}.frame(height:125,alignment:.bottom);structureInsight;structureLegend}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private var routine:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.routine",hintKey:"time.dashboard.month.range");VStack(spacing:14){HStack(alignment:.firstTextBaseline){Text(SharedL10n.tr("time.dashboard.month.score"));Spacer();VStack(alignment:.trailing,spacing:2){Text("\(data.routine.score)").font(.title.bold());Text(routineDeltaText).font(.caption.bold()).foregroundStyle((data.routine.scoreDelta ?? 0) >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"))}};Text(SharedL10n.tr("time.dashboard.month.routine_hint")).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E")).frame(maxWidth:.infinity,alignment:.leading);routineRow("time.dashboard.month.wake",data.routine.averageWakeMinute,data.routine.wakeDeviation,data.routine.previousAverageWakeMinute,Color(hex:"A8DCC5"));routineRow("time.dashboard.month.first_focus",data.routine.averageFirstFocusMinute,data.routine.firstFocusDeviation,data.routine.previousAverageFirstFocusMinute,Color(hex:"F3C9A8"));routineRow("time.dashboard.month.sleep",data.routine.averageSleepMinute,data.routine.sleepDeviation,data.routine.previousAverageSleepMinute,Color(hex:"C6CDDC"))}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private var routineDeltaText:String{guard let delta=data.routine.scoreDelta else{return SharedL10n.tr("time.dashboard.month.routine_compare.none")};if delta==0{return SharedL10n.tr("time.dashboard.month.routine_compare.flat")};return SharedL10n.tr(delta>0 ? "time.dashboard.month.routine_compare.up":"time.dashboard.month.routine_compare.down",abs(delta))}
+ private func routineRow(_ key:String,_ minute:Int?,_ dev:Int?,_ previousMinute:Int?,_ color:Color)->some View{VStack(spacing:7){HStack{Text(SharedL10n.tr(key)).font(.subheadline.bold());Spacer();Text(minute.map{String(format:"%02d:%02d ±%dm",$0/60,$0%60,dev ?? 0)} ?? "—").font(.caption).foregroundStyle(.secondary)};RoutineRangeBar(minute:minute,deviation:dev,previousMinute:previousMinute,color:color).frame(height:14)}}
+ private var calendarLegend:some View{VStack(alignment:.leading,spacing:8){HStack(spacing:12){calendarLegendItem(color:Color(hex:"8ED2B6"),key:"time.dashboard.month.calendar_legend.focus");calendarLegendItem(color:Color(hex:"E9B1BD"),key:"time.dashboard.month.calendar_legend.distraction");calendarLegendItem(color:Color(hex:"ECECEE"),key:"time.dashboard.month.calendar_legend.none")};Text(SharedL10n.tr("time.dashboard.month.calendar_legend.depth")).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E"))}}
+ private func calendarLegendItem(color:Color,key:String)->some View{HStack(spacing:5){RoundedRectangle(cornerRadius:3).fill(color).frame(width:14,height:10);Text(SharedL10n.tr(key)).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E")).lineLimit(1)}}
+ private var structureLegend:some View{LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],alignment:.leading,spacing:8){structureLegendItem("OBLIGATION","time.dashboard.load_kind.obligation");structureLegendItem("PROACTIVE","time.dashboard.load_kind.proactive");structureLegendItem("RECOVERY","time.dashboard.load_kind.recovery");structureLegendItem("DISTRACTION","time.dashboard.load_kind.distraction")}}
+ private func structureLegendItem(_ kind:String,_ key:String)->some View{HStack(spacing:5){Circle().fill(loadColor(kind)).frame(width:8,height:8);Text(SharedL10n.tr(key)).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E")).lineLimit(1)}}
+ private var structureInsight:some View{Text(structureInsightText).font(.system(size:11,weight:.medium)).foregroundStyle(Color(hex:"6B6864")).fixedSize(horizontal:false,vertical:true)}
+ private var structureInsightText:String{let weeks=data.structure.filter{weekTotal($0)>0};guard let first=weeks.first,let last=weeks.last else{return SharedL10n.tr("time.dashboard.month.structure_insight.neutral")};let firstHealthy=structureShare(first,["PROACTIVE","RECOVERY"]);let lastHealthy=structureShare(last,["PROACTIVE","RECOVERY"]);let healthyDelta=lastHealthy-firstHealthy;let distractionDelta=structureShare(last,["DISTRACTION"])-structureShare(first,["DISTRACTION"]);if healthyDelta >= 5 && distractionDelta <= 3{return SharedL10n.tr("time.dashboard.month.structure_insight.better",healthyDelta)};if distractionDelta >= 5 && healthyDelta <= 3{return SharedL10n.tr("time.dashboard.month.structure_insight.worse",distractionDelta)};return SharedL10n.tr("time.dashboard.month.structure_insight.steady",lastHealthy)}
+ private func weekTotal(_ week:MonthlyWeek)->Int{let values=week.minutes ?? week.percentages;return values.values.reduce(0,+)}
+ private func structureShare(_ week:MonthlyWeek,_ kinds:[String])->Int{let values=week.minutes ?? week.percentages;let total=max(values.values.reduce(0,+),1);let part=kinds.reduce(0){$0+(values[$1] ?? 0)};return Int(round(Double(part)*100/Double(total)))}
+ private func dayColor(_ d:MonthlyDay)->Color{if d.distractionMinutes>d.focusMinutes{return Color(hex:"C9485B").opacity(min(0.22+Double(d.distractionMinutes)/180,0.75))};if d.focusMinutes==0{return Color(hex:"ECECEE")};return Color(hex:"279E77").opacity(min(0.22+Double(d.focusMinutes)/180,0.78))}
+ private func loadColor(_ k:String)->Color{switch k{case"PROACTIVE":Color(hex:"F0A468");case"RECOVERY":Color(hex:"A8DCC5");case"DISTRACTION":Color(hex:"E9A9B8");default:Color(hex:"AEB9CE")}}
+ private func projectColor(_ index:Int)->Color{Color(hex:projectPalette[index % projectPalette.count])}
+}
+
+private struct LoadStructureBar: View {
+    let percentages: [String: Int]
+    let minutes: [String: Int]?
+    let color: (String) -> Color
+    private let order = ["DISTRACTION", "RECOVERY", "PROACTIVE", "OBLIGATION"]
+
+    var body: some View {
+        GeometryReader { proxy in
+            VStack(spacing: 1) {
+                ForEach(visibleSegments(totalHeight: proxy.size.height), id: \.kind) { segment in
+                    Rectangle()
+                        .fill(color(segment.kind))
+                        .frame(height: segment.height)
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    private func visibleSegments(totalHeight: CGFloat) -> [(kind: String, height: CGFloat, radius: CGFloat)] {
+        let values = segmentValues
+        let active = order.compactMap { kind -> (String, Int)? in
+            let value = values[kind] ?? 0
+            return value > 0 ? (kind, value) : nil
+        }
+        guard !active.isEmpty else { return [("OBLIGATION", totalHeight, 6)] }
+
+        let available = max(0, totalHeight - CGFloat(max(active.count - 1, 0)))
+        let total = max(active.map(\.1).reduce(0, +), 1)
+        let raw = active.map { (kind: $0.0, height: available * CGFloat($0.1) / CGFloat(total)) }
+        let minimum: CGFloat = 5
+        let shortfall = raw.reduce(CGFloat(0)) { total, item in
+            total + max(0, minimum - item.height)
+        }
+        let adjustable = raw.reduce(CGFloat(0)) { total, item in
+            total + max(0, item.height - minimum)
+        }
+
+        return raw.map { item in
+            let reduction = adjustable > 0 ? shortfall * max(0, item.height - minimum) / adjustable : 0
+            let height = max(minimum, item.height - reduction)
+            return (item.kind, height, CGFloat(3))
+        }
+    }
+
+    private var segmentValues: [String: Int] {
+        if let minutes, minutes.values.reduce(0, +) > 0 { return minutes }
+        return percentages
+    }
+}
+
+private struct RoutineRangeBar: View {
+    let minute: Int?
+    let deviation: Int?
+    let previousMinute: Int?
+    let color: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let center = x(for: minute, width: width)
+            let previous = x(for: previousMinute, width: width)
+            let range = rangeFrame(width: width)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color(hex: "ECECEE"))
+                    .frame(height: 8)
+
+                if let range {
+                    Capsule()
+                        .fill(color.opacity(0.7))
+                        .frame(width: range.width, height: 8)
+                        .offset(x: range.x)
+                }
+
+                if let center {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 12, height: 12)
+                        .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                        .offset(x: max(0, min(width - 12, center - 6)))
+                }
+
+                if let previous {
+                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                        .fill(Color(hex: "6B6864"))
+                        .frame(width: 2, height: 14)
+                        .offset(x: max(0, min(width - 2, previous - 1)))
+                }
+            }
+            .frame(height: proxy.size.height)
+        }
+    }
+
+    private func x(for minute: Int?, width: CGFloat) -> CGFloat? {
+        guard let minute else { return nil }
+        return width * CGFloat(clamped(minute)) / 1439
+    }
+
+    private func rangeFrame(width: CGFloat) -> (x: CGFloat, width: CGFloat)? {
+        guard let minute else { return nil }
+        let dev = max(deviation ?? 0, 12)
+        let start = clamped(minute - dev)
+        let end = clamped(minute + dev)
+        let x = width * CGFloat(start) / 1439
+        let endX = width * CGFloat(end) / 1439
+        return (x, max(8, endX - x))
+    }
+
+    private func clamped(_ value: Int) -> Int {
+        min(1439, max(0, value))
+    }
 }
 
 private struct WeeklyAnalysisSections: View {
     let data: WeeklyAnalysisResponse
     private let days = ["time.dashboard.week.mon","time.dashboard.week.tue","time.dashboard.week.wed","time.dashboard.week.thu","time.dashboard.week.fri","time.dashboard.week.sat","time.dashboard.week.sun"]
+    private let projectPalette = ["A9C7E8", "F2BE8D", "B9DDCB", "E9B9C4", "C9C2EA", "E9DA9B", "B8D7D9", "F1B8A8"]
     var body: some View { VStack(spacing:22) { goals; rhythm; focusTrend; structure } }
     private var goals: some View { VStack(spacing:0) {
         DailySectionTitle(titleKey:"time.dashboard.week.goals",hintKey:"time.dashboard.week.goals_hint")
-        VStack(spacing:0){ForEach(data.goals){g in HStack{VStack(alignment:.leading,spacing:5){Text(g.goalName).font(.system(size:15,weight:.semibold));HStack{Text(duration(g.totalMinutes)).font(.system(size:18,weight:.heavy));Text(String(format:"%+d%%",g.changePercent)).font(.caption.bold()).foregroundStyle(g.changePercent >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"));Text(SharedL10n.tr("time.dashboard.week.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)}};Spacer();MiniBars(values:g.dailyMinutes,color:Color(hex:"E8743B"))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(.white,in:RoundedRectangle(cornerRadius:20)) } }
+        VStack(spacing:0){ForEach(Array(data.goals.enumerated()),id:\.element.id){index,g in HStack{VStack(alignment:.leading,spacing:5){Text(g.goalName).font(.system(size:15,weight:.semibold));HStack{Text(duration(g.totalMinutes)).font(.system(size:18,weight:.heavy));Text(String(format:"%+d%%",g.changePercent)).font(.caption.bold()).foregroundStyle(g.changePercent >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"));Text(SharedL10n.tr("time.dashboard.week.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)}};Spacer();MiniBars(values:g.dailyMinutes,color:projectColor(index))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(.white,in:RoundedRectangle(cornerRadius:20)) } }
     private var rhythm: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.rhythm",hintKey:"time.dashboard.week.rhythm_hint");VStack(spacing:7){HStack{Text("").frame(width:42);ForEach(days,id:\.self){Text(SharedL10n.tr($0)).frame(maxWidth:.infinity)}}.font(.caption2).foregroundStyle(.secondary);ForEach(0..<5,id:\.self){slot in HStack{Text(SharedL10n.tr("time.dashboard.week.slot.\(slot)")).frame(width:42,alignment:.leading);ForEach(0..<7,id:\.self){d in let f=data.rhythm.indices.contains(d) ? data.rhythm[d].focusMinutes[slot]:0;let x=data.rhythm.indices.contains(d) ? data.rhythm[d].distractionMinutes[slot]:0;RoundedRectangle(cornerRadius:6).fill(x>f ? Color(hex:"E8B7C1") : Color(hex:"3FA78A").opacity(min(0.2+Double(f)/120,1))).frame(height:26)}}}}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))} }
     private var focusTrend: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.focus_trend",hintKey:"time.dashboard.week.shorter_better");VStack(alignment:.leading,spacing:16){Text(SharedL10n.tr("time.dashboard.daily.focus.longest")).font(.subheadline.bold());WeeklyTrendBars(values:data.focusTrend.map(\.longestMinutes),unitKey:"time.dashboard.daily.duration.minutes",base:Color(hex:"F3C9A8"),highlight:Color(hex:"E5772E"),highIsGood:true);Divider();Text(SharedL10n.tr("time.dashboard.daily.focus.return")).font(.subheadline.bold());WeeklyTrendBars(values:data.focusTrend.map{$0.averageReturnSeconds/60},unitKey:"time.dashboard.daily.duration.minutes",base:Color(hex:"EFC3CC"),highlight:Color(hex:"C2455E"),best:Color(hex:"B3DECC"),highIsGood:false)}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))} }
     private var structure: some View {
@@ -903,8 +1031,9 @@ private struct WeeklyAnalysisSections: View {
         }
     }
     private func color(_ k:String)->Color { switch k {case "PROACTIVE":Color(hex:"F0A468");case "RECOVERY":Color(hex:"BFE3D4");case "DISTRACTION":Color(hex:"EFC3CC");default:Color(hex:"AEB9CE")} }
+    private func projectColor(_ index: Int) -> Color { Color(hex: projectPalette[index % projectPalette.count]) }
 }
-private struct MiniBars: View { let values:[Int];let color:Color;var body:some View{HStack(alignment:.bottom,spacing:3){ForEach(Array(values.enumerated()),id:\.offset){_,v in RoundedRectangle(cornerRadius:2).fill(color.opacity(v==values.max() ? 1:0.4)).frame(width:9,height:CGFloat(max(3,min(32,v/2))))}}.frame(height:34)} }
+private struct MiniBars: View { let values:[Int];let color:Color;var body:some View{HStack(alignment:.bottom,spacing:3){ForEach(Array(values.enumerated()),id:\.offset){_,v in RoundedRectangle(cornerRadius:2).fill(color.opacity(v==values.max() ? 0.95:0.55)).frame(width:9,height:CGFloat(max(3,min(32,v/2))))}}.frame(height:34)} }
 
 private struct WeeklyTrendBars: View {
     let values: [Int]
