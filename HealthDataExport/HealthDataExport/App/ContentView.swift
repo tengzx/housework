@@ -510,7 +510,7 @@ struct HealthExportView: View {
         Section(localization.text("health_export.section.metrics")) {
             ForEach(MetricPriority.allCases) { priority in
                 let metrics = HealthMetric.allCases.filter { $0.priority == priority }
-                DisclosureGroup(priority.rawValue) {
+                DisclosureGroup(priority.title) {
                     ForEach(metrics) { metric in
                         Toggle(isOn: viewModel.metricBinding(metric)) {
                             Label {

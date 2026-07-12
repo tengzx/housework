@@ -33,7 +33,7 @@ struct WatchTemplateDetailView: View {
                                 ProgressView().tint(.white)
                             } else {
                                 Image(systemName: "play.fill")
-                                Text("开始训练").font(.system(size: 16, weight: .bold))
+                                Text(SharedL10n.tr("watch.fitness.start_workout")).font(.system(size: 16, weight: .bold))
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -52,7 +52,7 @@ struct WatchTemplateDetailView: View {
                 } else if let errorMessage {
                     VStack(spacing: 8) {
                         Text(errorMessage).font(.system(size: 13)).foregroundStyle(WK.muted)
-                        Button("重试") { Task { await load() } }
+                        Button(SharedL10n.tr("common.retry")) { Task { await load() } }
                     }
                     .padding(.top, 16)
                 }
@@ -79,7 +79,7 @@ struct WatchTemplateDetailView: View {
         do {
             detail = try await FitnessAPIClient.templateDetail(id: templateId)
         } catch {
-            errorMessage = "加载失败"
+            errorMessage = SharedL10n.tr("watch.fitness.load_failed")
         }
     }
 
@@ -100,7 +100,7 @@ struct WatchTemplateDetailView: View {
             ))
         } catch {
             Haptics.notify(success: false)
-            errorMessage = "开始训练失败"
+            errorMessage = SharedL10n.tr("watch.fitness.start_failed")
         }
         isStarting = false
     }
@@ -114,7 +114,7 @@ private struct WorkoutLaunchOverlay: View {
             WK.bg.ignoresSafeArea()
             VStack(spacing: 8) {
                 ProgressView().tint(.white)
-                Text("正在准备训练")
+                Text(SharedL10n.tr("watch.fitness.preparing_workout"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WK.muted)
             }
@@ -131,7 +131,7 @@ private struct ExerciseSummaryRow: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(2)
-            Text("\(exercise.sets.count) 组")
+            Text(SharedL10n.tr("watch.fitness.set_count", exercise.sets.count))
                 .font(.system(size: 11))
                 .foregroundStyle(WK.muted)
         }

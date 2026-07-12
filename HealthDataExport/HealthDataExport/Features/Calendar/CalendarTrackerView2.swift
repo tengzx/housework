@@ -66,7 +66,7 @@ struct CalendarTrackerView2: View {
             if let selection = timeSelection {
                 selectionConfirmBar(
                     selection,
-                    confirmTitle: "添加事件",
+                    confirmTitle: L10n.tr("calendar.selection.add_event"),
                     onCancel: {
                         withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                             timeSelection = nil
@@ -81,7 +81,7 @@ struct CalendarTrackerView2: View {
             } else if let selection = adjustSelection {
                 selectionConfirmBar(
                     selection,
-                    confirmTitle: "保存",
+                    confirmTitle: L10n.tr("common.save"),
                     onCancel: { cancelAdjust() },
                     onConfirm: { commitAdjust() }
                 )
@@ -215,7 +215,7 @@ struct CalendarTrackerView2: View {
                         anchorOffset = -2
                     }
                 } label: {
-                    Text("今天")
+                    Text(L10n.tr("common.today"))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Calendar2Style.accent)
                         .padding(4)
@@ -232,7 +232,9 @@ struct CalendarTrackerView2: View {
         if !store.statusMessage.isEmpty {
             return store.statusMessage
         }
-        return anchorOffset == -2 ? "左右滑动查看历史" : "正在查看 \(Calendar2Format.shortRange(visibleOffsets))"
+        return anchorOffset == -2
+            ? L10n.tr("calendar.history.swipe_hint")
+            : L10n.tr("calendar.history.viewing_range", Calendar2Format.shortRange(visibleOffsets))
     }
 
     private var dayHeader: some View {
@@ -848,7 +850,7 @@ private struct Calendar2EventBlockView: View {
             }
 
             if event.isRunning && height > 30 {
-                Text("进行中")
+                Text(L10n.tr("time.entry.running"))
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(Color(hex: "17191D").opacity(0.66))
                     .lineLimit(1)
@@ -1099,7 +1101,7 @@ private struct Calendar2SelectionNameSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("这段时间做了什么？")
+            Text(L10n.tr("calendar.selection.prompt"))
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "111115"))
                 .padding(.bottom, 12)
@@ -1118,7 +1120,7 @@ private struct Calendar2SelectionNameSheet: View {
             .background(Calendar2Style.accent.opacity(0.12), in: Capsule())
             .padding(.bottom, 16)
 
-            TextField("输入事件名称，例如 写代码", text: $name)
+            TextField(L10n.tr("calendar.selection.name_placeholder"), text: $name)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .focused($isNameFocused)
@@ -1142,7 +1144,7 @@ private struct Calendar2SelectionNameSheet: View {
                     if isSaving {
                         ProgressView().tint(.white)
                     } else {
-                        Text("保存")
+                        Text(L10n.tr("common.save"))
                     }
                 }
                 .font(.system(size: 17, weight: .semibold))
@@ -1174,13 +1176,13 @@ private struct Calendar2SelectionNameSheet: View {
         // 拼上框选的时间范围，让后端只需按名称推断分类。
         // 结束时间拉到当天最底部时是 24:00，超出后端可解析的范围，改用 23:59 提交。
         let endMinute = min(selection.end, Calendar2Layout.dayEnd * 60 - 1)
-        let text = "\(Calendar2Format.clock(selection.start))到\(Calendar2Format.clock(endMinute))\(trimmedName)"
+        let text = "\(Calendar2Format.clock(selection.start))\(L10n.tr("calendar.selection.range_separator"))\(Calendar2Format.clock(endMinute))\(trimmedName)"
         Task {
             if await store.createNaturalLanguageEvent(text: text, dayOffset: selection.dayOffset) != nil {
                 onCreated()
                 dismiss()
             } else {
-                errorMessage = store.statusMessage.isEmpty ? "保存失败，请重试" : store.statusMessage
+                errorMessage = store.statusMessage.isEmpty ? L10n.tr("calendar.selection.save_failed") : store.statusMessage
                 isSaving = false
             }
         }
@@ -1261,7 +1263,7 @@ private struct Calendar2MonthPickerView: View {
 
     private var weekdayRow: some View {
         HStack(spacing: 0) {
-            ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { label in
+            ForEach(weekdayLabels, id: \.self) { label in
                 Text(label)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Calendar2Style.muted)
@@ -1333,9 +1335,21 @@ private struct Calendar2MonthPickerView: View {
 
     private func monthYearText(_ date: Date) -> String {
         let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: "zh_CN")
-        fmt.dateFormat = "yyyy年M月"
+        fmt.locale = L10n.locale
+        fmt.setLocalizedDateFormatFromTemplate("yMMM")
         return fmt.string(from: date)
+    }
+
+    private var weekdayLabels: [String] {
+        [
+            L10n.tr("calendar.weekday.sun"),
+            L10n.tr("calendar.weekday.mon"),
+            L10n.tr("calendar.weekday.tue"),
+            L10n.tr("calendar.weekday.wed"),
+            L10n.tr("calendar.weekday.thu"),
+            L10n.tr("calendar.weekday.fri"),
+            L10n.tr("calendar.weekday.sat")
+        ]
     }
 }
 

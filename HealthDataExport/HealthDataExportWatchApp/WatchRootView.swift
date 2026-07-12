@@ -42,7 +42,7 @@ struct WatchRootView: View {
                         } label: {
                             Image(systemName: "bolt.fill")
                         }
-                        .accessibilityLabel("快捷指令")
+                        .accessibilityLabel(SharedL10n.tr("watch.root.shortcuts"))
                     }
 
                     // Replaces the top-right clock with a shortcut into the
@@ -53,7 +53,7 @@ struct WatchRootView: View {
                         } label: {
                             Image(systemName: "figure.strengthtraining.traditional")
                         }
-                        .accessibilityLabel("运动")
+                        .accessibilityLabel(SharedL10n.tr("watch.root.workouts"))
                     }
                 }
         }

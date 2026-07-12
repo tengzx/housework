@@ -1,12 +1,12 @@
 import SwiftUI
 
 // Tracking type display helpers
-private let trackingTypeOptions: [(value: String, label: String)] = [
-    ("weight_reps", "重量 + 次数"),
-    ("reps_only", "仅次数"),
-    ("time_only", "时间"),
-    ("distance_time", "距离 + 时间"),
-    ("cardio", "有氧"),
+private let trackingTypeOptions: [(value: String, key: String)] = [
+    ("weight_reps", "fitness.exercise.tracking.weight_reps"),
+    ("reps_only", "fitness.exercise.tracking.reps_only"),
+    ("time_only", "fitness.exercise.tracking.time_only"),
+    ("distance_time", "fitness.exercise.tracking.distance_time"),
+    ("cardio", "fitness.exercise.tracking.cardio"),
 ]
 
 // MARK: - Form sheet
@@ -38,21 +38,21 @@ struct FitnessExerciseFormSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("基本信息") {
-                    TextField("动作名称（必填）", text: $name)
+                Section(L10n.tr("fitness.exercise.basic_info")) {
+                    TextField(L10n.tr("fitness.exercise.name_required"), text: $name)
 
-                    Picker("分类", selection: $selectedCategoryId) {
-                        Text("未分类").tag(Optional<Int>.none)
+                    Picker(L10n.tr("fitness.exercise.category"), selection: $selectedCategoryId) {
+                        Text(L10n.tr("fitness.exercise.uncategorized")).tag(Optional<Int>.none)
                         ForEach(categories) { cat in
                             Text(cat.name).tag(Optional<Int>.some(cat.id))
                         }
                     }
                 }
 
-                Section("训练类型") {
-                    Picker("计数方式", selection: $trackingType) {
+                Section(L10n.tr("fitness.exercise.training_type")) {
+                    Picker(L10n.tr("fitness.exercise.tracking_method"), selection: $trackingType) {
                         ForEach(trackingTypeOptions, id: \.value) { opt in
-                            Text(opt.label).tag(opt.value)
+                            Text(L10n.tr(opt.key)).tag(opt.value)
                         }
                     }
                     .pickerStyle(.inline)
@@ -67,11 +67,11 @@ struct FitnessExerciseFormSheet: View {
                     }
                 }
             }
-            .navigationTitle(isCreateMode ? "新建动作" : "编辑动作")
+            .navigationTitle(L10n.tr(isCreateMode ? "fitness.exercise.create_title" : "fitness.exercise.edit_title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { Haptics.tap(); dismiss() }
+                    Button(L10n.tr("common.cancel")) { Haptics.tap(); dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
@@ -81,7 +81,7 @@ struct FitnessExerciseFormSheet: View {
                         if isSaving {
                             ProgressView().controlSize(.small)
                         } else {
-                            Text(isCreateMode ? "创建" : "保存").fontWeight(.semibold)
+                            Text(L10n.tr(isCreateMode ? "common.create" : "common.save")).fontWeight(.semibold)
                         }
                     }
                     .disabled(!canSave)
@@ -150,7 +150,7 @@ struct FitnessExerciseFormSheet: View {
             onSave(saved)
             dismiss()
         } catch {
-            errorMessage = "保存失败，请检查网络"
+            errorMessage = L10n.tr("fitness.exercise.save_failed")
             isSaving = false
         }
     }

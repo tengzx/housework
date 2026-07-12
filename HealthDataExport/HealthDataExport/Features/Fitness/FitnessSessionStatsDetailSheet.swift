@@ -35,7 +35,7 @@ private final class FitnessSessionStatsDetailViewModel: ObservableObject {
         analysis = results.3
 
         if summary == nil && breakdown == nil && heartRate == nil && analysis == nil {
-            errorMessage = "训练详情加载失败"
+            errorMessage = L10n.tr("fitness.session.load_failed")
         }
     }
 
@@ -142,11 +142,11 @@ struct FitnessSessionStatsDetailSheet: View {
 
         return VStack(spacing: 0) {
             HStack(spacing: 0) {
-                SessionMetricCell(title: "总时长", value: formatDuration(duration), isPrimary: true)
+                SessionMetricCell(title: L10n.tr("fitness.session.stats.total_duration"), value: formatDuration(duration), isPrimary: true)
                 Rectangle()
                     .fill(Color(hex: "F0EFF4"))
                     .frame(width: 1)
-                SessionMetricCell(title: "总训练量", value: formatVolume(volume), isPrimary: true, isMuted: true)
+                SessionMetricCell(title: L10n.tr("fitness.session.stats.total_volume"), value: formatVolume(volume), isPrimary: true, isMuted: true)
             }
 
             Rectangle()
@@ -155,11 +155,11 @@ struct FitnessSessionStatsDetailSheet: View {
                 .padding(.horizontal, 20)
 
             HStack(spacing: 0) {
-                SessionMetricCell(title: "卡路里", value: formatCalories(calories), symbol: "flame")
+                SessionMetricCell(title: L10n.tr("fitness.session.stats.calories"), value: formatCalories(calories), symbol: "flame")
                 Rectangle()
                     .fill(Color(hex: "F0EFF4"))
                     .frame(width: 1)
-                SessionMetricCell(title: "平均心率", value: avgHeartRate.map { "\($0) bpm" } ?? "--", symbol: "heart.fill")
+                SessionMetricCell(title: L10n.tr("fitness.session.stats.avg_heart_rate"), value: avgHeartRate.map { "\($0) bpm" } ?? "--", symbol: "heart.fill")
             }
         }
         .padding(.horizontal, 4)
@@ -172,7 +172,7 @@ struct FitnessSessionStatsDetailSheet: View {
 
     private func analysisCard(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("训练分析")
+            Text(L10n.tr("fitness.session.stats.analysis"))
                 .font(.system(size: 18, weight: .heavy))
                 .foregroundStyle(Color(hex: "1C1C1E"))
             Text(text)
@@ -222,7 +222,7 @@ private struct TrainingSplitCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("体能训练细分")
+            Text(L10n.tr("fitness.session.stats.training_split"))
                 .font(.system(size: 22, weight: .heavy))
                 .foregroundStyle(Color(hex: "1C1C22"))
                 .padding(.horizontal, 4)
@@ -230,7 +230,7 @@ private struct TrainingSplitCard: View {
             VStack(spacing: 16) {
                 HStack(alignment: .top, spacing: 0) {
                     SplitPercentCell(
-                        title: "肌肉",
+                        title: L10n.tr("fitness.session.stats.strength"),
                         value: breakdown.trainingSplit.strengthPercent,
                         tint: Color(hex: "F5721E")
                     )
@@ -241,7 +241,7 @@ private struct TrainingSplitCard: View {
                         .frame(maxHeight: .infinity)
 
                     SplitPercentCell(
-                        title: "有氧运动",
+                        title: L10n.tr("fitness.session.stats.cardio"),
                         value: breakdown.trainingSplit.cardioPercent,
                         tint: Color(hex: "F8C06A")
                     )
@@ -309,7 +309,7 @@ private struct MuscleLoadCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("肌肉耗力")
+            Text(L10n.tr("fitness.session.stats.muscle_load"))
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(Color(hex: "9A99A4"))
 
@@ -403,7 +403,7 @@ private struct HeartRateSummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("心率")
+            Text(L10n.tr("fitness.session.stats.heart_rate"))
                 .font(.system(size: 22, weight: .heavy))
                 .foregroundStyle(Color(hex: "1C1C1E"))
                 .padding(.horizontal, 4)
@@ -420,14 +420,14 @@ private struct HeartRateSummaryCard: View {
                                 .font(.system(size: 17, weight: .bold))
                                 .foregroundStyle(Color(hex: "1C1C1E"))
                         }
-                        Text("平均心率")
+                        Text(L10n.tr("fitness.session.stats.avg_heart_rate"))
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(Color(hex: "9A99A4"))
                     }
 
                     Spacer()
 
-                    Text("区间 \(heartRate.summary.currentZone ?? dominantZone)")
+                    Text(L10n.tr("fitness.session.stats.zone_label", heartRate.summary.currentZone ?? dominantZone))
                         .font(.system(size: 16, weight: .heavy))
                         .foregroundStyle(Color(hex: "3B82F6"))
                 }
@@ -477,7 +477,7 @@ private struct HeartRateSummaryCard: View {
             .shadow(color: Color(hex: "5A5078").opacity(0.07), radius: 20, y: 6)
 
             if heartRate.recovery.available, let drop = heartRate.recovery.hrDropBpm {
-                Text("恢复下降 \(drop) bpm")
+                Text(L10n.tr("fitness.session.stats.recovery_drop", drop))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color(hex: "3FA78A"))
                     .padding(.horizontal, 12)
@@ -673,9 +673,9 @@ private struct HeartRateZoneDurationCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("区间")
+                Text(L10n.tr("fitness.session.stats.zone"))
                     .frame(width: 44, alignment: .leading)
-                Text("时长")
+                Text(L10n.tr("fitness.session.stats.duration"))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("%")
                     .frame(width: 44, alignment: .trailing)
@@ -773,7 +773,7 @@ private struct SessionExerciseSummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("动作")
+            Text(L10n.tr("fitness.session.stats.exercises"))
                 .font(.system(size: 18, weight: .heavy))
                 .foregroundStyle(Color(hex: "1C1C1E"))
 
@@ -786,7 +786,7 @@ private struct SessionExerciseSummaryCard: View {
                                 .foregroundStyle(Color(hex: "1C1C1E"))
                                 .lineLimit(1)
                             Spacer()
-                            Text("\(exercise.setCount) 组")
+                            Text(L10n.tr("fitness.session.stats.set_count", exercise.setCount))
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(Color(hex: "9A99A4"))
                         }
@@ -807,7 +807,7 @@ private struct SessionExerciseSummaryCard: View {
                                     Spacer()
 
                                     if let rest = set.restSeconds, rest > 0 {
-                                        Text("休息 \(formatDuration(rest))")
+                                        Text(L10n.tr("fitness.session.stats.rest_duration", formatDuration(rest)))
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(Color(hex: "A3A2AC"))
                                     }
@@ -844,7 +844,7 @@ private struct SessionExerciseSummaryCard: View {
         }
         let weight = set.actualWeightKg.map { cleanNumber($0) } ?? "--"
         let reps = set.actualReps.map { "\($0)" } ?? "--"
-        return "\(weight) kg x \(reps) 次"
+        return L10n.tr("fitness.session.stats.weight_reps", weight, reps)
     }
 
     private func cleanNumber(_ value: Double) -> String {

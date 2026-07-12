@@ -11,18 +11,18 @@ enum IdealDayKind: String, CaseIterable, Codable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .proactive: "主动投入"
-        case .obligation: "必要事务"
-        case .recovery: "恢复充电"
-        case .distraction: "分心消耗"
+        case .proactive: SharedL10n.tr("time.dashboard.load_kind.proactive")
+        case .obligation: SharedL10n.tr("time.dashboard.load_kind.obligation")
+        case .recovery: SharedL10n.tr("time.dashboard.load_kind.recovery")
+        case .distraction: SharedL10n.tr("time.dashboard.load_kind.distraction")
         }
     }
     var subtitle: String {
         switch self {
-        case .proactive: "工作、学习、成长、深度陪伴等"
-        case .obligation: "家务、接送、做饭、杂事等"
-        case .recovery: "睡眠、休息、运动、放松等"
-        case .distraction: "刷手机、短视频、无意义娱乐等"
+        case .proactive: SharedL10n.tr("ideal_day.kind.proactive.subtitle")
+        case .obligation: SharedL10n.tr("ideal_day.kind.obligation.subtitle")
+        case .recovery: SharedL10n.tr("ideal_day.kind.recovery.subtitle")
+        case .distraction: SharedL10n.tr("ideal_day.kind.distraction.subtitle")
         }
     }
     var symbol: String {
@@ -148,7 +148,7 @@ final class IdealDayStore: ObservableObject {
             cache()
         } catch {
             // Offline-first: the editor remains useful before the backend is upgraded.
-            statusMessage = "当前使用本机保存的理想配置"
+            statusMessage = SharedL10n.tr("ideal_day.status.local_profile")
         }
         await loadTodayComparison()
     }
@@ -198,11 +198,11 @@ final class IdealDayStore: ObservableObject {
             cache()
             await IdealDayReminderScheduler.reschedule(profile: profile)
             await loadTodayComparison()
-            statusMessage = "已保存"
+            statusMessage = SharedL10n.tr("ideal_day.status.saved")
             return true
         } catch {
             await IdealDayReminderScheduler.reschedule(profile: profile)
-            statusMessage = "已保存在本机，连接 Life OS 后会再次同步"
+            statusMessage = SharedL10n.tr("ideal_day.status.saved_local_pending_sync")
             return false
         }
     }
@@ -228,8 +228,8 @@ enum IdealDayReminderScheduler {
             let parts = time.split(separator: ":").compactMap { Int($0) }
             guard parts.count == 2 else { continue }
             let content = UNMutableNotificationContent()
-            content.title = "理想一天 · 阶段检查"
-            content.body = "看看今天四类时间是否有不足，及时调整接下来的安排。"
+            content.title = SharedL10n.tr("ideal_day.notification.check_title")
+            content.body = SharedL10n.tr("ideal_day.notification.check_body")
             content.sound = .default
             let trigger = UNCalendarNotificationTrigger(
                 dateMatching: DateComponents(hour: parts[0], minute: parts[1]),
@@ -242,11 +242,22 @@ enum IdealDayReminderScheduler {
     fileprivate static func presentExceeded(_ values: [IdealDayComparison.Deviation]) async {
         let center = UNUserNotificationCenter.current()
         let content = UNMutableNotificationContent()
-        content.title = "理想一天 · 已超出目标"
-        content.body = values.map { "\($0.kind.title) 已用 \($0.actualMinutes / 60)h\($0.actualMinutes % 60)m，目标 \($0.targetMinutes / 60)h\($0.targetMinutes % 60)m" }.joined(separator: "；")
+        content.title = SharedL10n.tr("ideal_day.notification.exceeded_title")
+        content.body = values.map {
+            SharedL10n.tr(
+                "ideal_day.notification.exceeded_item",
+                $0.kind.title,
+                hoursAndMinutesText($0.actualMinutes),
+                hoursAndMinutesText($0.targetMinutes)
+            )
+        }.joined(separator: SharedL10n.tr("ideal_day.notification.separator"))
         content.sound = .default
         center.removeDeliveredNotifications(withIdentifiers: ["ideal-day.exceeded"])
         try? await center.add(.init(identifier: "ideal-day.exceeded", content: content, trigger: nil))
+    }
+
+    private static func hoursAndMinutesText(_ minutes: Int) -> String {
+        SharedL10n.tr("ideal_day.format.hours_minutes", minutes / 60, minutes % 60)
     }
 }
 
@@ -271,7 +282,7 @@ struct IdealDayView: View {
                     allocationCard
                     flexibleCard
                     reminderCard
-                    Text("💡 理想一天是你的方向盘。系统会把实际记录与其对比，超出目标及时提醒，并在中午 12 点、晚上 6 点检查不足。")
+                    Text(SharedL10n.tr("ideal_day.hint"))
                         .font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(6)
                         .padding(.horizontal, 18)
                 }
@@ -279,12 +290,12 @@ struct IdealDayView: View {
             }
             .refreshable { await store.loadTodayComparison() }
             .background(Color(hex: "F7F8FC").ignoresSafeArea())
-            .navigationTitle("理想一天")
+            .navigationTitle(SharedL10n.tr("ideal_day.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .topBarLeading) { Button(SharedL10n.tr("common.cancel")) { dismiss() } }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(store.isSaving ? "保存中…" : "保存") {
+                    Button(store.isSaving ? SharedL10n.tr("common.loading") : SharedL10n.tr("common.save")) {
                         Task { _ = await store.save(draft); dismiss() }
                     }.disabled(store.isSaving || draft.allocatedMinutes > 1440)
                 }
@@ -300,8 +311,8 @@ struct IdealDayView: View {
                 .presentationDetents([.height(330)])
                 .presentationDragIndicator(.visible)
             }
-            .alert("无法分配", isPresented: $showAllocationError) {
-                Button("知道了", role: .cancel) {}
+            .alert(SharedL10n.tr("ideal_day.alert.allocation_failed_title"), isPresented: $showAllocationError) {
+                Button(SharedL10n.tr("ideal_day.alert.acknowledged"), role: .cancel) {}
             } message: {
                 Text(allocationError)
             }
@@ -327,14 +338,18 @@ struct IdealDayView: View {
             }
             VStack(spacing: 3) {
                 Text("24h").font(.system(size: 42, weight: .bold, design: .rounded))
-                Text("时间分配").foregroundStyle(.secondary)
+                Text(SharedL10n.tr("ideal_day.allocation")).foregroundStyle(.secondary)
             }
         }
     }
 
     private var allocationCard: some View {
         VStack(alignment: .leading, spacing: 22) {
-            HStack { Text("时间配比").font(.headline); Spacer(); Text("拖动可调整时长").font(.caption).foregroundStyle(.secondary) }
+            HStack {
+                Text(SharedL10n.tr("ideal_day.allocation_ratio")).font(.headline)
+                Spacer()
+                Text(SharedL10n.tr("ideal_day.drag_hint")).font(.caption).foregroundStyle(.secondary)
+            }
             ForEach(IdealDayKind.allCases) { kind in
                 VStack(spacing: 10) {
                     HStack(spacing: 12) {
@@ -357,7 +372,7 @@ struct IdealDayView: View {
                                 .foregroundStyle(kind.color)
                             }
                             .buttonStyle(.plain)
-                            Text("实际 \(hoursAndMinutesText(store.todayActualMinutes[kind] ?? 0))")
+                            Text(SharedL10n.tr("ideal_day.actual_value", hoursAndMinutesText(store.todayActualMinutes[kind] ?? 0)))
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                     }
@@ -367,9 +382,9 @@ struct IdealDayView: View {
                         color: kind.color
                     )
                     HStack(spacing: 14) {
-                        Label("计划 \(hoursText(draft.minutes(for: kind)))", systemImage: "circle.fill")
+                        Label(SharedL10n.tr("ideal_day.plan_value", hoursText(draft.minutes(for: kind))), systemImage: "circle.fill")
                             .foregroundStyle(kind.color.opacity(0.48))
-                        Label("实际 \(hoursAndMinutesText(store.todayActualMinutes[kind] ?? 0))", systemImage: "circle.bottomhalf.filled")
+                        Label(SharedL10n.tr("ideal_day.actual_value", hoursAndMinutesText(store.todayActualMinutes[kind] ?? 0)), systemImage: "circle.bottomhalf.filled")
                             .foregroundStyle(kind.color)
                         Spacer()
                         Text("24h").foregroundStyle(.secondary)
@@ -384,7 +399,10 @@ struct IdealDayView: View {
     private var flexibleCard: some View {
         HStack {
             Image(systemName: "hourglass").foregroundStyle(flexibleColor)
-            VStack(alignment: .leading) { Text("弹性时间").font(.headline); Text("未规划的时间，可自由分配").font(.caption).foregroundStyle(.secondary) }
+            VStack(alignment: .leading) {
+                Text(SharedL10n.tr("ideal_day.flexible_time")).font(.headline)
+                Text(SharedL10n.tr("ideal_day.flexible_time_subtitle")).font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
             Text(hoursText(draft.flexibleMinutes)).foregroundStyle(flexibleColor).font(.title3).monospacedDigit()
         }.padding(18).background(flexibleColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 20))
@@ -392,8 +410,8 @@ struct IdealDayView: View {
 
     private var reminderCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("偏差提醒", isOn: $draft.remindersEnabled).font(.headline)
-            Text("超过目标时提醒；目标不足会在 12:00 和 18:00 定期排查。")
+            Toggle(SharedL10n.tr("ideal_day.reminder_toggle"), isOn: $draft.remindersEnabled).font(.headline)
+            Text(SharedL10n.tr("ideal_day.reminder_description"))
                 .font(.caption).foregroundStyle(.secondary)
         }.padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
     }
@@ -436,23 +454,25 @@ struct IdealDayView: View {
     }
 
     private func hoursText(_ minutes: Int) -> String {
-        minutes % 60 == 0 ? "\(minutes / 60)h" : String(format: "%.1fh", Double(minutes) / 60)
+        minutes % 60 == 0
+            ? SharedL10n.tr("ideal_day.format.hours_only", minutes / 60)
+            : SharedL10n.tr("ideal_day.format.hours_decimal", Double(minutes) / 60)
     }
 
     private func hoursAndMinutesText(_ minutes: Int) -> String {
-        "\(minutes / 60)h \(minutes % 60)m"
+        SharedL10n.tr("ideal_day.format.hours_minutes", minutes / 60, minutes % 60)
     }
 
 
     private func applyManualEntry(_ requestedMinutes: Int, for kind: IdealDayKind) {
         guard requestedMinutes <= 1440 else {
-            presentAllocationError("单个分类不能超过 24 小时。")
+            presentAllocationError(SharedL10n.tr("ideal_day.error.single_category_over_24h"))
             return
         }
         let currentMinutes = draft.minutes(for: kind)
         let availableMinutes = currentMinutes + draft.flexibleMinutes
         guard requestedMinutes <= availableMinutes else {
-            presentAllocationError("弹性时间不足，无法分配。请先减少其他分类的时间。")
+            presentAllocationError(SharedL10n.tr("ideal_day.error.flexible_time_insufficient"))
             return
         }
         guard let index = draft.allocations.firstIndex(where: { $0.kind == kind }) else { return }
@@ -520,8 +540,8 @@ private struct PlanActualSlider: View {
         }
         .frame(height: 30)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("计划与实际时间")
-        .accessibilityValue("计划 \(Int(plannedMinutes)) 分钟，实际 \(actualMinutes) 分钟")
+        .accessibilityLabel(SharedL10n.tr("ideal_day.accessibility.plan_actual_label"))
+        .accessibilityValue(SharedL10n.tr("ideal_day.accessibility.plan_actual_value", Int(plannedMinutes), actualMinutes))
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment: plannedMinutes = min(1440, plannedMinutes + 30)
@@ -555,11 +575,11 @@ private struct ManualTimeEntrySheet: View {
         NavigationStack {
             VStack(spacing: 24) {
                 HStack(spacing: 16) {
-                    timeField(title: "小时", text: $hours, field: .hours)
+                    timeField(title: SharedL10n.tr("ideal_day.time_field.hours"), text: $hours, field: .hours)
                     Text(":").font(.title.bold()).foregroundStyle(.secondary)
-                    timeField(title: "分钟", text: $minutes, field: .minutes)
+                    timeField(title: SharedL10n.tr("ideal_day.time_field.minutes"), text: $minutes, field: .minutes)
                 }
-                Text("最多可分配 \(maximumMinutes / 60) 小时 \(maximumMinutes % 60) 分钟（包含当前弹性时间）")
+                Text(SharedL10n.tr("ideal_day.maximum_allocatable", maximumMinutes / 60, maximumMinutes % 60))
                     .font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Spacer()
@@ -568,9 +588,9 @@ private struct ManualTimeEntrySheet: View {
             .navigationTitle(kind.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .topBarLeading) { Button(SharedL10n.tr("common.cancel")) { dismiss() } }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("确定") {
+                    Button(SharedL10n.tr("common.ok")) {
                         let total = min(Int(hours) ?? 0, 24) * 60 + min(Int(minutes) ?? 0, 59)
                         dismiss()
                         onConfirm(total)
@@ -579,7 +599,7 @@ private struct ManualTimeEntrySheet: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("完成") { focusedField = nil }
+                    Button(SharedL10n.tr("common.done")) { focusedField = nil }
                 }
             }
             .onAppear { focusedField = .hours }

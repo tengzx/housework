@@ -36,9 +36,9 @@ struct Calendar2EventFormSheet: View {
     @FocusState private var isQuickEntryFocused: Bool
 
     private let quickExamples = [
-        "15点玩手机半个小时",
-        "昨晚8点健身1小时",
-        "今天下午2点写代码2小时",
+        L10n.tr("calendar.event_form.quick_example.1"),
+        L10n.tr("calendar.event_form.quick_example.2"),
+        L10n.tr("calendar.event_form.quick_example.3"),
     ]
 
     init(
@@ -128,11 +128,11 @@ struct Calendar2EventFormSheet: View {
             saveBar
         }
         .background(Calendar2Style.sheet)
-        .alert("快捷指令", isPresented: Binding(
+        .alert(L10n.tr("calendar.event_form.shortcut.title"), isPresented: Binding(
             get: { shortcutAlert != nil },
             set: { if !$0 { shortcutAlert = nil } }
         )) {
-            Button("好", role: .cancel) {}
+            Button(L10n.tr("common.ok"), role: .cancel) {}
         } message: {
             Text(shortcutAlert ?? "")
         }
@@ -166,7 +166,7 @@ struct Calendar2EventFormSheet: View {
 
     private var quickHeader: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("你需要补录什么？")
+            Text(L10n.tr("calendar.event_form.quick_header"))
                 .font(.system(size: 26, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "111115"))
             Spacer()
@@ -174,7 +174,7 @@ struct Calendar2EventFormSheet: View {
                 openDetails()
             } label: {
                 HStack(spacing: 5) {
-                    Text("详细")
+                    Text(L10n.tr("calendar.event_form.details"))
                     Image(systemName: "chevron.down")
                         .font(.system(size: 11, weight: .bold))
                 }
@@ -192,7 +192,7 @@ struct Calendar2EventFormSheet: View {
             Circle()
                 .fill(category.color)
                 .frame(width: 13, height: 13)
-            Text(isEdit ? "编辑记录" : "新建记录")
+            Text(isEdit ? L10n.tr("calendar.event_form.title.edit") : L10n.tr("calendar.event_form.title.create"))
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "23232A"))
             Spacer()
@@ -237,7 +237,7 @@ struct Calendar2EventFormSheet: View {
         // name ("shortcut name already exists"), so surface that up front instead
         // of enqueuing a create that can never land.
         if ShortcutRecordStore.shared.tasks.contains(where: { $0.name == trimmedName }) {
-            shortcutAlert = "「\(trimmedName)」已在快捷指令中"
+            shortcutAlert = L10n.tr("calendar.event_form.shortcut.duplicate", trimmedName)
             return
         }
         let colorHex = RemoteShortcut.normalizeHex(originalEvent?.colorHex) ?? ShortcutTask.defaultColorHex
@@ -255,14 +255,14 @@ struct Calendar2EventFormSheet: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             didAddShortcut = true
         }
-        shortcutAlert = "已添加「\(trimmedName)」到快捷指令"
+        shortcutAlert = L10n.tr("calendar.event_form.shortcut.added", trimmedName)
     }
 
     // MARK: - Quick Entry
 
     private var quickEntryField: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField("几点开始，做了什么，做了多久，例如 15点玩手机半个小时", text: $quickText, axis: .vertical)
+            TextField(L10n.tr("calendar.event_form.quick_input_placeholder"), text: $quickText, axis: .vertical)
                 .lineLimit(2...4)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
@@ -278,7 +278,7 @@ struct Calendar2EventFormSheet: View {
                         quickText = example
                         isQuickEntryFocused = true
                     } label: {
-                        Text("例：\(example)")
+                        Text(L10n.tr("calendar.event_form.quick_example_prefix", example))
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(Color(hex: "B8B8C0"))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -301,8 +301,8 @@ struct Calendar2EventFormSheet: View {
 
     private var nameField: some View {
         VStack(alignment: .leading, spacing: 9) {
-            sectionLabel("名称")
-            TextField("输入事件名称", text: $draftName)
+            sectionLabel(L10n.tr("common.name"))
+            TextField(L10n.tr("calendar.event_form.name_placeholder"), text: $draftName)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .font(.system(size: 17, weight: .semibold))
@@ -323,7 +323,7 @@ struct Calendar2EventFormSheet: View {
         VStack(spacing: 0) {
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 4) {
-                    sectionLabel("时长")
+                    sectionLabel(L10n.tr("calendar.event_form.duration"))
                     Text(Calendar2Format.duration(max(end - start, 0)))
                         .font(.system(size: 26, weight: .bold, design: .rounded))
                         .monospacedDigit()
@@ -371,7 +371,7 @@ struct Calendar2EventFormSheet: View {
     private var categorySection: some View {
         VStack(alignment: .leading, spacing: 11) {
             HStack {
-                sectionLabel("分类")
+                sectionLabel(L10n.tr("record.shortcut.section.category"))
                 Spacer()
                 manageButton(tab: .category)
             }
@@ -418,13 +418,13 @@ struct Calendar2EventFormSheet: View {
     private var subcategorySection: some View {
         VStack(alignment: .leading, spacing: 11) {
             HStack {
-                sectionLabel("小类 · \(category.label)")
+                sectionLabel(L10n.tr("record.shortcut.section.subcategory", category.label))
                 Spacer()
                 manageButton(tab: .subcategory)
             }
             let types = category.types
             if types.isEmpty {
-                Text("该分类暂无小类，点「管理」添加")
+                Text(L10n.tr("record.shortcut.empty_subcategory"))
                     .font(.system(size: 14))
                     .foregroundStyle(Color(hex: "B5B5BC"))
                     .padding(.top, 6)
@@ -473,9 +473,9 @@ struct Calendar2EventFormSheet: View {
     /// 目标上时，所有 chip 都不高亮——不动它就保持原归属，选了才覆盖。
     private var goalSection: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionLabel("归属目标 / 项目")
+            sectionLabel(L10n.tr("calendar.event_form.goal_section"))
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
-                goalChip(id: nil, title: "公共", symbol: "tray")
+                goalChip(id: nil, title: L10n.tr("record.intentions.group_public"), symbol: "tray")
                 ForEach(availableGoals) { goal in
                     goalChip(id: goal.id, title: goal.name, symbol: goal.isProject ? "folder.fill" : "target")
                 }
@@ -517,8 +517,8 @@ struct Calendar2EventFormSheet: View {
 
     private var noteField: some View {
         VStack(alignment: .leading, spacing: 9) {
-            sectionLabel("备注")
-            TextField("添加备注（可选）", text: $draftNote, axis: .vertical)
+            sectionLabel(L10n.tr("intent.start_app_session.parameter.note.title"))
+            TextField(L10n.tr("calendar.event_form.note_placeholder"), text: $draftNote, axis: .vertical)
                 .lineLimit(3...6)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
@@ -542,7 +542,7 @@ struct Calendar2EventFormSheet: View {
                 .fill(Color.black.opacity(0.05))
                 .frame(height: 1)
             Button { commit() } label: {
-                Text(isQuickCreate ? "继续" : "保存")
+                Text(isQuickCreate ? L10n.tr("calendar.event_form.continue") : L10n.tr("common.save"))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -570,7 +570,7 @@ struct Calendar2EventFormSheet: View {
             showManagement = true
         } label: {
             HStack(spacing: 3) {
-                Text("管理")
+                Text(L10n.tr("record.action.manage"))
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
             }

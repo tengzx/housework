@@ -62,10 +62,18 @@ enum L10n {
     static func tr(_ key: String, _ arguments: CVarArg...) -> String {
         AppLocalizer.text(key, language: AppLanguage.current, arguments: arguments)
     }
+
+    static var currentLanguage: AppLanguage {
+        AppLanguage.current
+    }
+
+    static var locale: Locale {
+        currentLanguage.locale
+    }
 }
 
 private enum AppLocalizer {
-    private static let tableDirectory = "Resources/I18n"
+    private static let tableDirectories = ["Resources/I18n", ""]
     private static let fallbackLanguage = "zh-Hans"
     private static let supportedLanguages = ["zh-Hans", "en"]
     private static let lock = NSLock()
@@ -103,7 +111,12 @@ private enum AppLocalizer {
         }
         lock.unlock()
 
-        guard let url = Bundle.main.url(forResource: languageCode, withExtension: "json", subdirectory: tableDirectory),
+        let resourceURL = tableDirectories.lazy.compactMap { directory -> URL? in
+            let subdirectory = directory.isEmpty ? nil : directory
+            return Bundle.main.url(forResource: languageCode, withExtension: "json", subdirectory: subdirectory)
+        }.first
+
+        guard let url = resourceURL,
               let data = try? Data(contentsOf: url),
               let dictionary = try? JSONDecoder().decode([String: String].self, from: data) else {
             return nil

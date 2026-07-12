@@ -56,7 +56,7 @@ struct RecordView: View {
                     if !displayStatus.isEmpty {
                         Text(displayStatus)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(displayStatus.contains("失败") ? .red : Design.muted)
+                            .foregroundStyle(displayStatus.contains("failed") || displayStatus.contains("失败") ? .red : Design.muted)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 12)
                     }
@@ -105,16 +105,16 @@ struct RecordView: View {
             .presentationDragIndicator(.visible)
             .presentationBackground(.white)
         }
-        .alert("重命名意图", isPresented: Binding(
+        .alert(SharedL10n.tr("record.alert.rename_intention"), isPresented: Binding(
             get: { renamingIntention != nil },
             set: { if !$0 { renamingIntention = nil } }
         ), presenting: renamingIntention) { item in
-            TextField("名称", text: $renameIntentionText)
-            Button("保存") {
+            TextField(SharedL10n.tr("common.name"), text: $renameIntentionText)
+            Button(SharedL10n.tr("common.save")) {
                 intentionStore.rename(item, to: renameIntentionText)
                 renamingIntention = nil
             }
-            Button("取消", role: .cancel) {
+            Button(SharedL10n.tr("common.cancel"), role: .cancel) {
                 renamingIntention = nil
             }
         }
@@ -178,7 +178,7 @@ struct RecordView: View {
                                         .frame(width: 9, height: 9)
                                         .pulse()
 
-                                    Text("进行中")
+                                    Text(SharedL10n.tr("record.status.running"))
                                         .font(.system(size: 12, weight: .regular))
                                         .tracking(2)
                                         .foregroundStyle(Design.muted)
@@ -210,7 +210,7 @@ struct RecordView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "stop.fill")
                                     .font(.system(size: 14, weight: .semibold))
-                                Text("结束")
+                                Text(SharedL10n.tr("record.action.stop"))
                                     .font(.system(size: 15, weight: .bold))
                             }
                             .foregroundStyle(.white)
@@ -231,11 +231,11 @@ struct RecordView: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("还没有开始")
+                    Text(SharedL10n.tr("record.idle.title"))
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundStyle(Design.text)
 
-                    Text("点一个快捷指令，或在下面输入正在做的事")
+                    Text(SharedL10n.tr("record.idle.subtitle"))
                         .font(.system(size: 14, weight: .regular))
                         .lineSpacing(3)
                         .foregroundStyle(Design.muted)
@@ -285,7 +285,7 @@ struct RecordView: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(Design.accent)
 
-            TextField(store.activeSession == nil ? "输入：刚刚开会 30 分钟" : "切换到新的事…", text: $text)
+            TextField(store.activeSession == nil ? SharedL10n.tr("record.input.placeholder_add") : SharedL10n.tr("record.input.placeholder_switch"), text: $text)
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(Design.text)
                 .textInputAutocapitalization(.never)
@@ -337,7 +337,7 @@ struct RecordView: View {
     private var intentionsSection: some View {
         VStack(spacing: 12) {
             HStack {
-                Text("今日意图")
+                Text(SharedL10n.tr("record.section.intentions"))
                     .font(.system(size: 13, weight: .semibold))
                     .tracking(2)
                     .foregroundStyle(Design.muted)
@@ -351,7 +351,7 @@ struct RecordView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "plus")
                             .font(.system(size: 13, weight: .semibold))
-                        Text("添加")
+                        Text(SharedL10n.tr("record.action.add"))
                             .font(.system(size: 14, weight: .semibold))
                     }
                     .foregroundStyle(Design.accent)
@@ -363,7 +363,7 @@ struct RecordView: View {
             let quickStartItems = intentionStore.sortedItems.filter { !$0.isCompleted }
             let totalCount = intentionStore.sortedItems.count
             if quickStartItems.isEmpty {
-                Text("列出想推进的事，可挂到目标或项目上，点开始就计时")
+                Text(SharedL10n.tr("record.intentions.empty"))
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(Design.muted.opacity(0.85))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -387,7 +387,7 @@ struct RecordView: View {
                         isAddingIntention = true
                     } label: {
                         HStack(spacing: 5) {
-                            Text("查看全部 (\(totalCount))")
+                            Text(SharedL10n.tr("record.action.view_all", totalCount))
                                 .font(.system(size: 13, weight: .semibold))
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 10, weight: .semibold))
@@ -461,7 +461,7 @@ struct RecordView: View {
             }
 
             if item.isCompleted {
-                Text("已完成")
+                Text(SharedL10n.tr("record.status.completed"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Design.muted.opacity(0.82))
             } else if isRunning {
@@ -469,7 +469,7 @@ struct RecordView: View {
                     Circle()
                         .fill(Design.green)
                         .frame(width: 8, height: 8)
-                    Text("进行中")
+                    Text(SharedL10n.tr("record.status.running"))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Design.accent)
                 }
@@ -501,24 +501,24 @@ struct RecordView: View {
                 Button {
                     intentionStore.duplicate(item)
                 } label: {
-                    Label("复制", systemImage: "doc.on.doc")
+                    Label(SharedL10n.tr("record.action.copy"), systemImage: "doc.on.doc")
                 }
             }
             Button {
                 renameIntentionText = item.name
                 renamingIntention = item
             } label: {
-                Label("重命名", systemImage: "pencil")
+                Label(SharedL10n.tr("record.action.rename"), systemImage: "pencil")
             }
             Button {
                 intentionStore.setRepeating(item, !item.isRepeating)
             } label: {
-                Label(item.isRepeating ? "取消循环" : "设为循环", systemImage: "repeat")
+                Label(item.isRepeating ? SharedL10n.tr("record.action.disable_repeat") : SharedL10n.tr("record.action.enable_repeat"), systemImage: "repeat")
             }
             Button(role: .destructive) {
                 intentionStore.remove(item)
             } label: {
-                Label("删除", systemImage: "trash")
+                Label(SharedL10n.tr("common.delete"), systemImage: "trash")
             }
         }
         .shadow(color: .black.opacity(0.04), radius: 3, y: 1)
@@ -536,7 +536,7 @@ struct RecordView: View {
 
     private var sectionHeader: some View {
         HStack {
-            Text("快捷开始")
+            Text(SharedL10n.tr("record.section.shortcuts"))
                 .font(.system(size: 13, weight: .semibold))
                 .tracking(2)
                 .foregroundStyle(Design.muted)
@@ -548,7 +548,7 @@ struct RecordView: View {
                     isInputFocused = false
                     isManagingShortcuts.toggle()
                 } label: {
-                    Text(isManagingShortcuts ? "完成" : "管理")
+                    Text(isManagingShortcuts ? SharedL10n.tr("common.done") : SharedL10n.tr("record.action.manage"))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(isManagingShortcuts ? Design.accent : Design.muted)
                         .padding(4)
@@ -563,7 +563,7 @@ struct RecordView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "plus")
                         .font(.system(size: 13, weight: .semibold))
-                    Text("新增")
+                    Text(SharedL10n.tr("record.action.new"))
                         .font(.system(size: 14, weight: .semibold))
                 }
                 .foregroundStyle(Design.accent)
@@ -598,7 +598,7 @@ struct RecordView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
 
-                Text(isManagingShortcuts ? "管理中" : (isOn ? "进行中" : "一键开始"))
+                Text(isManagingShortcuts ? SharedL10n.tr("record.status.managing") : (isOn ? SharedL10n.tr("record.status.running") : SharedL10n.tr("record.status.one_tap_start")))
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(0.4)
                     .foregroundStyle(isManagingShortcuts ? .red.opacity(0.72) : (isOn ? Design.accent : Design.muted.opacity(0.82)))
@@ -717,7 +717,7 @@ struct RecordView: View {
             let runningEntry = try await ShortcutAPI.running()
             store.syncRunningSession(runningEntry)
         } catch {
-            statusMessage = "读取进行中失败：\(error.localizedDescription)"
+            statusMessage = SharedL10n.tr("record.sync.read_running_failed", error.localizedDescription)
         }
     }
 
@@ -806,7 +806,7 @@ private struct IntentionBoardSheet: View {
             }
         }
         .confirmationDialog(
-            "删除「\(goalToDelete?.name ?? "")」？",
+            SharedL10n.tr("record.alert.delete_goal", goalToDelete?.name ?? ""),
             isPresented: Binding(
                 get: { goalToDelete != nil },
                 set: { if !$0 { goalToDelete = nil } }
@@ -814,39 +814,39 @@ private struct IntentionBoardSheet: View {
             titleVisibility: .visible,
             presenting: goalToDelete
         ) { goal in
-            Button("删除\(goal.isProject ? "项目" : "目标")", role: .destructive) {
+            Button(SharedL10n.tr("common.delete"), role: .destructive) {
                 store.deleteGoal(goal)
                 goalToDelete = nil
             }
-            Button("取消", role: .cancel) {
+            Button(SharedL10n.tr("common.cancel"), role: .cancel) {
                 goalToDelete = nil
             }
         } message: { _ in
-            Text("其下的意图不会删除，会移到「公共」")
+            Text(SharedL10n.tr("record.intentions.delete_goal_message"))
         }
-        .alert("重命名意图", isPresented: Binding(
+        .alert(SharedL10n.tr("record.alert.rename_intention"), isPresented: Binding(
             get: { renamingItem != nil },
             set: { if !$0 { renamingItem = nil } }
         ), presenting: renamingItem) { item in
-            TextField("名称", text: $renameText)
-            Button("保存") {
+            TextField(SharedL10n.tr("common.name"), text: $renameText)
+            Button(SharedL10n.tr("common.save")) {
                 store.rename(item, to: renameText)
                 renamingItem = nil
             }
-            Button("取消", role: .cancel) {
+            Button(SharedL10n.tr("common.cancel"), role: .cancel) {
                 renamingItem = nil
             }
         }
-        .alert("重命名目标", isPresented: Binding(
+        .alert(SharedL10n.tr("record.alert.rename_goal"), isPresented: Binding(
             get: { renamingGoal != nil },
             set: { if !$0 { renamingGoal = nil } }
         ), presenting: renamingGoal) { goal in
-            TextField("名称", text: $renameText)
-            Button("保存") {
+            TextField(SharedL10n.tr("common.name"), text: $renameText)
+            Button(SharedL10n.tr("common.save")) {
                 store.renameGoal(goal, to: renameText)
                 renamingGoal = nil
             }
-            Button("取消", role: .cancel) {
+            Button(SharedL10n.tr("common.cancel"), role: .cancel) {
                 renamingGoal = nil
             }
         }
@@ -857,7 +857,7 @@ private struct IntentionBoardSheet: View {
             Image(systemName: "target")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Calendar2Style.accent)
-            Text("意图 · 目标推进")
+            Text(SharedL10n.tr("record.intentions.board_title"))
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "23232A"))
 
@@ -876,7 +876,7 @@ private struct IntentionBoardSheet: View {
                 HStack(spacing: 3) {
                     Image(systemName: isCreatingGoal ? "chevron.up" : "plus")
                         .font(.system(size: 11, weight: .semibold))
-                    Text(isCreatingGoal ? "收起" : "新建目标")
+                    Text(isCreatingGoal ? SharedL10n.tr("record.action.collapse") : SharedL10n.tr("record.action.new_goal"))
                 }
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Calendar2Style.accent)
@@ -919,7 +919,7 @@ private struct IntentionBoardSheet: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Calendar2Style.accent)
 
-                        Text(goal?.name ?? "公共")
+                        Text(goal?.name ?? SharedL10n.tr("record.intentions.group_public"))
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(Color(hex: "2A2A30"))
                             .lineLimit(1)
@@ -947,12 +947,12 @@ private struct IntentionBoardSheet: View {
                             renameText = goal.name
                             renamingGoal = goal
                         } label: {
-                            Label("重命名", systemImage: "pencil")
+                            Label(SharedL10n.tr("record.action.rename"), systemImage: "pencil")
                         }
                         Button(role: .destructive) {
                             goalToDelete = goal
                         } label: {
-                            Label("删除\(goal.isProject ? "项目" : "目标")", systemImage: "trash")
+                            Label(SharedL10n.tr("common.delete"), systemImage: "trash")
                         }
                     }
                 }
@@ -978,7 +978,7 @@ private struct IntentionBoardSheet: View {
                         boardRow(item)
                     }
                     if groupItems.isEmpty && !isDraftingHere {
-                        Text("还没有意图，点 + 添加")
+                        Text(SharedL10n.tr("record.intentions.empty_group"))
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(Color(hex: "B5B5BC"))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1037,7 +1037,7 @@ private struct IntentionBoardSheet: View {
                     Circle()
                         .fill(Color(hex: "22C55E"))
                         .frame(width: 8, height: 8)
-                    Text("进行中")
+                    Text(SharedL10n.tr("record.status.running"))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Calendar2Style.accent)
                 }
@@ -1071,24 +1071,24 @@ private struct IntentionBoardSheet: View {
                 Button {
                     store.duplicate(item)
                 } label: {
-                    Label("复制", systemImage: "doc.on.doc")
+                    Label(SharedL10n.tr("record.action.copy"), systemImage: "doc.on.doc")
                 }
             }
             Button {
                 renameText = item.name
                 renamingItem = item
             } label: {
-                Label("重命名", systemImage: "pencil")
+                Label(SharedL10n.tr("record.action.rename"), systemImage: "pencil")
             }
             Button {
                 store.setRepeating(item, !item.isRepeating)
             } label: {
-                Label(item.isRepeating ? "取消循环" : "设为循环", systemImage: "repeat")
+                Label(item.isRepeating ? SharedL10n.tr("record.action.disable_repeat") : SharedL10n.tr("record.action.enable_repeat"), systemImage: "repeat")
             }
             Button(role: .destructive) {
                 store.remove(item)
             } label: {
-                Label("删除", systemImage: "trash")
+                Label(SharedL10n.tr("common.delete"), systemImage: "trash")
             }
         }
     }
@@ -1102,7 +1102,7 @@ private struct IntentionBoardSheet: View {
                 .font(.system(size: 21, weight: .regular))
                 .foregroundStyle(Color(hex: "C9C9CF"))
 
-            TextField("输入意图，回车保存", text: $draftText)
+            TextField(SharedL10n.tr("record.intentions.draft_placeholder"), text: $draftText)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .focused($isDraftFocused)
@@ -1163,20 +1163,20 @@ private struct IntentionBoardSheet: View {
     }
 
     private func formatTrackedTime(_ seconds: Int) -> String {
-        guard seconds > 0 else { return "0分" }
+        guard seconds > 0 else { return SharedL10n.tr("calendar.duration.minute_only", 0) }
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
         if hours > 0 {
-            return minutes > 0 ? "\(hours)小时\(minutes)分" : "\(hours)小时"
+            return minutes > 0 ? SharedL10n.tr("calendar.duration.hour_minute", hours, minutes) : SharedL10n.tr("calendar.duration.hour_only", hours)
         }
-        return "\(max(minutes, 1))分"
+        return SharedL10n.tr("calendar.duration.minute_only", max(minutes, 1))
     }
 
     // MARK: - Inline goal creation
 
     private var goalCreator: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField("目标或项目名称", text: $newGoalName)
+            TextField(SharedL10n.tr("record.goal.name_placeholder"), text: $newGoalName)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .focused($isGoalNameFocused)
@@ -1190,9 +1190,9 @@ private struct IntentionBoardSheet: View {
                 )
 
             HStack(spacing: 10) {
-                Picker("类型", selection: $newGoalKind) {
-                    Text("目标").tag("goal")
-                    Text("项目").tag("project")
+                Picker(SharedL10n.tr("record.goal.kind"), selection: $newGoalKind) {
+                    Text(SharedL10n.tr("record.goal.kind.goal")).tag("goal")
+                    Text(SharedL10n.tr("record.goal.kind.project")).tag("project")
                 }
                 .pickerStyle(.segmented)
 
@@ -1204,7 +1204,7 @@ private struct IntentionBoardSheet: View {
                             ProgressView()
                                 .tint(.white)
                         } else {
-                            Text("创建")
+                            Text(SharedL10n.tr("record.action.create"))
                                 .font(.system(size: 14, weight: .semibold))
                         }
                     }
@@ -1365,7 +1365,7 @@ private struct AddShortcutSheet: View {
             Circle()
                 .fill(category.color)
                 .frame(width: 13, height: 13)
-            Text(editingTask == nil ? "新增快捷指令" : "编辑快捷指令")
+            Text(editingTask == nil ? SharedL10n.tr("record.shortcut.title_new") : SharedL10n.tr("record.shortcut.title_edit"))
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(Color(hex: "23232A"))
             Spacer()
@@ -1376,8 +1376,8 @@ private struct AddShortcutSheet: View {
 
     private var nameField: some View {
         VStack(alignment: .leading, spacing: 9) {
-            sectionLabel("名称")
-            TextField("例如：写日记", text: $name)
+            sectionLabel(SharedL10n.tr("common.name"))
+            TextField(SharedL10n.tr("record.shortcut.example_name"), text: $name)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .focused($isNameFocused)
@@ -1397,7 +1397,7 @@ private struct AddShortcutSheet: View {
 
     private var iconPreviewSection: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionLabel("图标")
+            sectionLabel(SharedL10n.tr("record.shortcut.section.icon"))
             HStack(spacing: 12) {
                 Image(systemName: derivedSymbol)
                     .font(.system(size: 22, weight: .semibold))
@@ -1405,11 +1405,11 @@ private struct AddShortcutSheet: View {
                     .frame(width: 46, height: 46)
                     .background(derivedColor, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(trimmedName.isEmpty ? "自动图标" : trimmedName)
+                    Text(trimmedName.isEmpty ? SharedL10n.tr("record.shortcut.auto_icon") : trimmedName)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color(hex: "2A2A30"))
                         .lineLimit(1)
-                    Text("根据「\(category.label)\(pickedType.map { " · \($0.label)" } ?? "")」自动选择")
+                    Text(SharedL10n.tr("record.shortcut.auto_icon_rule", "\(category.label)\(pickedType.map { " · \($0.label)" } ?? "")"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color(hex: "9A9AA2"))
                         .lineLimit(1)
@@ -1432,7 +1432,7 @@ private struct AddShortcutSheet: View {
     private var categorySection: some View {
         VStack(alignment: .leading, spacing: 11) {
             HStack {
-                sectionLabel("分类")
+                sectionLabel(SharedL10n.tr("record.shortcut.section.category"))
                 Spacer()
                 manageButton(tab: .category)
             }
@@ -1474,13 +1474,13 @@ private struct AddShortcutSheet: View {
     private var subcategorySection: some View {
         VStack(alignment: .leading, spacing: 11) {
             HStack {
-                sectionLabel("小类 · \(category.label)")
+                sectionLabel(SharedL10n.tr("record.shortcut.section.subcategory", category.label))
                 Spacer()
                 manageButton(tab: .subcategory)
             }
             let types = category.types
             if types.isEmpty {
-                Text("该分类暂无小类，点「管理」添加")
+                Text(SharedL10n.tr("record.shortcut.empty_subcategory"))
                     .font(.system(size: 14))
                     .foregroundStyle(Color(hex: "B5B5BC"))
                     .padding(.top, 6)
@@ -1525,7 +1525,7 @@ private struct AddShortcutSheet: View {
                 .fill(Color.black.opacity(0.05))
                 .frame(height: 1)
             Button { save() } label: {
-                Text(editingTask == nil ? "保存指令" : "保存修改")
+                Text(editingTask == nil ? SharedL10n.tr("record.shortcut.save_new") : SharedL10n.tr("record.shortcut.save_edit"))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -1553,7 +1553,7 @@ private struct AddShortcutSheet: View {
             showManagement = true
         } label: {
             HStack(spacing: 3) {
-                Text("管理")
+                Text(SharedL10n.tr("record.action.manage"))
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
             }

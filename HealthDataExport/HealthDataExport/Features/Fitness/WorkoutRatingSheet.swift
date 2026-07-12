@@ -12,16 +12,16 @@ private struct RPELevel {
 }
 
 private let rpeLevels: [RPELevel] = [
-    RPELevel(label: "极轻松", description: "几乎不费力，如悠闲散步。"),
-    RPELevel(label: "很轻松", description: "轻微费力，可以轻松唱歌。"),
-    RPELevel(label: "轻松",   description: "稍有费力，可以轻松交谈。"),
-    RPELevel(label: "稍费力", description: "有点费力，仍可正常对话。"),
-    RPELevel(label: "疲倦",   description: "用力；呼吸沉重，说话困难。"),
-    RPELevel(label: "吃力",   description: "相当费力，只能说短词。"),
-    RPELevel(label: "很吃力", description: "非常用力，难以说话。"),
-    RPELevel(label: "非常吃力", description: "呼吸急促，难以维持节奏。"),
-    RPELevel(label: "极度吃力", description: "接近极限，几乎无法说话。"),
-    RPELevel(label: "精疲力竭", description: "已达极限，无法继续。"),
+    RPELevel(label: L10n.tr("fitness.rating.level.1.label"), description: L10n.tr("fitness.rating.level.1.description")),
+    RPELevel(label: L10n.tr("fitness.rating.level.2.label"), description: L10n.tr("fitness.rating.level.2.description")),
+    RPELevel(label: L10n.tr("fitness.rating.level.3.label"), description: L10n.tr("fitness.rating.level.3.description")),
+    RPELevel(label: L10n.tr("fitness.rating.level.4.label"), description: L10n.tr("fitness.rating.level.4.description")),
+    RPELevel(label: L10n.tr("fitness.rating.level.5.label"), description: L10n.tr("fitness.rating.level.5.description")),
+    RPELevel(label: L10n.tr("fitness.rating.level.6.label"), description: L10n.tr("fitness.rating.level.6.description")),
+    RPELevel(label: L10n.tr("fitness.rating.level.7.label"), description: L10n.tr("fitness.rating.level.7.description")),
+    RPELevel(label: L10n.tr("fitness.rating.level.8.label"), description: L10n.tr("fitness.rating.level.8.description")),
+    RPELevel(label: L10n.tr("fitness.rating.level.9.label"), description: L10n.tr("fitness.rating.level.9.description")),
+    RPELevel(label: L10n.tr("fitness.rating.level.10.label"), description: L10n.tr("fitness.rating.level.10.description")),
 ]
 
 struct WorkoutRatingSheet: View {
@@ -44,7 +44,7 @@ struct WorkoutRatingSheet: View {
         VStack(spacing: 0) {
             Spacer()
 
-            Text("体能训练怎么样?")
+            Text(L10n.tr("fitness.rating.title"))
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(Color(hex: "1C1C1E"))
                 .padding(.bottom, 36)
@@ -67,7 +67,7 @@ struct WorkoutRatingSheet: View {
 
             VStack(spacing: 12) {
                 Button(action: onSave) {
-                    Text("保存体能训练")
+                    Text(L10n.tr("fitness.rating.save_workout"))
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -78,7 +78,7 @@ struct WorkoutRatingSheet: View {
 
                 if canUpdateTemplate {
                     Button(action: onSaveAndUpdateTemplate) {
-                        Text("保存并更新模版")
+                        Text(L10n.tr("fitness.rating.save_and_update_template"))
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(Color(hex: "1C1C1E"))
                             .frame(maxWidth: .infinity)

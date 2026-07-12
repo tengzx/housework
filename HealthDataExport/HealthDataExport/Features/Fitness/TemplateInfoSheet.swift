@@ -33,12 +33,12 @@ struct TemplateInfoSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("模板名称（必填）", text: $name)
+                    TextField(L10n.tr("fitness.template.info.name_placeholder"), text: $name)
                         .focused($nameFocused)
-                    TextField("训练主题，如：下半身、推胸", text: $trainingTheme)
+                    TextField(L10n.tr("fitness.template.info.theme_placeholder"), text: $trainingTheme)
                 } footer: {
-                    if title == "新建模板" {
-                        Text("保存后可在模板详情中添加锻炼动作。")
+                    if title == L10n.tr("fitness.template.info.new_title") {
+                        Text(L10n.tr("fitness.template.info.new_footer"))
                     }
                 }
             }
@@ -46,7 +46,7 @@ struct TemplateInfoSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { Haptics.tap(); dismiss() }
+                    Button(L10n.tr("common.cancel")) { Haptics.tap(); dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {

@@ -168,8 +168,8 @@ struct WatchActiveWorkoutView: View {
                     }
                 }
             }
-            .confirmationDialog("删除本次训练?", isPresented: $showDiscardConfirm, titleVisibility: .visible) {
-                Button("删除", role: .destructive) {
+            .confirmationDialog(SharedL10n.tr("watch.fitness.delete_workout_confirm"), isPresented: $showDiscardConfirm, titleVisibility: .visible) {
+                Button(SharedL10n.tr("common.delete"), role: .destructive) {
                     Task {
                         if await vm.discard() {
                             workout.discard()
@@ -182,7 +182,7 @@ struct WatchActiveWorkoutView: View {
                         }
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button(SharedL10n.tr("common.cancel"), role: .cancel) {}
             }
             .overlay {
                 if let countdown {
@@ -245,7 +245,7 @@ struct WatchActiveWorkoutView: View {
             if isPreparing || vm.isLoading {
                 ProgressView().tint(.white)
             } else {
-                Text(vm.errorMessage ?? "没有可训练的动作")
+                Text(vm.errorMessage ?? SharedL10n.tr("watch.fitness.no_exercises"))
                     .font(.system(size: 13))
                     .foregroundStyle(WK.muted)
                     .multilineTextAlignment(.center)
@@ -430,10 +430,10 @@ private struct OnsetAutoStartBanner: View {
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 1) {
-                Text("已开始")
+                Text(SharedL10n.tr("watch.fitness.started"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(WK.green)
-                Text("\(suggestion.exerciseName) 第\(suggestion.setIndex + 1)组")
+                Text(SharedL10n.tr("watch.fitness.exercise_set_index", suggestion.exerciseName, suggestion.setIndex + 1))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .lineLimit(2)
@@ -441,7 +441,7 @@ private struct OnsetAutoStartBanner: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: onUndo) {
-                Text("撤销")
+                Text(SharedL10n.tr("watch.fitness.undo"))
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(WK.bg)
                     .padding(.horizontal, 14)
@@ -604,7 +604,7 @@ private struct SetPageView: View {
     }
 
     private var setChip: some View {
-        Text("第\(context.exerciseSetIndex + 1) / \(context.exerciseSetCount) 组")
+        Text(SharedL10n.tr("watch.fitness.set_progress", context.exerciseSetIndex + 1, context.exerciseSetCount))
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -621,7 +621,7 @@ private struct SetPageView: View {
 
     private func durationText(_ seconds: Int) -> String {
         let safe = max(0, seconds)
-        return "\(safe / 60)分\(String(format: "%02d", safe % 60))秒"
+        return SharedL10n.tr("watch.fitness.duration_min_sec", safe / 60, safe % 60)
     }
 
     private func distanceText(_ meters: Double?) -> String {
@@ -639,15 +639,15 @@ private struct FinishPageView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Text("训练完成").font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+            Text(SharedL10n.tr("watch.fitness.workout_complete")).font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
             HStack(spacing: 14) {
-                stat(WK.clock(elapsed), "时长")
-                stat("\(sets)", "组")
+                stat(WK.clock(elapsed), SharedL10n.tr("watch.fitness.duration_label"))
+                stat("\(sets)", SharedL10n.tr("watch.fitness.sets_label"))
             }
-            stat(WK.weightText(volume), "总容量")
+            stat(WK.weightText(volume), SharedL10n.tr("watch.fitness.total_volume"))
 
             Button(action: onFinish) {
-                Text("完成")
+                Text(SharedL10n.tr("common.done"))
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -695,14 +695,14 @@ private struct ControlsPageView: View {
             WK.bg.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("总时间").font(.system(size: 12)).foregroundStyle(WK.muted)
+                    Text(SharedL10n.tr("watch.fitness.total_time")).font(.system(size: 12)).foregroundStyle(WK.muted)
                     Text(clockHMS(elapsed))
                         .font(.system(size: 30, weight: .heavy, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(WK.orange)
 
                     HStack {
-                        Text("活跃").font(.system(size: 13)).foregroundStyle(WK.muted)
+                        Text(SharedL10n.tr("watch.fitness.active_energy")).font(.system(size: 13)).foregroundStyle(WK.muted)
                         Spacer()
                         Text("\(Int(activeKcal.rounded())) kcal")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))

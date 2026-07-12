@@ -124,7 +124,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             do {
                 detail = try await fetchDetail()
             } catch {
-                errorMessage = "加载失败"
+                errorMessage = SharedL10n.tr("watch.fitness.load_failed")
             }
             isLoading = false
         } while needsReloadAfterCurrentLoad
@@ -233,7 +233,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             )
             detail = try await saveStructure(request)
         } catch {
-            errorMessage = "删除失败"
+            errorMessage = SharedL10n.tr("watch.fitness.delete_failed")
         }
     }
 
@@ -245,7 +245,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             try await discardSession()
             return true
         } catch {
-            errorMessage = "删除失败"
+            errorMessage = SharedL10n.tr("watch.fitness.delete_failed")
             return false
         }
     }
@@ -259,7 +259,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             try await completeSession(rpe: rpe)
             return true
         } catch {
-            errorMessage = "完成失败"
+            errorMessage = SharedL10n.tr("watch.fitness.complete_failed")
             return false
         }
     }
@@ -315,7 +315,7 @@ final class WatchWorkoutViewModel: ObservableObject {
                 WatchAuthSync.shared.broadcastSessionSnapshot(fresh)
                 errorMessage = nil
             } catch {
-                errorMessage = "同步中"
+                errorMessage = SharedL10n.tr("watch.fitness.syncing")
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 if pendingOperations.first?.operationId == operation.operationId {
                     Task { await flushPendingOperations() }

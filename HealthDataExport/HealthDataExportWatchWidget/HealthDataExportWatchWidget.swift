@@ -1,6 +1,33 @@
 import WidgetKit
 import SwiftUI
 
+private enum WidgetStrings {
+    private static var isChinese: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("zh") == true
+    }
+
+    static func tr(_ key: String, _ args: CVarArg...) -> String {
+        let value: String = switch key {
+        case "watch.widget.placeholder_name":
+            isChinese ? "写代码" : "Coding"
+        case "watch.widget.running":
+            isChinese ? "进行中" : "Running"
+        case "watch.widget.started_at":
+            isChinese ? "开始于 %@" : "Started at %@"
+        case "watch.widget.title":
+            isChinese ? "时间记录" : "Time Tracking"
+        case "watch.widget.empty_hint":
+            isChinese ? "点按开始记录" : "Tap to start tracking"
+        case "watch.widget.description":
+            isChinese ? "在表盘上显示正在进行的时间记录" : "Show the current active time entry on the watch face"
+        default:
+            key
+        }
+        guard !args.isEmpty else { return value }
+        return String(format: value, locale: Locale.current, arguments: args)
+    }
+}
+
 // MARK: - Timeline
 
 struct ActiveActivityEntry: TimelineEntry {
@@ -13,7 +40,7 @@ struct ActiveActivityProvider: TimelineProvider {
         ActiveActivityEntry(
             date: .now,
             activity: SharedActiveActivity(
-                name: "写代码",
+                name: WidgetStrings.tr("watch.widget.placeholder_name"),
                 startedAt: .now,
                 colorHex: "FF7847",
                 symbolName: "chevron.left.forwardslash.chevron.right"
@@ -98,7 +125,7 @@ struct ActiveActivityWidgetView: View {
                         .fill(tint)
                         .frame(width: 6, height: 6)
                         .widgetAccentable()
-                    Text("进行中")
+                    Text(WidgetStrings.tr("watch.widget.running"))
                         .font(.system(size: 11, weight: .medium))
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
@@ -127,7 +154,7 @@ struct ActiveActivityWidgetView: View {
                     Spacer(minLength: 0)
                 }
 
-                Text("开始于 \(startedAtFormatter.string(from: activity.startedAt))")
+                Text(WidgetStrings.tr("watch.widget.started_at", startedAtFormatter.string(from: activity.startedAt)))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
@@ -152,9 +179,9 @@ struct ActiveActivityWidgetView: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 26)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("时间记录")
+                    Text(WidgetStrings.tr("watch.widget.title"))
                         .font(.system(size: 15, weight: .semibold))
-                    Text("点按开始记录")
+                    Text(WidgetStrings.tr("watch.widget.empty_hint"))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
@@ -180,8 +207,8 @@ struct ActiveActivityWidget: Widget {
         StaticConfiguration(kind: kind, provider: ActiveActivityProvider()) { entry in
             ActiveActivityWidgetView(entry: entry)
         }
-        .configurationDisplayName("进行中")
-        .description("在表盘上显示正在进行的时间记录")
+        .configurationDisplayName(WidgetStrings.tr("watch.widget.running"))
+        .description(WidgetStrings.tr("watch.widget.description"))
         .supportedFamilies([.accessoryCircular, .accessoryRectangular])
     }
 }

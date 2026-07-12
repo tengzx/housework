@@ -54,7 +54,7 @@ enum FocusReminderNotifier {
         }
 
         let content = UNMutableNotificationContent()
-        content.title = payload.title?.isEmpty == false ? payload.title! : "专注提醒"
+        content.title = payload.title?.isEmpty == false ? payload.title! : SharedL10n.tr("focus.reminder.default_title")
         if let body = payload.body, !body.isEmpty {
             content.body = body
         }

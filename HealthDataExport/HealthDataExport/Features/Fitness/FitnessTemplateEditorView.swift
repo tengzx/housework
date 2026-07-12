@@ -202,7 +202,7 @@ final class TemplateEditorViewModel: ObservableObject {
         defer { isSaving = false }
         let nameToSave = trimmedTemplateName
         guard !nameToSave.isEmpty else {
-            errorMessage = "模板名称不能为空"
+            errorMessage = SharedL10n.tr("fitness.template.name_required")
             return
         }
         let saveExercises = exercises.map { ex in
@@ -262,7 +262,7 @@ final class TemplateEditorViewModel: ObservableObject {
             exercises = []
             await loadDetail()
         } catch {
-            errorMessage = "保存失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.template.save_failed")
         }
     }
 
@@ -277,7 +277,7 @@ final class TemplateEditorViewModel: ObservableObject {
             try await FitnessAPIClient.deleteTemplate(id: templateId)
             return true
         } catch {
-            errorMessage = "删除失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.template.delete_failed")
             return false
         }
     }
@@ -310,8 +310,8 @@ struct FitnessTemplateEditorView: View {
 
     private var subText: String {
         vm.exercises.isEmpty
-            ? "暂无锻炼"
-            : "\(vm.exercises.count) 种锻炼, \(vm.exercises.reduce(0) { $0 + $1.sets.count }) 组"
+            ? SharedL10n.tr("fitness.template.empty_exercises")
+            : SharedL10n.tr("fitness.template.summary", vm.exercises.count, vm.exercises.reduce(0) { $0 + $1.sets.count })
     }
 
     var body: some View {
@@ -333,7 +333,7 @@ struct FitnessTemplateEditorView: View {
                         // Title + subtitle (no card)
                         Section {
                             VStack(alignment: .leading, spacing: 6) {
-                                TextField("模板名称", text: $vm.templateName)
+                                TextField(SharedL10n.tr("fitness.template.name"), text: $vm.templateName)
                                     .font(.system(size: 28, weight: .heavy))
                                     .foregroundStyle(Color(hex: "1C1C1E"))
                                     .textInputAutocapitalization(.never)
@@ -426,20 +426,20 @@ struct FitnessTemplateEditorView: View {
         .sheet(item: $progressTarget) { target in
             ExerciseProgressSheet(target: target)
         }
-        .alert("错误", isPresented: Binding(
+        .alert(SharedL10n.tr("common.error"), isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) {
-            Button("好") { Haptics.tap(); vm.errorMessage = nil }
+            Button(SharedL10n.tr("common.ok")) { Haptics.tap(); vm.errorMessage = nil }
         } message: {
             Text(vm.errorMessage ?? "")
         }
         .alert(
-            "删除「\(vm.templateName)」？",
+            SharedL10n.tr("fitness.template.delete_confirm", vm.templateName),
             isPresented: $showDeleteConfirm
         ) {
-            Button("取消", role: .cancel) { Haptics.tap() }
-            Button("删除", role: .destructive) {
+            Button(SharedL10n.tr("common.cancel"), role: .cancel) { Haptics.tap() }
+            Button(SharedL10n.tr("common.delete"), role: .destructive) {
                 Haptics.tap()
                 Task {
                     if await vm.deleteTemplate() {
@@ -448,7 +448,7 @@ struct FitnessTemplateEditorView: View {
                 }
             }
         } message: {
-            Text("此操作不可撤销，模板将被归档。")
+            Text(SharedL10n.tr("fitness.template.delete_message"))
         }
         .task { await vm.loadDetail() }
     }
@@ -476,7 +476,7 @@ struct FitnessTemplateEditorView: View {
                     Haptics.tap()
                     showDeleteConfirm = true
                 } label: {
-                    Label("删除模板", systemImage: "trash")
+                    Label(SharedL10n.tr("fitness.template.delete_action"), systemImage: "trash")
                 }
             } label: {
                 Circle()
@@ -502,10 +502,10 @@ struct FitnessTemplateEditorView: View {
                 .padding(.horizontal, 16)
 
             VStack(spacing: 12) {
-                Text("未添加任何锻炼")
+                Text(SharedL10n.tr("fitness.template.empty_exercises"))
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
-                Text("轻点"+"开始将锻炼添加到你的模板。")
+                Text(SharedL10n.tr("fitness.template.empty_hint"))
                     .font(.system(size: 15))
                     .foregroundStyle(Color(hex: "7C7C82"))
                     .multilineTextAlignment(.center)
@@ -514,7 +514,7 @@ struct FitnessTemplateEditorView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "plus")
                             .font(.system(size: 14, weight: .semibold))
-                        Text("添加锻炼")
+                        Text(SharedL10n.tr("fitness.template.add_exercise"))
                             .font(.system(size: 16, weight: .semibold))
                     }
                     .foregroundStyle(.white)
@@ -532,7 +532,7 @@ struct FitnessTemplateEditorView: View {
     private var bottomBar: some View {
         HStack(spacing: 12) {
             Button { Haptics.tap(); showLibrary = true } label: {
-                Text("添加锻炼")
+                Text(SharedL10n.tr("fitness.template.add_exercise"))
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
                     .frame(maxWidth: .infinity)
@@ -554,7 +554,7 @@ struct FitnessTemplateEditorView: View {
                     if vm.isSaving {
                         ProgressView().tint(.white)
                     } else {
-                        Text("保存")
+                        Text(SharedL10n.tr("common.save"))
                             .font(.system(size: 16, weight: .semibold))
                     }
                 }
@@ -604,7 +604,7 @@ private struct ExerciseCard: View {
                     set: $set,
                     isTimeBased: exercise.isTimeBased,
                     showSecondColumn: exercise.showSecondColumn,
-                    secondPlaceholder: exercise.showDistanceColumn ? "米" : "kg",
+                    secondPlaceholder: exercise.showDistanceColumn ? SharedL10n.tr("fitness.unit.meter") : "kg",
                     showRestInput: showRestInputs,
                     onFocusChange: { isEditing in onEditSet(isEditing ? set.id : nil) },
                     onDelete: { vm.deleteSet(exerciseId: exercise.id, setId: set.id) }
@@ -660,7 +660,7 @@ private struct ExerciseCard: View {
                     Haptics.tap()
                     vm.removeExercise(id: exercise.id)
                 } label: {
-                    Label("删除动作", systemImage: "trash")
+                    Label(SharedL10n.tr("fitness.template.delete_exercise"), systemImage: "trash")
                 }
             } label: {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -678,7 +678,7 @@ private struct ExerciseCard: View {
 
     private var columnHeaderRow: some View {
         HStack(spacing: 10) {
-            Text("组").frame(width: 44)
+            Text(SharedL10n.tr("fitness.template.set_short")).frame(width: 44)
             if exercise.showSecondColumn { Text(exercise.secondColumnLabel).frame(maxWidth: .infinity) }
             Text(exercise.thirdLabel).frame(maxWidth: .infinity)
             Spacer().frame(width: 30)
@@ -697,7 +697,7 @@ private struct ExerciseCard: View {
                 HStack(spacing: 8) {
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.system(size: 14, weight: .semibold))
-                    Text("进度")
+                    Text(SharedL10n.tr("fitness.template.progress"))
                         .font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundStyle(Color(hex: "1C1C1E"))
@@ -716,7 +716,7 @@ private struct ExerciseCard: View {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .semibold))
-                    Text("添加组")
+                    Text(SharedL10n.tr("fitness.template.add_set"))
                         .font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundStyle(Color(hex: "1C1C1E"))
@@ -809,7 +809,7 @@ private struct SetRow: View {
                     Image(systemName: "timer")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color(hex: "6F6F76"))
-                    Text("休息")
+                    Text(SharedL10n.tr("fitness.template.rest"))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color(hex: "6F6F76"))
                     TextField("120", text: $set.restSecondsText)
@@ -822,7 +822,7 @@ private struct SetRow: View {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .stroke(Color(hex: "EEEEF1"), lineWidth: 1)
                         )
-                    Text("秒")
+                    Text(SharedL10n.tr("fitness.unit.second"))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color(hex: "6F6F76"))
                     Spacer()

@@ -20,35 +20,35 @@ enum HealthMetric: String, CaseIterable, Codable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .sleepAnalysis: "Sleep Analysis"
-        case .hrvSDNN: "HRV SDNN"
-        case .restingHeartRate: "Resting Heart Rate"
-        case .heartRate: "Heart Rate"
-        case .activeEnergyBurned: "Active Energy Burned"
-        case .exerciseTime: "Exercise Time"
-        case .workouts: "Workouts"
-        case .stepCount: "Step Count"
-        case .respiratoryRate: "Respiratory Rate"
-        case .bloodOxygen: "Blood Oxygen"
-        case .wristTemperature: "Wrist Temperature"
-        case .mindfulState: "State of Mind"
+        case .sleepAnalysis: L10n.tr("health_export.metric.sleep_analysis.title")
+        case .hrvSDNN: L10n.tr("health_export.metric.hrv_sdnn.title")
+        case .restingHeartRate: L10n.tr("health_export.metric.resting_heart_rate.title")
+        case .heartRate: L10n.tr("health_export.metric.heart_rate.title")
+        case .activeEnergyBurned: L10n.tr("health_export.metric.active_energy_burned.title")
+        case .exerciseTime: L10n.tr("health_export.metric.exercise_time.title")
+        case .workouts: L10n.tr("health_export.metric.workouts.title")
+        case .stepCount: L10n.tr("health_export.metric.step_count.title")
+        case .respiratoryRate: L10n.tr("health_export.metric.respiratory_rate.title")
+        case .bloodOxygen: L10n.tr("health_export.metric.blood_oxygen.title")
+        case .wristTemperature: L10n.tr("health_export.metric.wrist_temperature.title")
+        case .mindfulState: L10n.tr("health_export.metric.mindful_state.title")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .sleepAnalysis: "总睡眠、在床、睡眠分段"
-        case .hrvSDNN: "恢复状态核心输入"
-        case .restingHeartRate: "静息心率与恢复压力"
-        case .heartRate: "日内心率平均与峰值"
-        case .activeEnergyBurned: "活动消耗"
-        case .exerciseTime: "运动分钟数"
-        case .workouts: "训练记录"
-        case .stepCount: "步数"
-        case .respiratoryRate: "呼吸频率"
-        case .bloodOxygen: "血氧"
-        case .wristTemperature: "手腕温度变化"
-        case .mindfulState: "Apple Health 情绪状态记录"
+        case .sleepAnalysis: L10n.tr("health_export.metric.sleep_analysis.subtitle")
+        case .hrvSDNN: L10n.tr("health_export.metric.hrv_sdnn.subtitle")
+        case .restingHeartRate: L10n.tr("health_export.metric.resting_heart_rate.subtitle")
+        case .heartRate: L10n.tr("health_export.metric.heart_rate.subtitle")
+        case .activeEnergyBurned: L10n.tr("health_export.metric.active_energy_burned.subtitle")
+        case .exerciseTime: L10n.tr("health_export.metric.exercise_time.subtitle")
+        case .workouts: L10n.tr("health_export.metric.workouts.subtitle")
+        case .stepCount: L10n.tr("health_export.metric.step_count.subtitle")
+        case .respiratoryRate: L10n.tr("health_export.metric.respiratory_rate.subtitle")
+        case .bloodOxygen: L10n.tr("health_export.metric.blood_oxygen.subtitle")
+        case .wristTemperature: L10n.tr("health_export.metric.wrist_temperature.subtitle")
+        case .mindfulState: L10n.tr("health_export.metric.mindful_state.subtitle")
         }
     }
 
@@ -138,9 +138,20 @@ enum HealthMetric: String, CaseIterable, Codable, Identifiable, Hashable {
 }
 
 enum MetricPriority: String, CaseIterable, Identifiable {
-    case primary = "第一优先级"
-    case secondary = "第二优先级"
-    case subjective = "主观数据"
+    case primary
+    case secondary
+    case subjective
 
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .primary:
+            return L10n.tr("health_export.metric_priority.primary")
+        case .secondary:
+            return L10n.tr("health_export.metric_priority.secondary")
+        case .subjective:
+            return L10n.tr("health_export.metric_priority.subjective")
+        }
+    }
 }

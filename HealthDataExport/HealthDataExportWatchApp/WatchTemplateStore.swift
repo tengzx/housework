@@ -21,7 +21,7 @@ final class WatchTemplateStore: ObservableObject {
             templates = try await FitnessAPIClient.templates()
             errorMessage = nil
         } catch {
-            if templates.isEmpty { errorMessage = "加载失败，请检查网络与登录状态" }
+            if templates.isEmpty { errorMessage = SharedL10n.tr("watch.fitness.templates_load_failed") }
         }
     }
 }

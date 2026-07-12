@@ -38,7 +38,7 @@ final class TimeCalendarStore: ObservableObject {
                 guard !Self.isCancellation(error) else { return }
                 categories = Calendar2Category.fallbackCategories
                 hasLoadedRemoteCategories = false
-                statusMessage = "分类加载失败，已使用默认分类"
+                statusMessage = SharedL10n.tr("time.calendar.categories_load_failed")
             }
         }
 
@@ -108,7 +108,7 @@ final class TimeCalendarStore: ObservableObject {
             dayOffset: dayOffset,
             start: start,
             end: end,
-            name: type?.label ?? "新记录",
+            name: type?.label ?? SharedL10n.tr("time.calendar.new_entry"),
             category: category.id,
             typeId: type?.id,
             source: "manual",
@@ -161,12 +161,12 @@ final class TimeCalendarStore: ObservableObject {
 
     func updateCategory(id: String, categoryId: String) async -> Calendar2Event? {
         guard hasLoadedRemoteCategories else {
-            statusMessage = "服务器分类未加载成功，不能修改分类"
+            statusMessage = SharedL10n.tr("time.calendar.server_categories_unavailable_update_category")
             return nil
         }
         guard var event = events.first(where: { $0.id == id }) else { return nil }
         guard let category = categories.first(where: { $0.id == categoryId }) else {
-            statusMessage = "服务器分类不存在：\(categoryId)"
+            statusMessage = SharedL10n.tr("time.calendar.server_category_missing", categoryId)
             return nil
         }
         event.category = categoryId
@@ -178,11 +178,11 @@ final class TimeCalendarStore: ObservableObject {
 
     func updateName(id: String, name: String, categoryId: String, typeId: String?) async -> Calendar2Event? {
         guard hasLoadedRemoteCategories else {
-            statusMessage = "服务器分类未加载成功，不能修改名称"
+            statusMessage = SharedL10n.tr("time.calendar.server_categories_unavailable_update_name")
             return nil
         }
         guard categories.contains(where: { $0.id == categoryId }) else {
-            statusMessage = "服务器分类不存在：\(categoryId)"
+            statusMessage = SharedL10n.tr("time.calendar.server_category_missing", categoryId)
             return nil
         }
         guard var event = events.first(where: { $0.id == id }) else { return nil }
@@ -195,11 +195,11 @@ final class TimeCalendarStore: ObservableObject {
 
     func updateType(id: String, categoryId: String, typeId: String?) async -> Calendar2Event? {
         guard hasLoadedRemoteCategories else {
-            statusMessage = "服务器分类未加载成功，不能修改小类"
+            statusMessage = SharedL10n.tr("time.calendar.server_categories_unavailable_update_type")
             return nil
         }
         guard categories.contains(where: { $0.id == categoryId }) else {
-            statusMessage = "服务器分类不存在：\(categoryId)"
+            statusMessage = SharedL10n.tr("time.calendar.server_category_missing", categoryId)
             return nil
         }
         guard var event = events.first(where: { $0.id == id }) else { return nil }
@@ -341,7 +341,7 @@ final class TimeCalendarStore: ObservableObject {
 
     private func readableMessage(for error: Error) -> String {
         if let decodingError = error as? DecodingError {
-            return "接口数据格式不匹配：\(decodingError.readableDescription)"
+            return SharedL10n.tr("time.calendar.response_mismatch", decodingError.readableDescription)
         }
         return error.localizedDescription
     }
@@ -744,7 +744,7 @@ struct TimeEventResponse: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeFlexibleString(for: .id)
-        name = try container.decodeFirstString(keys: [.name, .taskName, .task_name]) ?? "未命名"
+        name = try container.decodeFirstString(keys: [.name, .taskName, .task_name]) ?? SharedL10n.tr("record.fallback.unnamed")
         categoryId = try container.decodeFirstString(keys: [.categoryId, .category_id, .category]) ?? "rest"
         typeId = try container.decodeFirstString(keys: [.typeId, .type_id])
         categoryName = try container.decodeFirstString(keys: [.categoryName, .category_name])
@@ -806,7 +806,7 @@ struct MobileAppEventResponse: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeFlexibleString(for: .id)
-        name = (try? container.decode(String.self, forKey: .name)) ?? "未命名"
+        name = (try? container.decode(String.self, forKey: .name)) ?? SharedL10n.tr("record.fallback.unnamed")
         categoryId = (try? container.decode(String.self, forKey: .categoryId)) ?? "mobile-app-sessions"
         typeId = try? container.decode(String.self, forKey: .typeId)
         startedAt = try container.decodeFirstDate(keys: [.startedAt])
@@ -836,7 +836,7 @@ private struct TimeCalendarAPIError: LocalizedError {
         if let response = try? JSONDecoder().decode(ShortcutStyleErrorResponse.self, from: data) {
             return "\(response.error) (\(statusCode))"
         }
-        return "日历接口请求失败 (\(statusCode))"
+        return SharedL10n.tr("time.calendar.request_failed", statusCode)
     }
 }
 
@@ -857,11 +857,11 @@ private extension DecodingError {
     var readableDescription: String {
         switch self {
         case .keyNotFound(let key, let context):
-            return "缺少字段 \(key.stringValue)；路径 \(context.codingPath.map(\.stringValue).joined(separator: "."))"
+            return SharedL10n.tr("time.calendar.decoding.key_not_found", key.stringValue, context.codingPath.map(\.stringValue).joined(separator: "."))
         case .typeMismatch(_, let context):
-            return "字段类型不匹配；路径 \(context.codingPath.map(\.stringValue).joined(separator: "."))"
+            return SharedL10n.tr("time.calendar.decoding.type_mismatch", context.codingPath.map(\.stringValue).joined(separator: "."))
         case .valueNotFound(_, let context):
-            return "字段为空；路径 \(context.codingPath.map(\.stringValue).joined(separator: "."))"
+            return SharedL10n.tr("time.calendar.decoding.value_not_found", context.codingPath.map(\.stringValue).joined(separator: "."))
         case .dataCorrupted(let context):
             return context.debugDescription
         @unknown default:

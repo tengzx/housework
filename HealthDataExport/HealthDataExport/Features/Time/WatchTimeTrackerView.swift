@@ -67,7 +67,7 @@ struct WatchTimeTrackerView: View {
                             .frame(width: 7, height: 7)
                             .watchPulse()
 
-                        Text("进行中 · \(startTimeText(session.startedAt)) 开始")
+                        Text(SharedL10n.tr("watch.time.running_since", startTimeText(session.startedAt)))
                             .font(.system(size: 12, weight: .regular))
                             .foregroundStyle(WatchDesign.muted)
                             .lineLimit(1)
@@ -107,24 +107,24 @@ struct WatchTimeTrackerView: View {
     private var shortcutList: some View {
         ScrollView {
             VStack(spacing: 8) {
-                sectionTitle("今日意图")
+                sectionTitle(SharedL10n.tr("watch.time.section.today_intentions"))
 
                 if isLoadingIntentions && todayIntentions.isEmpty {
-                    sectionPlaceholder("正在读取…")
+                    sectionPlaceholder(SharedL10n.tr("watch.time.loading"))
                 } else if todayIntentions.isEmpty {
-                    sectionPlaceholder(intentionStatusMessage.isEmpty ? "今天还没有意图" : intentionStatusMessage)
+                    sectionPlaceholder(intentionStatusMessage.isEmpty ? SharedL10n.tr("watch.time.empty_today_intentions") : intentionStatusMessage)
                 } else {
                     ForEach(todayIntentions) { intention in
                         shortcutRow(task(for: intention), tint: WatchDesign.accent, intentionId: intention.id)
                     }
                 }
 
-                sectionTitle("快捷开始")
+                sectionTitle(SharedL10n.tr("watch.time.section.shortcut_start"))
 
                 if isLoadingShortcuts && shortcutTasks.isEmpty {
-                    sectionPlaceholder("正在读取…")
+                    sectionPlaceholder(SharedL10n.tr("watch.time.loading"))
                 } else if shortcutTasks.isEmpty {
-                    sectionPlaceholder("暂无快捷指令")
+                    sectionPlaceholder(SharedL10n.tr("watch.time.empty_shortcuts"))
                 } else {
                     ForEach(shortcutTasks) { task in
                         shortcutRow(task, tint: task.color)
@@ -150,7 +150,7 @@ struct WatchTimeTrackerView: View {
             async let shortcuts: Void = refreshShortcuts()
             _ = await (intentions, shortcuts)
         }
-        .navigationTitle("快捷开始")
+        .navigationTitle(SharedL10n.tr("watch.time.nav_title"))
     }
 
     private func sectionTitle(_ title: String) -> some View {
@@ -178,7 +178,7 @@ struct WatchTimeTrackerView: View {
                 name: intention.name,
                 symbolName: "target",
                 colorHex: WatchDesign.accentHex,
-                categoryName: "今日意图"
+                categoryName: SharedL10n.tr("watch.time.category.today_intentions")
             )
     }
 
@@ -227,9 +227,9 @@ struct WatchTimeTrackerView: View {
         let category = task.categoryName?.trimmingCharacters(in: .whitespaces)
         let tail: String
         if let minutes = task.defaultDurationMinutes, minutes > 0 {
-            tail = "预计 \(minutes) 分钟"
+            tail = SharedL10n.tr("common.estimate_minutes", minutes)
         } else {
-            tail = "常用"
+            tail = SharedL10n.tr("common.frequent")
         }
         if let category, !category.isEmpty {
             return "\(category) · \(tail)"
@@ -241,7 +241,7 @@ struct WatchTimeTrackerView: View {
         Button {
             stopActiveSession()
         } label: {
-            Text("结束记录")
+            Text(SharedL10n.tr("watch.time.stop_entry"))
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 22)
@@ -249,7 +249,7 @@ struct WatchTimeTrackerView: View {
                 .background(WatchDesign.accent, in: Capsule())
         }
         .buttonStyle(WatchPressButtonStyle())
-        .accessibilityLabel("结束当前记录")
+        .accessibilityLabel(SharedL10n.tr("watch.time.stop_current_entry"))
     }
 
     private func startTask(_ task: ShortcutTask, intentionId: Int? = nil) {
@@ -276,7 +276,7 @@ struct WatchTimeTrackerView: View {
             let runningEntry = try await ShortcutAPI.running()
             store.syncRunningSession(runningEntry)
         } catch {
-            statusMessage = "读取失败"
+            statusMessage = SharedL10n.tr("watch.time.read_failed")
         }
     }
 
@@ -304,7 +304,7 @@ struct WatchTimeTrackerView: View {
             if shortcutTasks.isEmpty {
                 shortcutTasks = store.tasks
             }
-            statusMessage = "快捷指令读取失败"
+            statusMessage = SharedL10n.tr("watch.time.shortcuts_read_failed")
         }
     }
 
@@ -321,9 +321,9 @@ struct WatchTimeTrackerView: View {
             intentionStatusMessage = ""
         } catch {
             if case let HTTPClientError.httpFailure(statusCode, _) = error {
-                intentionStatusMessage = "读取失败（HTTP \(statusCode)）"
+                intentionStatusMessage = SharedL10n.tr("watch.time.read_failed_http", statusCode)
             } else {
-                intentionStatusMessage = "读取失败，请下拉重试"
+                intentionStatusMessage = SharedL10n.tr("watch.time.read_failed_retry")
             }
         }
     }

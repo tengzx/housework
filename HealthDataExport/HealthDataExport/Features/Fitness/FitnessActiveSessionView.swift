@@ -212,23 +212,23 @@ struct FitnessActiveSessionView: View {
                 }
             )
         }
-        .alert("错误", isPresented: Binding(
+        .alert(L10n.tr("common.error"), isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) {
-            Button("好") { Haptics.tap(); vm.errorMessage = nil }
+            Button(L10n.tr("common.ok")) { Haptics.tap(); vm.errorMessage = nil }
         } message: {
             Text(vm.errorMessage ?? "")
         }
-        .alert("还有未完成的组", isPresented: $showIncompleteAlert) {
-            Button("继续训练", role: .cancel) { Haptics.tap() }
-            Button("仍然完成", role: .destructive) { Haptics.tap(); showRatingSheet = true }
+        .alert(L10n.tr("fitness.session.incomplete_sets_title"), isPresented: $showIncompleteAlert) {
+            Button(L10n.tr("fitness.session.continue_workout"), role: .cancel) { Haptics.tap() }
+            Button(L10n.tr("fitness.session.finish_anyway"), role: .destructive) { Haptics.tap(); showRatingSheet = true }
         } message: {
-            Text("还有 \(vm.incompleteSetCount) 组未完成，确定要结束训练吗？")
+            Text(L10n.tr("fitness.session.incomplete_sets_message", vm.incompleteSetCount))
         }
-        .alert("删除本次训练？", isPresented: $showDiscardConfirm) {
-            Button("取消", role: .cancel) { Haptics.tap() }
-            Button("删除训练", role: .destructive) {
+        .alert(L10n.tr("fitness.session.delete_workout_title"), isPresented: $showDiscardConfirm) {
+            Button(L10n.tr("common.cancel"), role: .cancel) { Haptics.tap() }
+            Button(L10n.tr("fitness.session.delete_workout"), role: .destructive) {
                 Haptics.tap()
                 Task {
                     if await vm.discard() {
@@ -238,7 +238,7 @@ struct FitnessActiveSessionView: View {
                 }
             }
         } message: {
-            Text("删除后不会保存为完成记录。")
+            Text(L10n.tr("fitness.session.delete_workout_message"))
         }
     }
 
@@ -284,7 +284,7 @@ struct FitnessActiveSessionView: View {
             showExerciseLibrary = true
         } label: {
             HStack(spacing: 12) {
-                Text("添加锻炼")
+                Text(L10n.tr("fitness.session.add_exercise"))
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(Color(hex: "6F6F76"))
 
@@ -350,7 +350,7 @@ struct FitnessActiveSessionView: View {
                         ProgressView()
                             .tint(Color(hex: "F05B5B"))
                     } else {
-                        Text("完成")
+                        Text(L10n.tr("common.complete"))
                             .font(.system(size: 17, weight: .bold))
                     }
                 }
@@ -372,7 +372,7 @@ struct FitnessActiveSessionView: View {
                         }
                     }
                 } label: {
-                    Label(vm.isSessionPaused ? "继续训练" : "暂停训练", systemImage: vm.isSessionPaused ? "play.fill" : "pause.fill")
+                    Label(vm.isSessionPaused ? L10n.tr("fitness.session.resume_workout") : L10n.tr("fitness.session.pause_workout"), systemImage: vm.isSessionPaused ? "play.fill" : "pause.fill")
                 }
                 .disabled(vm.isPausing)
 
@@ -380,7 +380,7 @@ struct FitnessActiveSessionView: View {
                     Haptics.tap()
                     showDiscardConfirm = true
                 } label: {
-                    Label("删除训练", systemImage: "trash")
+                    Label(L10n.tr("fitness.session.delete_workout"), systemImage: "trash")
                 }
                 .disabled(vm.isDiscarding)
             } label: {
@@ -638,7 +638,7 @@ private struct ActiveExerciseCard: View {
                     .lineLimit(1)
                     .contentShape(Rectangle())
                     .onTapGesture { Haptics.tap(); onOpenDetail() }
-                Text("\(trackingLabel) · \(exercise.sets.count) 组")
+                Text(L10n.tr("fitness.session.exercise_summary", trackingLabel, exercise.sets.count))
                     .font(.system(size: 14))
                     .foregroundStyle(Color(hex: "9A9AA0"))
             }
@@ -652,7 +652,7 @@ private struct ActiveExerciseCard: View {
 
     private var columnHeaderRow: some View {
         HStack(spacing: 10) {
-            Text("组").frame(width: 44)
+            Text(L10n.tr("fitness.common.set")).frame(width: 44)
             if exercise.showSecondColumn {
                 Text(ExerciseTrackingDisplay.secondColumnLabel(exercise.trackingType)).frame(maxWidth: .infinity)
             }
@@ -673,7 +673,7 @@ private struct ActiveExerciseCard: View {
                 HStack(spacing: 8) {
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.system(size: 14, weight: .semibold))
-                    Text("进度")
+                    Text(L10n.tr("fitness.session.progress"))
                         .font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundStyle(Color(hex: "1C1C1E"))
@@ -696,7 +696,7 @@ private struct ActiveExerciseCard: View {
                     } else {
                         Image(systemName: "plus")
                             .font(.system(size: 14, weight: .semibold))
-                        Text("添加组")
+                        Text(L10n.tr("fitness.session.add_set"))
                             .font(.system(size: 15, weight: .semibold))
                     }
                 }
@@ -711,10 +711,10 @@ private struct ActiveExerciseCard: View {
 
     private var trackingLabel: String {
         switch exercise.trackingType {
-        case "weight_reps": return "杠铃"
-        case "reps_only": return "自重"
-        case "distance_time", "cardio": return "有氧器械"
-        case "time_only": return "计时"
+        case "weight_reps": return L10n.tr("fitness.session.tracking.weight_reps")
+        case "reps_only": return L10n.tr("fitness.session.tracking.reps_only")
+        case "distance_time", "cardio": return L10n.tr("fitness.session.tracking.distance_time")
+        case "time_only": return L10n.tr("fitness.session.tracking.time_only")
         default: return exercise.exerciseType
         }
     }
@@ -795,7 +795,7 @@ private struct ActiveExerciseCard: View {
 
             if isDue {
                 return RestState(
-                    text: "休息完成 00:00",
+                    text: L10n.tr("fitness.session.rest_done"),
                     isActive: true,
                     isDue: true,
                     fillColor: Color(hex: "34C982"),
@@ -841,14 +841,14 @@ private struct ActiveExerciseCard: View {
                 Haptics.tap()
                 onDeleteExercise()
             } label: {
-                Label("删除动作", systemImage: "trash")
+                Label(L10n.tr("fitness.session.delete_exercise"), systemImage: "trash")
             }
 
             Button {
                 Haptics.tap()
                 withAnimation(.easeInOut(duration: 0.2)) { isDeletingSets.toggle() }
             } label: {
-                Label(isDeletingSets ? "完成删除组" : "删除组",
+                Label(isDeletingSets ? L10n.tr("fitness.session.finish_deleting_sets") : L10n.tr("fitness.session.delete_sets"),
                       systemImage: isDeletingSets ? "checkmark" : "minus.circle")
             }
         } label: {
@@ -1105,8 +1105,9 @@ private enum RestReminderNotifier {
         guard interval > 0 else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "休息结束"
-        content.body = exerciseName.map { "开始下一组：\($0)" } ?? "开始下一组"
+        content.title = SharedL10n.tr("fitness.session.rest_finished")
+        content.body = exerciseName.map { SharedL10n.tr("fitness.session.start_next_set_with_name", $0) }
+            ?? SharedL10n.tr("fitness.session.start_next_set")
         content.sound = .default
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)

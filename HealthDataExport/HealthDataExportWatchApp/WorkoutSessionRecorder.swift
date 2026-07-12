@@ -26,7 +26,7 @@ final class WorkoutSessionRecorder: ObservableObject {
     static let shared = WorkoutSessionRecorder()
 
     /// On-device debug readout, shown on the controls page.
-    @MainActor @Published private(set) var debugStatus = "采集: 待机"
+    @MainActor @Published private(set) var debugStatus = SharedL10n.tr("watch.session_recorder.status", SharedL10n.tr("watch.session_recorder.idle"))
 
     private let manager = CMMotionManager()
     /// Motion delivers here; all mutable state and file I/O below are confined to it.
@@ -109,11 +109,11 @@ final class WorkoutSessionRecorder: ObservableObject {
 
     func startSession(sessionId: Int) {
         guard Self.captureEnabled else {
-            report("采集已关闭(诊断)")
+            report(SharedL10n.tr("watch.session_recorder.disabled"))
             return
         }
         guard manager.isDeviceMotionAvailable else {
-            report("运动不可用")
+            report(SharedL10n.tr("watch.session_recorder.motion_unavailable"))
             return
         }
         let start = Date().timeIntervalSince1970
@@ -138,7 +138,7 @@ final class WorkoutSessionRecorder: ObservableObject {
         }
 
         startSensors()
-        report("录制中")
+        report(SharedL10n.tr("watch.session_recorder.recording"))
         sessionRecLog.info("session capture started id=\(sessionId, privacy: .public)")
     }
 
@@ -157,7 +157,7 @@ final class WorkoutSessionRecorder: ObservableObject {
         queue.addOperation { [weak self] in
             self?.finalizeCurrentLocked(save: save)
         }
-        report("待机")
+        report(SharedL10n.tr("watch.session_recorder.idle"))
     }
 
     /// Flush + close the in-flight session, if any. Runs on `queue`; a no-op when
@@ -254,7 +254,9 @@ final class WorkoutSessionRecorder: ObservableObject {
         }
 
         // Live sample count = proof capture is alive (shown on controls page).
-        if totalSamples % Self.batchSize == 0 { report("录制中 \(totalSamples)") }
+        if totalSamples % Self.batchSize == 0 {
+            report(SharedL10n.tr("watch.session_recorder.recording_samples", totalSamples))
+        }
     }
 
     // MARK: - Persistence (queue)
@@ -354,6 +356,8 @@ final class WorkoutSessionRecorder: ObservableObject {
     }
 
     private func report(_ text: String) {
-        Task { @MainActor in self.debugStatus = "采集: \(text)" }
+        Task { @MainActor in
+            self.debugStatus = SharedL10n.tr("watch.session_recorder.status", text)
+        }
     }
 }

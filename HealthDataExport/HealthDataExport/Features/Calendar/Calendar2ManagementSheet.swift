@@ -55,7 +55,7 @@ struct Calendar2ManagementSheet: View {
                 .padding(.bottom, 4)
 
             HStack {
-                Text(tab == .category ? "管理分类" : "管理小类")
+                Text(tab == .category ? L10n.tr("calendar.management.title.category") : L10n.tr("calendar.management.title.subcategory"))
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(hex: "23232A"))
                 Spacer()
@@ -63,7 +63,7 @@ struct Calendar2ManagementSheet: View {
                     ProgressView()
                         .padding(.trailing, 4)
                 }
-                Button("完成") {
+                Button(L10n.tr("common.done")) {
                     Haptics.tap()
                     Task { await saveAll() }
                 }
@@ -75,8 +75,8 @@ struct Calendar2ManagementSheet: View {
             .padding(.vertical, 10)
 
             HStack(spacing: 4) {
-                tabSegment("分类", value: .category)
-                tabSegment("小类", value: .subcategory)
+                tabSegment(L10n.tr("calendar.management.tab.category"), value: .category)
+                tabSegment(L10n.tr("calendar.management.tab.subcategory"), value: .subcategory)
             }
             .padding(4)
             .background(Color(hex: "F0F0F3"), in: RoundedRectangle(cornerRadius: 11))
@@ -96,11 +96,11 @@ struct Calendar2ManagementSheet: View {
         .background(Calendar2Style.sheet)
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
-        .alert("保存失败", isPresented: Binding(
+        .alert(L10n.tr("calendar.management.save_failed"), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button("好") { Haptics.tap(); errorMessage = nil }
+            Button(L10n.tr("common.ok")) { Haptics.tap(); errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
         }
@@ -145,7 +145,7 @@ struct Calendar2ManagementSheet: View {
                                 .frame(width: 30, height: 30)
 
                             ColorPicker(
-                                "选择分类颜色",
+                                L10n.tr("calendar.management.category.select_color"),
                                 selection: Binding(
                                     get: { cat.color },
                                     set: { cat.hexColor = Self.hexString(from: $0) }
@@ -157,9 +157,12 @@ struct Calendar2ManagementSheet: View {
                             .frame(width: 30, height: 30)
                             .contentShape(Rectangle())
                         }
-                        .accessibilityLabel("修改\(cat.name.isEmpty ? "分类" : cat.name)颜色")
+                        .accessibilityLabel(L10n.tr(
+                            "calendar.management.category.change_color",
+                            cat.name.isEmpty ? L10n.tr("calendar.management.category.unnamed") : cat.name
+                        ))
 
-                        TextField("分类名称", text: $cat.name)
+                        TextField(L10n.tr("calendar.management.category.name_placeholder"), text: $cat.name)
                             .font(.system(size: 16))
                             .foregroundStyle(Color(hex: "23232A"))
 
@@ -196,7 +199,7 @@ struct Calendar2ManagementSheet: View {
                     expandedId = id
                 }
             } label: {
-                addRowLabel("＋ 新建分类")
+                addRowLabel(L10n.tr("calendar.management.category.add"))
             }
             .buttonStyle(HapticButtonStyle())
             .padding(.horizontal, 20)
@@ -221,7 +224,7 @@ struct Calendar2ManagementSheet: View {
                         } label: {
                             HStack(spacing: 7) {
                                 Circle().fill(cat.color).frame(width: 8, height: 8)
-                                Text(cat.name.isEmpty ? "（无名称）" : cat.name)
+                                Text(cat.name.isEmpty ? L10n.tr("calendar.management.category.no_name") : cat.name)
                                     .font(.system(size: 14, weight: isOn ? .semibold : .medium))
                                     .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
                             }
@@ -251,7 +254,7 @@ struct Calendar2ManagementSheet: View {
 
             if filteredSubs.isEmpty {
                 VStack(spacing: 8) {
-                    Text("暂无小类")
+                    Text(L10n.tr("calendar.management.subcategory.empty"))
                         .font(.system(size: 15))
                         .foregroundStyle(Color(hex: "B5B5BC"))
                 }
@@ -266,7 +269,7 @@ struct Calendar2ManagementSheet: View {
                 }
             }
 
-            let addCatName = selCat?.name.isEmpty == false ? selCat!.name : "未分类"
+            let addCatName = selCat?.name.isEmpty == false ? selCat!.name : L10n.tr("calendar.management.category.uncategorized")
             Button {
                 let id = "new_sub_\(nextId)"
                 nextId += 1
@@ -275,7 +278,7 @@ struct Calendar2ManagementSheet: View {
                     expandedId = id
                 }
             } label: {
-                addRowLabel("＋ 新建「\(addCatName)」的小类")
+                addRowLabel(L10n.tr("calendar.management.subcategory.add_for_category", addCatName))
             }
             .buttonStyle(HapticButtonStyle())
             .padding(.horizontal, 20)
@@ -293,7 +296,7 @@ struct Calendar2ManagementSheet: View {
                     .frame(width: 10, height: 10)
                     .padding(.leading, 10)
 
-                TextField("小类名称", text: $subs[idx].name)
+                TextField(L10n.tr("calendar.management.subcategory.name_placeholder"), text: $subs[idx].name)
                     .font(.system(size: 16))
                     .foregroundStyle(Color(hex: "23232A"))
 
@@ -306,7 +309,7 @@ struct Calendar2ManagementSheet: View {
                     VStack(spacing: 2) {
                         Image(systemName: "scope")
                             .font(.system(size: 12, weight: .medium))
-                        Text("专注")
+                        Text(L10n.tr("calendar.management.subcategory.focus"))
                             .font(.system(size: 10))
                     }
                     .foregroundStyle(subs[idx].tracksFocus ? Calendar2Style.accent : Color(hex: "C6C6CC"))
@@ -354,7 +357,7 @@ struct Calendar2ManagementSheet: View {
     private func loadKindMenu(selection: Binding<LoadKind?>, inherited: LoadKind?, allowsInheritance: Bool) -> some View {
         Menu {
             if allowsInheritance {
-                Button("继承大类（\(inherited?.label ?? "未设置")）") {
+                Button(L10n.tr("calendar.management.load_kind.inherit", inherited?.label ?? L10n.tr("calendar.management.load_kind.unset"))) {
                     selection.wrappedValue = nil
                 }
                 Divider()
@@ -368,7 +371,7 @@ struct Calendar2ManagementSheet: View {
             VStack(spacing: 2) {
                 Image(systemName: "chart.pie")
                     .font(.system(size: 12, weight: .medium))
-                Text(selection.wrappedValue?.label ?? inherited?.label ?? "负载")
+                Text(selection.wrappedValue?.label ?? inherited?.label ?? L10n.tr("calendar.management.load_kind.default"))
                     .font(.system(size: 9))
                     .lineLimit(1)
             }

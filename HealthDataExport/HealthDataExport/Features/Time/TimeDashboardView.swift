@@ -7,9 +7,9 @@ enum DashboardGranularity: String, CaseIterable {
     case day, week, month
     var tabLabel: String {
         switch self {
-        case .day: return "日"
-        case .week: return "周"
-        case .month: return "月"
+        case .day: return SharedL10n.tr("time.dashboard.tab.day")
+        case .week: return SharedL10n.tr("time.dashboard.tab.week")
+        case .month: return SharedL10n.tr("time.dashboard.tab.month")
         }
     }
 }
@@ -24,10 +24,10 @@ enum LoadKind: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .obligation: return "必要事务"
-        case .proactive: return "主动投入"
-        case .recovery: return "恢复充电"
-        case .distraction: return "分心消耗"
+        case .obligation: return SharedL10n.tr("time.dashboard.load_kind.obligation")
+        case .proactive: return SharedL10n.tr("time.dashboard.load_kind.proactive")
+        case .recovery: return SharedL10n.tr("time.dashboard.load_kind.recovery")
+        case .distraction: return SharedL10n.tr("time.dashboard.load_kind.distraction")
         }
     }
 
@@ -295,8 +295,8 @@ final class TimeDashboardViewModel: ObservableObject {
         switch granularity {
         case .day:
             let fmt = DateFormatter()
-            fmt.locale = Locale(identifier: "zh_CN")
-            fmt.dateFormat = "M月d日 · EEEE"
+            fmt.locale = L10n.locale
+            fmt.setLocalizedDateFormatFromTemplate("M d EEEE")
             return fmt.string(from: anchorDate)
         case .week:
             let weekday = cal.component(.weekday, from: anchorDate)
@@ -305,11 +305,11 @@ final class TimeDashboardViewModel: ObservableObject {
             let month = cal.component(.month, from: monday)
             let day = cal.component(.day, from: monday)
             let weekOfMonth = (day - 1) / 7 + 1
-            return "\(month)月 · 第\(weekOfMonth)周"
+            return SharedL10n.tr("time.dashboard.week_of_month", month, weekOfMonth)
         case .month:
             let fmt = DateFormatter()
-            fmt.locale = Locale(identifier: "zh_CN")
-            fmt.dateFormat = "yyyy年M月"
+            fmt.locale = L10n.locale
+            fmt.setLocalizedDateFormatFromTemplate("yMMMM")
             return fmt.string(from: anchorDate)
         }
     }
@@ -317,20 +317,20 @@ final class TimeDashboardViewModel: ObservableObject {
     private var computedRangeLabel: String {
         let cal = Calendar(identifier: .gregorian)
         let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.locale = L10n.locale
         switch granularity {
         case .day:
-            fmt.dateFormat = "M月d日"
+            fmt.setLocalizedDateFormatFromTemplate("Md")
             return fmt.string(from: anchorDate)
         case .week:
             let weekday = cal.component(.weekday, from: anchorDate)
             let daysToMon = (weekday - 2 + 7) % 7
             let monday = cal.date(byAdding: .day, value: -daysToMon, to: anchorDate)!
             let sunday = cal.date(byAdding: .day, value: 6, to: monday)!
-            fmt.dateFormat = "M月d日"
-            return "\(fmt.string(from: monday)) – \(fmt.string(from: sunday))"
+            fmt.setLocalizedDateFormatFromTemplate("Md")
+            return SharedL10n.tr("time.dashboard.range_between", fmt.string(from: monday), fmt.string(from: sunday))
         case .month:
-            fmt.dateFormat = "yyyy年M月"
+            fmt.setLocalizedDateFormatFromTemplate("yMMMM")
             return fmt.string(from: anchorDate)
         }
     }
@@ -389,7 +389,7 @@ final class TimeDashboardViewModel: ObservableObject {
     }
 
     /// 复盘弹框标题（仅“日”维度提供每日复盘）。
-    var reviewSheetTitle: String { "今日复盘" }
+    var reviewSheetTitle: String { SharedL10n.tr("time.dashboard.review.today") }
 
     func loadDailyReviews() async {
         // 每日复盘按日期查询，from/to 需为 yyyy-MM-dd（服务端 range 是带时区的 ISO datetime，不能直接用）。
@@ -452,11 +452,11 @@ struct TimeDashboardView: View {
                         }
 
                     HStack {
-                        Text("四类负载")
+                        Text(SharedL10n.tr("time.dashboard.section.load_cards"))
                             .font(.system(size: 15, weight: .heavy))
                             .foregroundStyle(Color(hex: "1C1B1A"))
                         Spacer()
-                        Text("点卡片看大类构成 ›")
+                        Text(SharedL10n.tr("time.dashboard.section.load_cards_hint"))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(Color(hex: "A6A29C"))
                     }
@@ -476,11 +476,11 @@ struct TimeDashboardView: View {
 
                     if let summary = viewModel.mobileAppSummary {
                         HStack {
-                            Text("手机使用")
+                            Text(SharedL10n.tr("time.dashboard.section.mobile_usage"))
                                 .font(.system(size: 15, weight: .heavy))
                                 .foregroundStyle(Color(hex: "1C1B1A"))
                             Spacer()
-                            Text("Top 5 应用")
+                            Text(SharedL10n.tr("time.dashboard.section.top_apps"))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(Color(hex: "A6A29C"))
                         }
@@ -547,7 +547,7 @@ struct TimeDashboardView: View {
 
     private var topBar: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("负载报表")
+            Text(SharedL10n.tr("time.dashboard.title"))
                 .font(.system(size: 24, weight: .heavy))
                 .foregroundStyle(Color(hex: "1C1B1A"))
             Spacer()
@@ -623,9 +623,9 @@ private struct VerdictCardView: View {
 
     private var eyebrow: String {
         switch overview.granularity {
-        case "day": return "今日方向"
-        case "month": return "本月方向"
-        default: return "本周方向"
+        case "day": return SharedL10n.tr("time.dashboard.headline.day")
+        case "month": return SharedL10n.tr("time.dashboard.headline.month")
+        default: return SharedL10n.tr("time.dashboard.headline.week")
         }
     }
 
@@ -655,7 +655,7 @@ private struct VerdictCardView: View {
                 HStack(spacing: 8) {
                     trendBadge
                     if showReviewHint {
-                        Text("查看复盘 ›")
+                        Text(SharedL10n.tr("time.dashboard.review.view"))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Color(hex: "A6A29C"))
                     }
@@ -735,11 +735,11 @@ private struct LoadCardView: View {
     private var goalDisplay: (label: String, bg: Color, fg: Color) {
         switch card.target?.lowercased() {
         case "maximize", "increase", "more", "越多越好":
-            return ("越多越好", Color(hex: "3FA78A").opacity(0.1), Color(hex: "3FA78A"))
+            return (SharedL10n.tr("time.dashboard.goal.maximize"), Color(hex: "3FA78A").opacity(0.1), Color(hex: "3FA78A"))
         case "minimize", "decrease", "less", "越少越好":
-            return ("越少越好", Color(hex: "C9485B").opacity(0.1), Color(hex: "C9485B"))
+            return (SharedL10n.tr("time.dashboard.goal.minimize"), Color(hex: "C9485B").opacity(0.1), Color(hex: "C9485B"))
         default:
-            return ("维持", Color(hex: "F0ECE3"), Color(hex: "A6A29C"))
+            return (SharedL10n.tr("time.dashboard.goal.maintain"), Color(hex: "F0ECE3"), Color(hex: "A6A29C"))
         }
     }
 
@@ -843,11 +843,11 @@ struct CompositionSheetView: View {
     private var goalDisplay: (label: String, bg: Color, fg: Color) {
         switch card.target?.lowercased() {
         case "maximize", "increase", "more", "越多越好":
-            return ("越多越好", Color(hex: "3FA78A").opacity(0.1), Color(hex: "3FA78A"))
+            return (SharedL10n.tr("time.dashboard.goal.maximize"), Color(hex: "3FA78A").opacity(0.1), Color(hex: "3FA78A"))
         case "minimize", "decrease", "less", "越少越好":
-            return ("越少越好", Color(hex: "C9485B").opacity(0.1), Color(hex: "C9485B"))
+            return (SharedL10n.tr("time.dashboard.goal.minimize"), Color(hex: "C9485B").opacity(0.1), Color(hex: "C9485B"))
         default:
-            return ("维持", Color(hex: "F0ECE3"), Color(hex: "A6A29C"))
+            return (SharedL10n.tr("time.dashboard.goal.maintain"), Color(hex: "F0ECE3"), Color(hex: "A6A29C"))
         }
     }
 
@@ -868,7 +868,7 @@ struct CompositionSheetView: View {
                             .padding(.bottom, 18)
                     }
 
-                    Text("大类构成（含小类拆解）")
+                    Text(SharedL10n.tr("time.dashboard.composition.title"))
                         .font(.system(size: 12, weight: .bold))
                         .tracking(0.5)
                         .foregroundStyle(Color(hex: "A6A29C"))
@@ -929,11 +929,11 @@ struct CompositionSheetView: View {
 
     private func metaText(_ comp: DashboardCompositionResponse) -> some View {
         (
-            Text("本期 ").foregroundStyle(Color(hex: "6B6864"))
+            Text(SharedL10n.tr("time.dashboard.period.current_prefix")).foregroundStyle(Color(hex: "6B6864"))
             + Text(comp.summary.totalLabel).fontWeight(.bold).foregroundStyle(Color(hex: "1C1B1A"))
-            + Text(" · 占总时间 ").foregroundStyle(Color(hex: "6B6864"))
+            + Text(SharedL10n.tr("time.dashboard.period.of_total_prefix")).foregroundStyle(Color(hex: "6B6864"))
             + Text("\(comp.summary.percentOfAllTracked)%").fontWeight(.bold).foregroundStyle(Color(hex: "1C1B1A"))
-            + Text(" · 较上期 ").foregroundStyle(Color(hex: "6B6864"))
+            + Text(SharedL10n.tr("time.dashboard.period.compare_prefix")).foregroundStyle(Color(hex: "6B6864"))
             + Text(comp.summary.deltaLabel).fontWeight(.bold).foregroundStyle(Color(hex: "1C1B1A"))
         )
         .font(.system(size: 14))
@@ -989,7 +989,7 @@ struct DailyReviewSheetView: View {
             Image(systemName: errorMessage.isEmpty ? "text.badge.checkmark" : "exclamationmark.triangle")
                 .font(.system(size: 30))
                 .foregroundStyle(Color(hex: "C6C2BB"))
-            Text(errorMessage.isEmpty ? "暂无复盘记录" : errorMessage)
+            Text(errorMessage.isEmpty ? SharedL10n.tr("time.dashboard.review.empty") : errorMessage)
                 .font(.system(size: 14))
                 .foregroundStyle(Color(hex: "A6A29C"))
                 .multilineTextAlignment(.center)
@@ -1009,8 +1009,8 @@ private struct DailyReviewRowView: View {
         parser.dateFormat = "yyyy-MM-dd"
         guard let date = parser.date(from: review.reviewDate) else { return review.reviewDate }
         let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: "zh_CN")
-        fmt.dateFormat = "M月d日 · EEEE"
+        fmt.locale = L10n.locale
+        fmt.setLocalizedDateFormatFromTemplate("M d EEEE")
         return fmt.string(from: date)
     }
 
@@ -1215,15 +1215,15 @@ private struct TrendSectionView: View {
                 .padding(.top, 20)
 
             HStack(alignment: .firstTextBaseline) {
-                Text("近期趋势")
+                Text(SharedL10n.tr("time.dashboard.trend.title"))
                     .font(.system(size: 12, weight: .bold))
                     .tracking(0.5)
                     .foregroundStyle(Color(hex: "A6A29C"))
                 Spacer()
                 if let last = trend.points.last, !trend.points.isEmpty {
-                    (Text("本期 ").foregroundStyle(Color(hex: "A6A29C"))
+                    (Text(SharedL10n.tr("time.dashboard.period.current_prefix")).foregroundStyle(Color(hex: "A6A29C"))
                      + Text(minutesLabel(last.totalMinutes)).foregroundStyle(color).fontWeight(.bold)
-                     + Text("  均值 \(minutesLabel(trend.averageMinutes))").foregroundStyle(Color(hex: "A6A29C")))
+                     + Text(SharedL10n.tr("time.dashboard.trend.average", minutesLabel(trend.averageMinutes))).foregroundStyle(Color(hex: "A6A29C")))
                         .font(.system(size: 12))
                 }
             }
@@ -1349,7 +1349,7 @@ private struct TrendBarChart: View {
         let parts = label.split(separator: "-")
         // "2026-04" → "4月"
         if parts.count == 2, parts[0].count == 4, let month = Int(parts[1]) {
-            return "\(month)月"
+            return SharedL10n.tr("time.dashboard.month_short", month)
         }
         // "2026-06-17" → "6/17"
         if parts.count >= 3, let month = Int(parts[1]), let day = Int(String(parts[2]).prefix(2)) {
@@ -1419,9 +1419,9 @@ private struct MobileUsageSectionView: View {
 
     private var periodLabel: String {
         switch granularity {
-        case .day: return "今日手机时间"
-        case .week: return "本周手机时间"
-        case .month: return "本月手机时间"
+        case .day: return SharedL10n.tr("time.dashboard.mobile.day")
+        case .week: return SharedL10n.tr("time.dashboard.mobile.week")
+        case .month: return SharedL10n.tr("time.dashboard.mobile.month")
         }
     }
 

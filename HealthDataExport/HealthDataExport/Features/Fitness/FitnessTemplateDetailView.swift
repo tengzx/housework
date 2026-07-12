@@ -39,7 +39,7 @@ final class FitnessTemplateDetailViewModel: ObservableObject {
         do {
             detail = try await FitnessAPIClient.templateDetail(id: payload.id)
         } catch {
-            errorMessage = "加载失败，请检查网络"
+            errorMessage = L10n.tr("fitness.template.load_failed")
         }
     }
 
@@ -52,7 +52,7 @@ final class FitnessTemplateDetailViewModel: ObservableObject {
             let response = try await FitnessAPIClient.startSession(templateId: payload.id, name: title)
             return FitnessWorkoutSessionPayload(sessionId: response.sessionId, name: title)
         } catch {
-            startMessage = "开始训练失败，请检查网络"
+            startMessage = L10n.tr("fitness.template.start_failed")
             return nil
         }
     }
@@ -93,7 +93,7 @@ struct FitnessTemplateDetailView: View {
                             .padding(.horizontal, 20)
                             .padding(.top, 26)
 
-                        Text("\(vm.exerciseCount) 种锻炼, \(vm.setCount) 组")
+                        Text(L10n.tr("fitness.template.exercise_set_summary", vm.exerciseCount, vm.setCount))
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(Color(hex: "8E8E93"))
                             .padding(.horizontal, 20)
@@ -144,11 +144,11 @@ struct FitnessTemplateDetailView: View {
         .task {
             await vm.load()
         }
-        .alert("提示", isPresented: Binding(
+        .alert(L10n.tr("fitness.common.notice"), isPresented: Binding(
             get: { vm.startMessage != nil },
             set: { if !$0 { vm.startMessage = nil } }
         )) {
-            Button("好") { Haptics.tap(); vm.startMessage = nil }
+            Button(L10n.tr("common.ok")) { Haptics.tap(); vm.startMessage = nil }
         } message: {
             Text(vm.startMessage ?? "")
         }
@@ -178,12 +178,12 @@ struct FitnessTemplateDetailView: View {
 
     private var devicePickerRow: some View {
         HStack {
-            Text("设备")
+            Text(L10n.tr("fitness.template.device"))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color(hex: "9A9AA0"))
             Spacer()
             HStack(spacing: 8) {
-                Text("仅 iPhone")
+                Text(L10n.tr("fitness.template.iphone_only"))
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
                 Image(systemName: "chevron.down")
@@ -207,7 +207,7 @@ struct FitnessTemplateDetailView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "pencil")
                         .font(.system(size: 17, weight: .semibold))
-                    Text("编辑")
+                    Text(L10n.tr("common.edit"))
                         .font(.system(size: 18, weight: .bold))
                 }
                 .foregroundStyle(Color(hex: "1C1C1E"))
@@ -231,7 +231,7 @@ struct FitnessTemplateDetailView: View {
                     } else {
                         Image(systemName: "play.fill")
                             .font(.system(size: 17, weight: .semibold))
-                        Text("开始")
+                        Text(L10n.tr("common.start"))
                             .font(.system(size: 18, weight: .bold))
                     }
                 }
@@ -269,7 +269,7 @@ private struct TemplateDetailExerciseRow: View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
                     .lineLimit(1)
-                Text("\(exercise.categoryName ?? "——") · \(exercise.sets.count) 组")
+                Text(L10n.tr("fitness.template.detail_exercise_summary", exercise.categoryName ?? L10n.tr("fitness.common.none"), exercise.sets.count))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color(hex: "8E8E93"))
                     .lineLimit(1)

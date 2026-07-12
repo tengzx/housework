@@ -51,7 +51,7 @@ final class FitnessTemplateListViewModel: ObservableObject {
         do {
             templates = try await FitnessAPIClient.templates()
         } catch {
-            errorMessage = "加载失败，请检查网络"
+            errorMessage = L10n.tr("fitness.template.list.load_failed")
         }
     }
 
@@ -105,9 +105,9 @@ final class FitnessTemplateListViewModel: ObservableObject {
             do { fetchedSessions = try await sessionsTask.items } catch { sessionsFailed = true }
 
             if let fetchedVolume { strengthVolume = fetchedVolume }
-            statsErrorMessage = volumeFailed ? "统计分析加载失败" : nil
+            statsErrorMessage = volumeFailed ? L10n.tr("fitness.stats.load_failed") : nil
             if let fetchedSessions { sessionsInRange = fetchedSessions }
-            sessionsErrorMessage = sessionsFailed ? "训练记录加载失败" : nil
+            sessionsErrorMessage = sessionsFailed ? L10n.tr("fitness.stats.sessions_load_failed") : nil
 
             isStatsLoading = false
             isSessionsLoading = false
@@ -127,7 +127,7 @@ final class FitnessTemplateListViewModel: ObservableObject {
                 endDate: period.endDateString
             )
         } catch {
-            statsErrorMessage = "统计分析加载失败"
+            statsErrorMessage = L10n.tr("fitness.stats.load_failed")
         }
     }
 
@@ -147,7 +147,7 @@ final class FitnessTemplateListViewModel: ObservableObject {
             )
             sessionsInRange = page.items
         } catch {
-            sessionsErrorMessage = "训练记录加载失败"
+            sessionsErrorMessage = L10n.tr("fitness.stats.sessions_load_failed")
         }
     }
 
@@ -178,7 +178,7 @@ final class FitnessTemplateListViewModel: ObservableObject {
             try await FitnessAPIClient.deleteTemplate(id: id)
             templates.removeAll { $0.id == id }
         } catch {
-            errorMessage = "删除失败"
+            errorMessage = L10n.tr("fitness.template.list.delete_failed")
         }
     }
 }
@@ -199,7 +199,7 @@ struct FitnessTemplateListView: View {
             ScrollView {
                     VStack(spacing: 0) {
                         HStack(alignment: .center) {
-                            Text("体能训练模板")
+                            Text(L10n.tr("fitness.template.list.title"))
                                 .font(.system(size: 21, weight: .bold))
                                 .foregroundStyle(Color(hex: "1C1C1E"))
                             Spacer()
@@ -289,7 +289,7 @@ struct FitnessTemplateListView: View {
                                 .padding(.bottom, 16)
 
                             Button { Haptics.tap(); startCreate() } label: {
-                                Text("编辑健身")
+                                Text(L10n.tr("fitness.template.list.edit_workouts"))
                                     .font(.system(size: 16, weight: .semibold))
                                     .foregroundStyle(Color(hex: "1C1C1E"))
                                     .frame(maxWidth: .infinity)
@@ -350,23 +350,23 @@ struct FitnessTemplateListView: View {
         .sheet(item: $selectedStatsSession) { session in
             FitnessSessionStatsDetailSheet(session: session)
         }
-        .alert("错误", isPresented: Binding(
+        .alert(L10n.tr("common.error"), isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) {
-            Button("好") { Haptics.tap(); vm.errorMessage = nil }
+            Button(L10n.tr("common.ok")) { Haptics.tap(); vm.errorMessage = nil }
         } message: {
             Text(vm.errorMessage ?? "")
         }
         .alert(
-            "删除「\(templateToDelete?.name ?? "")」？",
+            L10n.tr("fitness.template.list.delete_title", templateToDelete?.name ?? ""),
             isPresented: Binding(
                 get: { templateToDelete != nil },
                 set: { if !$0 { templateToDelete = nil } }
             )
         ) {
-            Button("取消", role: .cancel) { Haptics.tap(); templateToDelete = nil }
-            Button("删除", role: .destructive) {
+            Button(L10n.tr("common.cancel"), role: .cancel) { Haptics.tap(); templateToDelete = nil }
+            Button(L10n.tr("common.delete"), role: .destructive) {
                 Haptics.tap()
                 if let tpl = templateToDelete {
                     Task { await vm.delete(id: tpl.id) }
@@ -374,7 +374,7 @@ struct FitnessTemplateListView: View {
                 templateToDelete = nil
             }
         } message: {
-            Text("此操作不可撤销，模板将被归档。")
+            Text(L10n.tr("fitness.template.list.delete_message"))
         }
         .task { await vm.loadAll() }
     }
@@ -387,16 +387,16 @@ struct FitnessTemplateListView: View {
             .frame(height: 200)
             .overlay(
                 VStack(spacing: 12) {
-                    Text("未添加任何模板")
+                    Text(L10n.tr("fitness.template.list.empty_title"))
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(Color(hex: "1C1C1E"))
-                    Text("轻点"+"开始创建训练模板")
+                    Text(L10n.tr("fitness.template.list.empty_subtitle"))
                         .font(.system(size: 15))
                         .foregroundStyle(Color(hex: "7C7C82"))
                     Button { Haptics.tap(); startCreate() } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "plus").font(.system(size: 14, weight: .semibold))
-                            Text("新建模板").font(.system(size: 16, weight: .semibold))
+                            Text(L10n.tr("fitness.template.list.new_template")).font(.system(size: 16, weight: .semibold))
                         }
                         .foregroundStyle(.white)
                         .padding(.horizontal, 26).padding(.vertical, 13)
@@ -411,7 +411,7 @@ struct FitnessTemplateListView: View {
 
     /// 跳转到编辑界面开始新建，模板要等到点击“保存”时才真正创建；名称可在编辑界面修改。
     private func startCreate() {
-        navigateToEditor = FitnessTemplateEditorPayload(id: nil, name: "新模板")
+        navigateToEditor = FitnessTemplateEditorPayload(id: nil, name: L10n.tr("fitness.template.list.default_new_template_name"))
     }
 }
 
@@ -430,7 +430,7 @@ private struct TemplateGridCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.trailing, 28)
 
-            Text("\(template.exerciseCount) 种锻炼, \(template.setCount) 组")
+            Text(L10n.tr("fitness.template.exercise_set_summary", template.exerciseCount, template.setCount))
                 .font(.system(size: 13))
                 .foregroundStyle(Color(hex: "9A9AA0"))
                 .padding(.top, 4)
@@ -452,7 +452,7 @@ private struct TemplateGridCard: View {
                             )
                     }
                 }
-                Text("kg")
+                Text(L10n.tr("fitness.common.kilogram_short"))
                     .font(.system(size: 14))
                     .foregroundStyle(Color(hex: "9A9AA0"))
                     .padding(.bottom, 3)
@@ -467,7 +467,7 @@ private struct TemplateGridCard: View {
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
-                    Label("删除模板", systemImage: "trash")
+                    Label(L10n.tr("fitness.template.list.delete_template"), systemImage: "trash")
                 }
             } label: {
                 Image(systemName: "gearshape.fill")

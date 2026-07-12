@@ -21,12 +21,12 @@ struct WatchTemplateListView: View {
                             .font(.system(size: 13))
                             .foregroundStyle(WK.muted)
                             .multilineTextAlignment(.center)
-                        Button("重试") { Task { await store.load() } }
+                        Button(SharedL10n.tr("common.retry")) { Task { await store.load() } }
                             .font(.system(size: 13, weight: .semibold))
                     }
                     .padding(.top, 16)
                 } else if templates.isEmpty {
-                    Text("暂无训练模版\n请在 iPhone 上创建")
+                    Text(SharedL10n.tr("watch.fitness.empty_templates"))
                         .font(.system(size: 13))
                         .foregroundStyle(WK.muted)
                         .multilineTextAlignment(.center)
@@ -46,7 +46,7 @@ struct WatchTemplateListView: View {
             .padding(.top, 4)
         }
         .background(WK.bg.ignoresSafeArea())
-        .navigationTitle("训练模版")
+        .navigationTitle(SharedL10n.tr("watch.fitness.templates_title"))
         .task { await store.load() }
     }
 }
@@ -62,7 +62,7 @@ private struct TemplateRow: View {
                 .lineLimit(2)
             HStack(spacing: 8) {
                 Label("\(template.exerciseCount)", systemImage: "dumbbell.fill")
-                Label("\(template.setCount) 组", systemImage: "list.number")
+                Label(SharedL10n.tr("watch.fitness.set_count", template.setCount), systemImage: "list.number")
             }
             .font(.system(size: 11))
             .foregroundStyle(WK.muted)

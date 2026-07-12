@@ -54,22 +54,22 @@ struct WatchSetEditorView: View {
                 VStack(spacing: 10) {
                     if isTimeBased {
                         if isDistanceBased {
-                            StepperRow(label: "距离", text: Self.distanceText(distanceMeters), isSelected: selectedField == .distance,
+                            StepperRow(label: SharedL10n.tr("watch.fitness.distance"), text: Self.distanceText(distanceMeters), isSelected: selectedField == .distance,
                                        onSelect: { select(.distance); showDistancePad = true },
                                        onMinus: { select(.distance); distanceMeters = max(0, distanceMeters - 10); crownValue = distanceMeters },
                                        onPlus: { select(.distance); distanceMeters += 10; crownValue = distanceMeters })
-                            Text("点数字可直接输入")
+                            Text(SharedL10n.tr("watch.fitness.tap_number_to_input"))
                                 .font(.system(size: 11))
                                 .foregroundStyle(WK.muted)
                         }
                         timeStepperRow
                     } else {
-                        StepperRow(label: "次数", text: "x\(reps)", isSelected: selectedField == .reps,
+                        StepperRow(label: SharedL10n.tr("watch.fitness.reps"), text: "x\(reps)", isSelected: selectedField == .reps,
                                    onSelect: { select(.reps) },
                                    onMinus: { select(.reps); reps = max(0, reps - 1); crownValue = Double(reps) },
                                    onPlus: { select(.reps); reps += 1; crownValue = Double(reps) })
                         if showsWeight {
-                            StepperRow(label: "重量", text: WK.weightText(weight), isSelected: selectedField == .weight,
+                            StepperRow(label: SharedL10n.tr("watch.fitness.weight"), text: WK.weightText(weight), isSelected: selectedField == .weight,
                                        onSelect: { select(.weight) },
                                        onMinus: { select(.weight); weight = max(0, weight - 1); crownValue = weight },
                                        onPlus: { select(.weight); weight += 1; crownValue = weight })
@@ -79,7 +79,7 @@ struct WatchSetEditorView: View {
                     Button(action: save) {
                         Group {
                             if isSaving { ProgressView().tint(.white) }
-                            else { Text("保存").font(.system(size: 16, weight: .bold)) }
+                            else { Text(SharedL10n.tr("common.save")).font(.system(size: 16, weight: .bold)) }
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
@@ -107,7 +107,7 @@ struct WatchSetEditorView: View {
                 }
             }
             .background(WK.bg.ignoresSafeArea())
-            .navigationTitle("保存组")
+            .navigationTitle(SharedL10n.tr("watch.fitness.save_set"))
             .onAppear {
                 if selectedField == nil {
                     select(isTimeBased ? .durationSec : .reps)
@@ -115,16 +115,16 @@ struct WatchSetEditorView: View {
                 crownFocused = true
             }
             .sheet(isPresented: $showDistancePad) {
-                WatchNumberPadView(title: "距离", unit: "m", initialValue: Int(distanceMeters.rounded())) { entered in
+                WatchNumberPadView(title: SharedL10n.tr("watch.fitness.distance"), unit: "m", initialValue: Int(distanceMeters.rounded())) { entered in
                     distanceMeters = Double(entered)
                     crownValue = distanceMeters
                 }
             }
-            .confirmationDialog("删除这一组?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                Button("删除", role: .destructive) {
+            .confirmationDialog(SharedL10n.tr("watch.fitness.delete_set_confirm"), isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button(SharedL10n.tr("common.delete"), role: .destructive) {
                     onDelete()
                 }
-                Button("取消", role: .cancel) {}
+                Button(SharedL10n.tr("common.cancel"), role: .cancel) {}
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -446,10 +446,9 @@ struct WatchRatingView: View {
     @FocusState private var crownFocused: Bool
 
     /// Per-level descriptors, matching the phone's rating sheet.
-    private static let levels = [
-        "极轻松", "很轻松", "轻松", "稍费力", "疲倦",
-        "吃力", "很吃力", "非常吃力", "极度吃力", "精疲力竭",
-    ]
+    private static var levels: [String] {
+        (1...10).map { SharedL10n.tr("watch.fitness.rpe.\($0)") }
+    }
 
     private let startDeg: Double = 135
     private let sweepDeg: Double = 270
@@ -500,7 +499,7 @@ struct WatchRatingView: View {
                     .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
                     .position(point(center: center, radius: radius, for: rpe))
 
-                Text("体能训练怎么样?")
+                Text(SharedL10n.tr("watch.fitness.rating_prompt"))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .position(x: center.x, y: center.y - radius * 0.42)

@@ -14,11 +14,11 @@ enum ExerciseTrackingDisplay {
     }
 
     static func secondColumnLabel(_ trackingType: String) -> String {
-        isDistanceBased(trackingType) ? "米" : "KG"
+        isDistanceBased(trackingType) ? SharedL10n.tr("fitness.common.meter") : SharedL10n.tr("fitness.common.kg_upper")
     }
 
     static func thirdColumnLabel(_ trackingType: String) -> String {
-        isTimeBased(trackingType) ? "时间" : "次数"
+        isTimeBased(trackingType) ? SharedL10n.tr("fitness.common.duration") : SharedL10n.tr("fitness.common.reps")
     }
 }
 

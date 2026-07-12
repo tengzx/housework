@@ -20,7 +20,7 @@ struct HealthObserverLogEntry: Codable, Identifiable, Hashable {
 @MainActor
 final class HealthObserverSyncManager: ObservableObject {
     @Published var isEnabled: Bool
-    @Published private(set) var statusText = "未启动自动同步"
+    @Published private(set) var statusText = L10n.tr("health_export.observer.status.not_started")
     @Published private(set) var lastSyncAt: Date?
     @Published private(set) var logs: [HealthObserverLogEntry]
 
@@ -86,20 +86,20 @@ final class HealthObserverSyncManager: ObservableObject {
         defaults.set(enabled, forKey: Self.enabledKey)
 
         if enabled {
-            addLog(level: "info", message: "自动同步已开启")
+            addLog(level: "info", message: L10n.tr("health_export.observer.log.enabled"))
             Task { await refreshObservers(force: true) }
         } else {
             stopObservers()
-            statusText = "自动同步已关闭"
+            statusText = L10n.tr("health_export.observer.status.off")
             activeConfigurationSignature = nil
-            addLog(level: "info", message: "自动同步已关闭")
+            addLog(level: "info", message: L10n.tr("health_export.observer.log.disabled"))
         }
     }
 
     func refreshObservers(force: Bool = false) async {
         guard isEnabled else {
             stopObservers()
-            statusText = "自动同步已关闭"
+            statusText = L10n.tr("health_export.observer.status.off")
             activeConfigurationSignature = nil
             return
         }
@@ -109,13 +109,13 @@ final class HealthObserverSyncManager: ObservableObject {
         let signature = configurationSignature(for: configurations)
 
         guard HKHealthStore.isHealthDataAvailable() else {
-            statusText = "当前设备不支持 HealthKit 自动同步"
+            statusText = L10n.tr("health_export.observer.status.unavailable")
             addLog(level: "error", message: statusText)
             return
         }
 
         guard !types.isEmpty else {
-            statusText = "没有可自动同步的健康指标"
+            statusText = L10n.tr("health_export.observer.status.no_metrics")
             addLog(level: "warning", message: statusText)
             stopObservers()
             activeConfigurationSignature = nil
@@ -125,7 +125,7 @@ final class HealthObserverSyncManager: ObservableObject {
         if !force,
            !observerQueries.isEmpty,
            activeConfigurationSignature == signature {
-            statusText = "HealthKit Observer 已保持注册"
+            statusText = L10n.tr("health_export.observer.status.registered")
             return
         }
 
@@ -141,10 +141,10 @@ final class HealthObserverSyncManager: ObservableObject {
 
             observedTypes = types
             activeConfigurationSignature = signature
-            statusText = "已启动 HealthKit Observer 自动同步"
-            addLog(level: "info", message: "已注册 \(types.count) 个 HealthKit Observer")
+            statusText = L10n.tr("health_export.observer.status.started")
+            addLog(level: "info", message: L10n.tr("health_export.observer.log.registered_count", types.count))
         } catch {
-            statusText = "自动同步启动失败：\(error.localizedDescription)"
+            statusText = L10n.tr("health_export.observer.status.start_failed", error.localizedDescription)
             addLog(level: "error", message: statusText)
         }
     }
@@ -159,14 +159,14 @@ final class HealthObserverSyncManager: ObservableObject {
                 return !configuration.selectedMetricIDs.isDisjoint(with: changedMetricIDs)
             }
         guard !configurations.isEmpty else {
-            statusText = "没有可发送的自动同步配置"
-            addLog(level: "warning", message: "触发自动同步但没有可发送配置")
+            statusText = L10n.tr("health_export.observer.status.no_config")
+            addLog(level: "warning", message: L10n.tr("health_export.observer.log.no_config"))
             return
         }
 
         isSyncing = true
-        statusText = "正在自动同步：\(reason)"
-        addLog(level: "info", message: "收到 HealthKit 更新：\(reason)")
+        statusText = L10n.tr("health_export.observer.status.syncing", reason)
+        addLog(level: "info", message: L10n.tr("health_export.observer.log.received_update", reason))
 
         let backgroundTaskID = await MainActor.run {
             UIApplication.shared.beginBackgroundTask(withName: "HealthObserverSync") {
@@ -192,22 +192,22 @@ final class HealthObserverSyncManager: ObservableObject {
                 )
                 configurationStore.markSent(id: configuration.id, status: "[自动] \(result)")
                 await MainActor.run {
-                    statusText = "[自动] \(configuration.name)：\(result)"
+                    statusText = L10n.tr("health_export.observer.status.auto_result", configuration.name, result)
                     lastSyncAt = .now
                     defaults.set(lastSyncAt, forKey: Self.lastSyncAtKey)
                 }
-                addLog(level: "success", message: "\(configuration.name) 自动上传成功")
+                addLog(level: "success", message: L10n.tr("health_export.observer.log.upload_success", configuration.name))
             } catch {
                 let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 configurationStore.markSent(id: configuration.id, status: "[自动] \(message)")
                 await MainActor.run {
-                    statusText = "[自动] \(configuration.name)：\(message)"
+                    statusText = L10n.tr("health_export.observer.status.auto_result", configuration.name, message)
                 }
-                addLog(level: "error", message: "\(configuration.name) 自动上传失败：\(message)")
+                addLog(level: "error", message: L10n.tr("health_export.observer.log.upload_failed", configuration.name, message))
                 if case .protectedHealthDataUnavailable = (error as? ExportError) {
                     pendingRetryReason = reason
                     pendingRetryMetricIDs = changedMetricIDs
-                    addLog(level: "warning", message: "锁屏时健康数据不可读，已等待解锁后重试")
+                    addLog(level: "warning", message: L10n.tr("health_export.observer.log.waiting_unlock"))
                 }
             }
         }
@@ -221,7 +221,7 @@ final class HealthObserverSyncManager: ObservableObject {
             }
             if let error {
                 Task { @MainActor in
-                    self.statusText = "Observer 错误：\(error.localizedDescription)"
+                    self.statusText = L10n.tr("health_export.observer.status.observer_error", error.localizedDescription)
                     self.addLog(level: "error", message: self.statusText)
                 }
                 completionHandler()
@@ -273,7 +273,7 @@ final class HealthObserverSyncManager: ObservableObject {
         let metricIDs = pendingRetryMetricIDs
         pendingRetryReason = nil
         pendingRetryMetricIDs = nil
-        addLog(level: "info", message: "检测到解锁，重试自动同步")
+        addLog(level: "info", message: L10n.tr("health_export.observer.log.retry_after_unlock"))
         await syncNow(reason: reason, changedMetricIDs: metricIDs)
     }
 
@@ -281,11 +281,11 @@ final class HealthObserverSyncManager: ObservableObject {
         do {
             let change = try await anchoredChange(for: sampleType, initializeIfNeeded: false)
             guard change.hasChanges else { return }
-            addLog(level: "info", message: "收到 HealthKit 增量更新：\(sampleType.identifier)，新增 \(change.addedCount) 条")
+            addLog(level: "info", message: L10n.tr("health_export.observer.log.incremental_update", sampleType.identifier, change.addedCount))
             await syncNow(reason: sampleType.identifier, changedMetricIDs: changedMetricIDs(for: sampleType))
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            addLog(level: "error", message: "增量查询失败：\(sampleType.identifier) - \(message)")
+            addLog(level: "error", message: L10n.tr("health_export.observer.log.incremental_failed", sampleType.identifier, message))
         }
     }
 
@@ -301,7 +301,7 @@ final class HealthObserverSyncManager: ObservableObject {
     private func initializeAnchorIfNeeded(for sampleType: HKSampleType) async throws {
         guard anchor(for: sampleType) == nil else { return }
         _ = try await anchoredChange(for: sampleType, initializeIfNeeded: true)
-        addLog(level: "info", message: "已初始化增量锚点：\(sampleType.identifier)")
+        addLog(level: "info", message: L10n.tr("health_export.observer.log.anchor_initialized", sampleType.identifier))
     }
 
     private func anchoredChange(for sampleType: HKSampleType, initializeIfNeeded: Bool) async throws -> (addedCount: Int, deletedCount: Int, hasChanges: Bool) {

@@ -1,5 +1,95 @@
 import Foundation
 
+private enum HTTPClientStrings {
+    private static let tableDirectory = "Resources/I18n"
+    private static let fallbackLanguage = "zh-Hans"
+    private static let supportedLanguages = ["zh-Hans", "en"]
+    private static let lock = NSLock()
+    private static var cache: [String: [String: String]] = [:]
+
+    static func text(_ key: String, _ arguments: CVarArg...) -> String {
+        let language = UserDefaults.standard.string(forKey: "app.language") ?? "system"
+        let template = lookup(key: key, languageCode: language) ?? lookup(key: key, languageCode: fallbackLanguage) ?? fallback(for: key)
+        guard !arguments.isEmpty else { return template }
+        return String(format: template, locale: locale(for: language), arguments: arguments)
+    }
+
+    private static func lookup(key: String, languageCode: String) -> String? {
+        switch languageCode {
+        case "system":
+            for code in resolvedSystemLanguages() {
+                if let value = dictionary(for: code)?[key] {
+                    return value
+                }
+            }
+            return nil
+        default:
+            return dictionary(for: languageCode)?[key]
+        }
+    }
+
+    private static func dictionary(for languageCode: String) -> [String: String]? {
+        lock.lock()
+        if let cached = cache[languageCode] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        guard let url = Bundle.main.url(forResource: languageCode, withExtension: "json", subdirectory: tableDirectory),
+              let data = try? Data(contentsOf: url),
+              let dictionary = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return nil
+        }
+
+        lock.lock()
+        cache[languageCode] = dictionary
+        lock.unlock()
+        return dictionary
+    }
+
+    private static func resolvedSystemLanguages() -> [String] {
+        var resolved: [String] = []
+        for candidate in Locale.preferredLanguages {
+            if candidate.hasPrefix("zh-Hans") || candidate.hasPrefix("zh") {
+                resolved.append("zh-Hans")
+            } else if candidate.hasPrefix("en") {
+                resolved.append("en")
+            }
+        }
+        resolved.append(contentsOf: supportedLanguages)
+        var unique: [String] = []
+        for code in resolved where !unique.contains(code) {
+            unique.append(code)
+        }
+        return unique
+    }
+
+    private static func locale(for languageCode: String) -> Locale {
+        switch languageCode {
+        case "en":
+            return Locale(identifier: "en")
+        case "zh-Hans":
+            return Locale(identifier: "zh-Hans")
+        default:
+            return .autoupdatingCurrent
+        }
+    }
+
+    private static func fallback(for key: String) -> String {
+        switch key {
+        case "http.invalid_response":
+            return "The server did not return a valid HTTP response."
+        case "http.request_failed":
+            return "Request failed (%d)"
+        case "http.request_failed_with_body":
+            return "Request failed (%d): %@"
+        default:
+            return key
+        }
+    }
+}
+
 /// Thread-safe holder for the current bearer token. `HTTPClient` reads this
 /// synchronously when building requests, so it must be accessible off the main
 /// actor (and from any target that compiles `HTTPClient`). `SessionStore` keeps
@@ -48,10 +138,12 @@ enum HTTPClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "接口没有返回有效 HTTP 响应。"
+            return HTTPClientStrings.text("http.invalid_response")
         case let .httpFailure(statusCode, data):
             let body = String(data: data, encoding: .utf8) ?? ""
-            return body.isEmpty ? "接口请求失败 (\(statusCode))" : "接口请求失败 (\(statusCode))：\(body)"
+            return body.isEmpty
+                ? HTTPClientStrings.text("http.request_failed", statusCode)
+                : HTTPClientStrings.text("http.request_failed_with_body", statusCode, body)
         }
     }
 }

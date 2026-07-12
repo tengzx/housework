@@ -103,11 +103,11 @@ final class ExerciseLibraryViewModel: ObservableObject {
     }
 
     var selectedCategoryName: String {
-        categories.first { $0.id == selectedCategoryId }?.name ?? "所有器械"
+        categories.first { $0.id == selectedCategoryId }?.name ?? L10n.tr("fitness.library.all_equipment")
     }
 
     var selectedMuscleGroupName: String {
-        muscleGroups.first { $0.id == selectedMuscleGroupId }?.name ?? "所有肌群"
+        muscleGroups.first { $0.id == selectedMuscleGroupId }?.name ?? L10n.tr("fitness.library.all_muscle_groups")
     }
 
     func onSearchChanged() {
@@ -202,7 +202,7 @@ final class ExerciseLibraryViewModel: ObservableObject {
             preselected.removeAll { $0.id == id }
             selectedIds.remove(id)
         } catch {
-            errorMessage = "删除失败，请检查网络"
+            errorMessage = L10n.tr("fitness.library.delete_failed")
         }
     }
 }
@@ -241,11 +241,11 @@ struct FitnessExerciseLibrarySheet: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Button("取消") { Haptics.tap(); dismiss() }
+                Button(L10n.tr("common.cancel")) { Haptics.tap(); dismiss() }
                     .foregroundStyle(Color(hex: "1C1C1E"))
                     .font(.system(size: 17))
                 Spacer()
-                Text("库")
+                Text(L10n.tr("fitness.library.title"))
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
                 Spacer()
@@ -254,7 +254,7 @@ struct FitnessExerciseLibrarySheet: View {
                     onConfirm(vm.confirmedExercises())
                     dismiss()
                 } label: {
-                    Text("添加\(vm.hasSelection ? "(\(vm.selectionCount))" : "")")
+                    Text(vm.hasSelection ? L10n.tr("fitness.library.confirm_add_count", vm.selectionCount) : L10n.tr("fitness.library.confirm_add"))
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(vm.hasSelection ? Color(hex: "1C1C1E") : Color(hex: "BFBFC5"))
                 }
@@ -269,7 +269,7 @@ struct FitnessExerciseLibrarySheet: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(Color(hex: "9A9AA0"))
                     .font(.system(size: 16))
-                TextField("搜索", text: $vm.searchText)
+                TextField(L10n.tr("fitness.library.search_placeholder"), text: $vm.searchText)
                     .focused($searchFocused)
                     .font(.system(size: 16))
                     .foregroundStyle(Color(hex: "1C1C1E"))
@@ -305,7 +305,7 @@ struct FitnessExerciseLibrarySheet: View {
                                 CustomExerciseRow { formTarget = .create }
                                     .padding(.horizontal, 16)
                             } header: {
-                                SectionLetterHeader(letter: "自定义")
+                                SectionLetterHeader(letter: L10n.tr("fitness.library.custom_section"))
                             }
                         }
 
@@ -327,13 +327,13 @@ struct FitnessExerciseLibrarySheet: View {
                                                 Haptics.tap()
                                                 formTarget = .edit(exercise)
                                             } label: {
-                                                Label("编辑", systemImage: "pencil")
+                                                Label(L10n.tr("common.edit"), systemImage: "pencil")
                                             }
                                             Button(role: .destructive) {
                                                 Haptics.tap()
                                                 deleteTarget = exercise
                                             } label: {
-                                                Label("删除", systemImage: "trash")
+                                                Label(L10n.tr("common.delete"), systemImage: "trash")
                                             }
                                         }
                                     })
@@ -370,8 +370,8 @@ struct FitnessExerciseLibrarySheet: View {
         // 肌群筛选
         .sheet(isPresented: $showMuscleFilter) {
             FilterPickerSheet(
-                title: "肌群",
-                allLabel: "所有肌群",
+                title: L10n.tr("fitness.library.muscle_group"),
+                allLabel: L10n.tr("fitness.library.all_muscle_groups"),
                 options: vm.muscleGroups.map { ($0.id, $0.name) },
                 selectedId: vm.selectedMuscleGroupId,
                 onApply: { vm.setMuscleGroup($0) }
@@ -380,8 +380,8 @@ struct FitnessExerciseLibrarySheet: View {
         // 分类筛选
         .sheet(isPresented: $showCategoryFilter) {
             FilterPickerSheet(
-                title: "器械",
-                allLabel: "所有器械",
+                title: L10n.tr("fitness.library.equipment"),
+                allLabel: L10n.tr("fitness.library.all_equipment"),
                 options: vm.categories.map { ($0.id, $0.name) },
                 selectedId: vm.selectedCategoryId,
                 onApply: { vm.setCategory($0) }
@@ -402,24 +402,24 @@ struct FitnessExerciseLibrarySheet: View {
         }
         // 删除确认
         .alert(
-            "删除「\(deleteTarget?.name ?? "")」？",
+            L10n.tr("fitness.library.delete_exercise_title", deleteTarget?.name ?? ""),
             isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
         ) {
-            Button("取消", role: .cancel) { Haptics.tap(); deleteTarget = nil }
-            Button("删除", role: .destructive) {
+            Button(L10n.tr("common.cancel"), role: .cancel) { Haptics.tap(); deleteTarget = nil }
+            Button(L10n.tr("common.delete"), role: .destructive) {
                 Haptics.tap()
                 guard let t = deleteTarget else { return }
                 deleteTarget = nil
                 Task { await vm.deleteExercise(id: t.id) }
             }
         } message: {
-            Text("此操作不可撤销。")
+            Text(L10n.tr("fitness.library.delete_exercise_message"))
         }
-        .alert("错误", isPresented: Binding(
+        .alert(L10n.tr("common.error"), isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) {
-            Button("好") { Haptics.tap(); vm.errorMessage = nil }
+            Button(L10n.tr("common.ok")) { Haptics.tap(); vm.errorMessage = nil }
         } message: {
             Text(vm.errorMessage ?? "")
         }
@@ -508,7 +508,7 @@ struct FilterPickerSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("筛选条件 · \(title)")
+            Text(L10n.tr("fitness.library.filter_title", title))
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(Color(hex: "1C1C1E"))
                 .padding(.top, 18)
@@ -530,7 +530,7 @@ struct FilterPickerSheet: View {
                 onApply(choice)
                 dismiss()
             } label: {
-                Text("按“\(chosenName)”筛选")
+                Text(L10n.tr("fitness.library.apply_filter", chosenName))
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -606,14 +606,14 @@ private struct ExerciseLibraryRow: View {
                     .foregroundStyle(Color(hex: "1C1C1E"))
                     .lineLimit(1)
                 HStack(spacing: 4) {
-                    Text(exercise.category?.name ?? (exercise.isSystem ? "系统" : "自定义"))
+                    Text(exercise.category?.name ?? (exercise.isSystem ? L10n.tr("fitness.library.system_badge") : L10n.tr("fitness.library.custom_badge")))
                         .font(.system(size: 14))
                         .foregroundStyle(Color(hex: "9A9AA0"))
                     if !exercise.isSystem {
                         Text("·")
                             .font(.system(size: 14))
                             .foregroundStyle(Color(hex: "BFBFC5"))
-                        Text("自定义")
+                        Text(L10n.tr("fitness.library.custom_badge"))
                             .font(.system(size: 12))
                             .foregroundStyle(Color(hex: "6E5BF0"))
                             .padding(.horizontal, 5)
@@ -671,7 +671,7 @@ private struct CustomExerciseRow: View {
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(Color(hex: "5B5B61"))
                     )
-                Text("添加自定义动作")
+                Text(L10n.tr("fitness.library.add_custom_exercise"))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
                 Spacer()

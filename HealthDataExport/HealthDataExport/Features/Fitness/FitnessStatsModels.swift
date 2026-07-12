@@ -11,17 +11,17 @@ enum FitnessStrengthVolumeRange: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .week: return "周"
-        case .month: return "月"
-        case .year: return "年"
+        case .week: return L10n.tr("fitness.stats.range.week")
+        case .month: return L10n.tr("fitness.stats.range.month")
+        case .year: return L10n.tr("fitness.stats.range.year")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .week: return "按周统计"
-        case .month: return "按月统计"
-        case .year: return "按年统计"
+        case .week: return L10n.tr("fitness.stats.range.week_subtitle")
+        case .month: return L10n.tr("fitness.stats.range.month_subtitle")
+        case .year: return L10n.tr("fitness.stats.range.year_subtitle")
         }
     }
 
@@ -104,17 +104,17 @@ struct FitnessStatsPeriod {
         let calendar = Calendar.current
         let formatter = DateFormatter()
         formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = L10n.locale
         switch range {
         case .week:
-            formatter.dateFormat = "M月d日"
+            formatter.setLocalizedDateFormatFromTemplate("Md")
             let last = calendar.date(byAdding: .day, value: -1, to: interval.end) ?? interval.end
             return "\(formatter.string(from: interval.start)) - \(formatter.string(from: last))"
         case .month:
-            formatter.dateFormat = "yyyy年M月"
+            formatter.setLocalizedDateFormatFromTemplate("yMMM")
             return formatter.string(from: interval.start)
         case .year:
-            formatter.dateFormat = "yyyy"
+            formatter.setLocalizedDateFormatFromTemplate("yyyy")
             return formatter.string(from: interval.start)
         }
     }

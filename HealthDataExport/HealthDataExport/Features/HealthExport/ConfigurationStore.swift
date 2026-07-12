@@ -32,7 +32,7 @@ final class ConfigurationStore: ObservableObject {
                 if migratedLegacyTokens { save() }
             }
         } catch {
-            configurations = [ExportConfiguration(lastStatus: "配置读取失败，已重置")]
+            configurations = [ExportConfiguration(lastStatus: L10n.tr("health_export.config_load_reset"))]
             save()
         }
     }
@@ -68,7 +68,7 @@ final class ConfigurationStore: ObservableObject {
     }
 
     func addConfiguration() -> ExportConfiguration {
-        let config = ExportConfiguration(name: "接口 \(configurations.count + 1)")
+        let config = ExportConfiguration(name: L10n.tr("health_export.default_config_name", configurations.count + 1))
         configurations.append(config)
         save()
         return config

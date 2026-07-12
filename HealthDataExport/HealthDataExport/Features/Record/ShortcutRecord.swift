@@ -361,7 +361,7 @@ final class ShortcutRecordStore: ObservableObject {
     func start(_ task: ShortcutTask, intentionRemoteId: Int? = nil, intentionLocalId: UUID? = nil) {
         let wasRunning = activeSession != nil
         activeSession = ActiveShortcutSession(task: task, startedAt: .now)
-        events.insert(ShortcutEvent(task: task, kind: .started, note: "开始了"), at: 0)
+        events.insert(ShortcutEvent(task: task, kind: .started, note: SharedL10n.tr("record.event.started")), at: 0)
         saveActiveSession()
         saveEvents()
         let startOp = ShortcutSyncOperation(
@@ -388,7 +388,7 @@ final class ShortcutRecordStore: ObservableObject {
     func stop(note: String) {
         guard let activeSession else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        events.insert(ShortcutEvent(task: activeSession.task, kind: .stopped, note: trimmedNote.isEmpty ? "结束了" : trimmedNote), at: 0)
+        events.insert(ShortcutEvent(task: activeSession.task, kind: .stopped, note: trimmedNote.isEmpty ? SharedL10n.tr("record.event.stopped") : trimmedNote), at: 0)
         self.activeSession = nil
         saveActiveSession()
         saveEvents()
@@ -546,7 +546,7 @@ final class ShortcutRecordStore: ObservableObject {
                 guard pendingSync.first?.id == operation.id else {
                     continue
                 }
-                syncStatusMessage = "同步失败：\(Self.readableMessage(for: error))"
+                syncStatusMessage = SharedL10n.tr("record.sync.failed", Self.readableMessage(for: error))
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 if pendingSync.first?.id == operation.id {
                     Task { await flushSync() }
@@ -583,7 +583,7 @@ final class ShortcutRecordStore: ObservableObject {
                 }
             } catch {
                 guard pendingCrud.first?.id == operation.id else { continue }
-                syncStatusMessage = "同步失败：\(Self.readableMessage(for: error))"
+                syncStatusMessage = SharedL10n.tr("record.sync.failed", Self.readableMessage(for: error))
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 if pendingCrud.first?.id == operation.id {
                     Task { await flushCrud() }
@@ -777,44 +777,46 @@ final class ShortcutRecordStore: ObservableObject {
         userDefaults.set(data, forKey: key)
     }
 
-    nonisolated static let categories: [ShortcutCategory] = [
-        ShortcutCategory(id: "work", label: "工作", colorHex: "3F7BF7", subtypes: [
-            ShortcutSubtype(id: "work.coding",   label: "编程"),
-            ShortcutSubtype(id: "work.meeting",  label: "会议"),
-            ShortcutSubtype(id: "work.writing",  label: "写作"),
-            ShortcutSubtype(id: "work.design",   label: "设计"),
-        ]),
-        ShortcutCategory(id: "study", label: "学习", colorHex: "6C5CE7", subtypes: [
-            ShortcutSubtype(id: "study.reading",  label: "阅读"),
-            ShortcutSubtype(id: "study.course",   label: "课程"),
-            ShortcutSubtype(id: "study.notes",    label: "笔记"),
-            ShortcutSubtype(id: "study.practice", label: "练习"),
-        ]),
-        ShortcutCategory(id: "life", label: "生活", colorHex: "24C48E", subtypes: [
-            ShortcutSubtype(id: "life.meal",     label: "吃饭"),
-            ShortcutSubtype(id: "life.shopping", label: "购物"),
-            ShortcutSubtype(id: "life.commute",  label: "通勤"),
-            ShortcutSubtype(id: "life.chores",   label: "家务"),
-        ]),
-        ShortcutCategory(id: "sport", label: "运动", colorHex: "FF6257", subtypes: [
-            ShortcutSubtype(id: "sport.gym",     label: "健身"),
-            ShortcutSubtype(id: "sport.running", label: "跑步"),
-            ShortcutSubtype(id: "sport.yoga",    label: "瑜伽"),
-            ShortcutSubtype(id: "sport.ball",    label: "球类"),
-        ]),
-        ShortcutCategory(id: "rest", label: "休息", colorHex: "FFB02E", subtypes: [
-            ShortcutSubtype(id: "rest.sleep",      label: "睡眠"),
-            ShortcutSubtype(id: "rest.nap",        label: "小憩"),
-            ShortcutSubtype(id: "rest.meditation", label: "冥想"),
-            ShortcutSubtype(id: "rest.leisure",    label: "放松"),
-        ]),
-        ShortcutCategory(id: "fun", label: "娱乐", colorHex: "F642A8", subtypes: [
-            ShortcutSubtype(id: "fun.game",   label: "游戏"),
-            ShortcutSubtype(id: "fun.music",  label: "音乐"),
-            ShortcutSubtype(id: "fun.video",  label: "视频"),
-            ShortcutSubtype(id: "fun.social", label: "社交"),
-        ]),
-    ]
+    nonisolated static var categories: [ShortcutCategory] {
+        [
+            ShortcutCategory(id: "work", label: SharedL10n.tr("record.default.work"), colorHex: "3F7BF7", subtypes: [
+                ShortcutSubtype(id: "work.coding",   label: SharedL10n.tr("record.default.work.coding")),
+                ShortcutSubtype(id: "work.meeting",  label: SharedL10n.tr("record.default.work.meeting")),
+                ShortcutSubtype(id: "work.writing",  label: SharedL10n.tr("record.default.work.writing")),
+                ShortcutSubtype(id: "work.design",   label: SharedL10n.tr("record.default.work.design")),
+            ]),
+            ShortcutCategory(id: "study", label: SharedL10n.tr("record.default.study"), colorHex: "6C5CE7", subtypes: [
+                ShortcutSubtype(id: "study.reading",  label: SharedL10n.tr("record.default.study.reading")),
+                ShortcutSubtype(id: "study.course",   label: SharedL10n.tr("record.default.study.course")),
+                ShortcutSubtype(id: "study.notes",    label: SharedL10n.tr("record.default.study.notes")),
+                ShortcutSubtype(id: "study.practice", label: SharedL10n.tr("record.default.study.practice")),
+            ]),
+            ShortcutCategory(id: "life", label: SharedL10n.tr("record.default.life"), colorHex: "24C48E", subtypes: [
+                ShortcutSubtype(id: "life.meal",     label: SharedL10n.tr("record.default.life.meal")),
+                ShortcutSubtype(id: "life.shopping", label: SharedL10n.tr("record.default.life.shopping")),
+                ShortcutSubtype(id: "life.commute",  label: SharedL10n.tr("record.default.life.commute")),
+                ShortcutSubtype(id: "life.chores",   label: SharedL10n.tr("record.default.life.chores")),
+            ]),
+            ShortcutCategory(id: "sport", label: SharedL10n.tr("record.default.sport"), colorHex: "FF6257", subtypes: [
+                ShortcutSubtype(id: "sport.gym",     label: SharedL10n.tr("record.default.sport.gym")),
+                ShortcutSubtype(id: "sport.running", label: SharedL10n.tr("record.default.sport.running")),
+                ShortcutSubtype(id: "sport.yoga",    label: SharedL10n.tr("record.default.sport.yoga")),
+                ShortcutSubtype(id: "sport.ball",    label: SharedL10n.tr("record.default.sport.ball")),
+            ]),
+            ShortcutCategory(id: "rest", label: SharedL10n.tr("record.default.rest"), colorHex: "FFB02E", subtypes: [
+                ShortcutSubtype(id: "rest.sleep",      label: SharedL10n.tr("record.default.rest.sleep")),
+                ShortcutSubtype(id: "rest.nap",        label: SharedL10n.tr("record.default.rest.nap")),
+                ShortcutSubtype(id: "rest.meditation", label: SharedL10n.tr("record.default.rest.meditation")),
+                ShortcutSubtype(id: "rest.leisure",    label: SharedL10n.tr("record.default.rest.leisure")),
+            ]),
+            ShortcutCategory(id: "fun", label: SharedL10n.tr("record.default.fun"), colorHex: "F642A8", subtypes: [
+                ShortcutSubtype(id: "fun.game",   label: SharedL10n.tr("record.default.fun.game")),
+                ShortcutSubtype(id: "fun.music",  label: SharedL10n.tr("record.default.fun.music")),
+                ShortcutSubtype(id: "fun.video",  label: SharedL10n.tr("record.default.fun.video")),
+                ShortcutSubtype(id: "fun.social", label: SharedL10n.tr("record.default.fun.social")),
+            ]),
+        ]
+    }
 
     /// Resolve the SF Symbol a shortcut should show, preferring the small
     /// category's icon, then the big category's, then a guess from the name.
@@ -893,50 +895,77 @@ final class ShortcutRecordStore: ObservableObject {
     nonisolated static func symbolName(for label: String) -> String {
         let mappings: [(String, String)] = [
             ("编程", "chevron.left.forwardslash.chevron.right"),
+            ("coding", "chevron.left.forwardslash.chevron.right"),
             ("代码", "chevron.left.forwardslash.chevron.right"),
             ("会议", "briefcase.fill"),
+            ("meeting", "briefcase.fill"),
             ("开会", "briefcase.fill"),
             ("写作", "pencil"),
+            ("writing", "pencil"),
             ("日记", "pencil"),
             ("设计", "paintbrush.fill"),
+            ("design", "paintbrush.fill"),
             ("阅读", "book.fill"),
+            ("reading", "book.fill"),
             ("课程", "graduationcap.fill"),
+            ("course", "graduationcap.fill"),
             ("笔记", "note.text"),
+            ("notes", "note.text"),
             ("练习", "checklist"),
+            ("practice", "checklist"),
             ("吃饭", "fork.knife"),
+            ("meal", "fork.knife"),
             ("购物", "cart.fill"),
+            ("shopping", "cart.fill"),
             ("通勤", "car.fill"),
+            ("commute", "car.fill"),
             ("家务", "house.fill"),
+            ("chores", "house.fill"),
             ("健身", "dumbbell.fill"),
+            ("gym", "dumbbell.fill"),
             ("跑步", "figure.run"),
+            ("running", "figure.run"),
             ("瑜伽", "figure.mind.and.body"),
+            ("yoga", "figure.mind.and.body"),
             ("睡眠", "moon.stars.fill"),
+            ("sleep", "moon.stars.fill"),
             ("冥想", "figure.mind.and.body"),
+            ("meditation", "figure.mind.and.body"),
             ("休息", "cup.and.saucer.fill"),
+            ("rest", "cup.and.saucer.fill"),
             ("游戏", "gamecontroller.fill"),
+            ("game", "gamecontroller.fill"),
             ("音乐", "music.note"),
+            ("music", "music.note"),
             ("视频", "video.fill"),
+            ("video", "video.fill"),
             ("社交", "heart.fill"),
+            ("social", "heart.fill"),
             ("健康", "heart")
         ]
-        return mappings.first { label.contains($0.0) }?.1 ?? "bolt.fill"
+        let normalized = label.lowercased()
+        return mappings.first { normalized.contains($0.0.lowercased()) }?.1 ?? "bolt.fill"
     }
 
-    nonisolated static let defaultTasks: [ShortcutTask] = [
-        ShortcutTask(name: "写代码", symbolName: "chevron.left.forwardslash.chevron.right", colorHex: "FF7847"),
-        ShortcutTask(name: "阅读", symbolName: "book", colorHex: "FF7847"),
-        ShortcutTask(name: "健身", symbolName: "dumbbell", colorHex: "FF7847"),
-        ShortcutTask(name: "开会", symbolName: "briefcase", colorHex: "FF7847"),
-        ShortcutTask(name: "吃饭", symbolName: "fork.knife", colorHex: "FF7847"),
-        ShortcutTask(name: "休息", symbolName: "cup.and.saucer", colorHex: "FF7847")
-    ]
+    nonisolated static var defaultTasks: [ShortcutTask] {
+        [
+            ShortcutTask(name: SharedL10n.tr("record.default.task.coding"), symbolName: "chevron.left.forwardslash.chevron.right", colorHex: "FF7847"),
+            ShortcutTask(name: SharedL10n.tr("record.default.task.reading"), symbolName: "book", colorHex: "FF7847"),
+            ShortcutTask(name: SharedL10n.tr("record.default.task.gym"), symbolName: "dumbbell", colorHex: "FF7847"),
+            ShortcutTask(name: SharedL10n.tr("record.default.task.meeting"), symbolName: "briefcase", colorHex: "FF7847"),
+            ShortcutTask(name: SharedL10n.tr("record.default.task.meal"), symbolName: "fork.knife", colorHex: "FF7847"),
+            ShortcutTask(name: SharedL10n.tr("record.default.task.rest"), symbolName: "cup.and.saucer", colorHex: "FF7847")
+        ]
+    }
 
-    nonisolated private static let defaultEvents: [ShortcutEvent] = [
-        ShortcutEvent(task: defaultTasks[0], kind: .stopped, note: "结束了", createdAt: Calendar.current.date(bySettingHour: 5, minute: 54, second: 0, of: .now) ?? .now),
-        ShortcutEvent(task: defaultTasks[1], kind: .note, note: "Import from time tracker #1196 分心...", createdAt: Calendar.current.date(bySettingHour: 8, minute: 1, second: 0, of: .now) ?? .now),
-        ShortcutEvent(task: defaultTasks[2], kind: .note, note: "玩手机", createdAt: Calendar.current.date(bySettingHour: 7, minute: 0, second: 0, of: .now) ?? .now),
-        ShortcutEvent(task: defaultTasks[3], kind: .note, note: "吃饭", createdAt: Calendar.current.date(bySettingHour: 12, minute: 5, second: 0, of: .now) ?? .now)
-    ]
+    nonisolated private static var defaultEvents: [ShortcutEvent] {
+        [
+            ShortcutEvent(task: defaultTasks[0], kind: .stopped, note: SharedL10n.tr("record.event.stopped"), createdAt: Calendar.current.date(bySettingHour: 5, minute: 54, second: 0, of: .now) ?? .now),
+            ShortcutEvent(task: defaultTasks[1], kind: .note, note: "Import from time tracker #1196...", createdAt: Calendar.current.date(bySettingHour: 8, minute: 1, second: 0, of: .now) ?? .now),
+            ShortcutEvent(task: defaultTasks[2], kind: .note, note: SharedL10n.tr("record.default.fun.video"), createdAt: Calendar.current.date(bySettingHour: 7, minute: 0, second: 0, of: .now) ?? .now),
+            ShortcutEvent(task: defaultTasks[3], kind: .note, note: SharedL10n.tr("record.default.life.meal"), createdAt: Calendar.current.date(bySettingHour: 12, minute: 5, second: 0, of: .now) ?? .now)
+        ]
+    }
 }
 
 struct RunningShortcutEntry: Hashable {

@@ -16,7 +16,7 @@ final class ExerciseDetailViewModel: ObservableObject {
         do {
             detail = try await FitnessAPIClient.exerciseDetail(id: id)
         } catch {
-            errorMessage = "加载失败，请检查网络"
+            errorMessage = L10n.tr("fitness.exercise.load_failed")
         }
     }
 }
@@ -44,7 +44,7 @@ struct FitnessExerciseDetailSheet: View {
                         .background(Color(hex: "E7E7EB"), in: Circle())
                 }
                 Spacer()
-                Text("动作详情")
+                Text(L10n.tr("fitness.exercise.detail_title"))
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
                 Spacer()
@@ -128,7 +128,7 @@ struct FitnessExerciseDetailSheet: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Color(hex: "9A9AA0"))
                     if !isSystem {
-                        Text("自定义")
+                        Text(L10n.tr("fitness.exercise.custom"))
                             .font(.system(size: 12))
                             .foregroundStyle(Color(hex: "6E5BF0"))
                             .padding(.horizontal, 6)
@@ -150,10 +150,10 @@ struct FitnessExerciseDetailSheet: View {
         if !primary.isEmpty || !secondary.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 if !primary.isEmpty {
-                    muscleRow(title: "主要肌群", muscles: primary, color: Color(hex: "C4451E"))
+                    muscleRow(title: L10n.tr("fitness.exercise.primary_muscles"), muscles: primary, color: Color(hex: "C4451E"))
                 }
                 if !secondary.isEmpty {
-                    muscleRow(title: "次要肌群", muscles: secondary, color: Color(hex: "9A9AA0"))
+                    muscleRow(title: L10n.tr("fitness.exercise.secondary_muscles"), muscles: secondary, color: Color(hex: "9A9AA0"))
                 }
             }
             .padding(16)
@@ -177,7 +177,7 @@ struct FitnessExerciseDetailSheet: View {
     private var guidanceSection: some View {
         if let detail = vm.detail, detail.hasGuidance {
             VStack(alignment: .leading, spacing: 16) {
-                guidanceBlock(title: "动作指导", text: detail.instructions)
+                guidanceBlock(title: L10n.tr("fitness.exercise.guidance"), text: detail.instructions)
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -186,7 +186,7 @@ struct FitnessExerciseDetailSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "text.book.closed")
                     .foregroundStyle(Color(hex: "BFBFC5"))
-                Text("暂无动作指导")
+                Text(L10n.tr("fitness.exercise.no_guidance"))
                     .font(.system(size: 15))
                     .foregroundStyle(Color(hex: "9A9AA0"))
             }
@@ -214,7 +214,7 @@ struct FitnessExerciseDetailSheet: View {
     // MARK: Helpers
 
     private var category: String {
-        vm.detail?.category?.name ?? exercise.category?.name ?? (isSystem ? "系统" : "自定义")
+        vm.detail?.category?.name ?? exercise.category?.name ?? L10n.tr(isSystem ? "fitness.exercise.system" : "fitness.exercise.custom")
     }
     private var isSystem: Bool { vm.detail?.isSystem ?? exercise.isSystem }
 }

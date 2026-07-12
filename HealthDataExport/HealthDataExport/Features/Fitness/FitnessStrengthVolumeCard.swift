@@ -27,10 +27,10 @@ struct StrengthVolumeAnalysisCard: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("统计分析")
+                    Text(L10n.tr("fitness.stats.analysis_title"))
                         .font(.system(size: 26, weight: .heavy))
                         .foregroundStyle(Color(hex: "1C1C22"))
-                    Text("健身 · \(selectedRange.subtitle)")
+                    Text(L10n.tr("fitness.stats.analysis_subtitle", selectedRange.subtitle))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color(hex: "9A99A4"))
                 }
@@ -60,11 +60,11 @@ struct StrengthVolumeAnalysisCard: View {
                     Image(systemName: "dumbbell")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(Color(hex: "8A8994"))
-                    Text("肌肉训练量分布")
+                    Text(L10n.tr("fitness.stats.muscle_distribution"))
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(Color(hex: "3A3944"))
                     Spacer()
-                    Text("千克")
+                    Text(L10n.tr("fitness.common.kilogram"))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color(hex: "B4B3BD"))
                 }
@@ -74,7 +74,7 @@ struct StrengthVolumeAnalysisCard: View {
                         .frame(height: 300)
                         .overlay {
                             if response.totalVolumeKg <= 0 {
-                                emptyState("这个周期还没有可统计的力量训练")
+                                emptyState(L10n.tr("fitness.stats.empty_strength"))
                                     .offset(y: 24)
                             }
                         }
@@ -87,7 +87,7 @@ struct StrengthVolumeAnalysisCard: View {
                             Haptics.tap()
                             onRetry()
                         } label: {
-                            Text("重试")
+                            Text(L10n.tr("common.retry"))
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 18)
@@ -98,7 +98,7 @@ struct StrengthVolumeAnalysisCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 34)
                 } else {
-                    emptyState("正在读取训练统计")
+                    emptyState(L10n.tr("fitness.stats.loading"))
                 }
             }
             .padding(.top, 20)
@@ -193,7 +193,7 @@ struct StrengthVolumeAnalysisCard: View {
     private var sessionHistorySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("训练记录")
+                Text(L10n.tr("fitness.stats.session_history"))
                     .font(.system(size: 21, weight: .heavy))
                     .foregroundStyle(Color(hex: "1C1C22"))
                 Spacer()
@@ -201,7 +201,7 @@ struct StrengthVolumeAnalysisCard: View {
                     ProgressView()
                         .scaleEffect(0.78)
                 } else {
-                    Text(selectedRange == .year ? "最新 6 个" : "全部")
+                    Text(selectedRange == .year ? L10n.tr("fitness.stats.latest_six") : L10n.tr("fitness.stats.all"))
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Color(hex: "A3A2AC"))
                 }
@@ -216,7 +216,7 @@ struct StrengthVolumeAnalysisCard: View {
                         Haptics.tap()
                         onRetrySessions()
                     } label: {
-                        Text("重试")
+                        Text(L10n.tr("common.retry"))
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(height: 34)
@@ -228,7 +228,7 @@ struct StrengthVolumeAnalysisCard: View {
                 .padding(.vertical, 20)
                 .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             } else if sessions.isEmpty {
-                Text(isSessionsLoading ? "正在读取训练记录" : "这个周期还没有完成的训练")
+                Text(isSessionsLoading ? L10n.tr("fitness.stats.loading_sessions") : L10n.tr("fitness.stats.empty_sessions"))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color(hex: "9A9AA0"))
                     .frame(maxWidth: .infinity)
@@ -266,11 +266,11 @@ private struct WorkoutCheckinSection: View {
                 Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(Color(hex: "FF7A3D"))
-                Text("训练打卡")
+                Text(L10n.tr("fitness.stats.checkin_title"))
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(Color(hex: "3A3944"))
                 Spacer()
-                Text("\(checkinCount) 天")
+                Text(L10n.tr("fitness.stats.checkin_days", checkinCount))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(hex: "B4B3BD"))
             }
@@ -418,12 +418,12 @@ private struct StrengthVolumeRadialChart: View {
 
     private var displayRegions: [FitnessStrengthVolumeRegion] {
         let fallback = [
-            FitnessStrengthVolumeRegion(regionCode: "chest", regionName: "胸部", volumeKg: 0),
-            FitnessStrengthVolumeRegion(regionCode: "back", regionName: "背部", volumeKg: 0),
-            FitnessStrengthVolumeRegion(regionCode: "legs", regionName: "腿部", volumeKg: 0),
-            FitnessStrengthVolumeRegion(regionCode: "shoulders", regionName: "肩部", volumeKg: 0),
-            FitnessStrengthVolumeRegion(regionCode: "core", regionName: "核心", volumeKg: 0),
-            FitnessStrengthVolumeRegion(regionCode: "arms", regionName: "手臂", volumeKg: 0)
+            FitnessStrengthVolumeRegion(regionCode: "chest", regionName: L10n.tr("fitness.stats.region.chest"), volumeKg: 0),
+            FitnessStrengthVolumeRegion(regionCode: "back", regionName: L10n.tr("fitness.stats.region.back"), volumeKg: 0),
+            FitnessStrengthVolumeRegion(regionCode: "legs", regionName: L10n.tr("fitness.stats.region.legs"), volumeKg: 0),
+            FitnessStrengthVolumeRegion(regionCode: "shoulders", regionName: L10n.tr("fitness.stats.region.shoulders"), volumeKg: 0),
+            FitnessStrengthVolumeRegion(regionCode: "core", regionName: L10n.tr("fitness.stats.region.core"), volumeKg: 0),
+            FitnessStrengthVolumeRegion(regionCode: "arms", regionName: L10n.tr("fitness.stats.region.arms"), volumeKg: 0)
         ]
         guard !regions.isEmpty else { return fallback }
         return fallback.map { fallbackRegion in

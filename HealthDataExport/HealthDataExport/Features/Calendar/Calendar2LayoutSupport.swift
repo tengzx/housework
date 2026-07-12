@@ -53,25 +53,35 @@ enum Calendar2Format {
 
     static func month(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月"
+        formatter.locale = L10n.locale
+        formatter.setLocalizedDateFormatFromTemplate(
+            L10n.currentLanguage == .en ? "MMM" : "M"
+        )
         return formatter.string(from: date)
     }
 
     static func weekday(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "EEE"
-        return formatter.string(from: date)
+        let weekdayIndex = Calendar.current.component(.weekday, from: date)
+        let keys = [
+            "calendar.weekday.sun",
+            "calendar.weekday.mon",
+            "calendar.weekday.tue",
+            "calendar.weekday.wed",
+            "calendar.weekday.thu",
+            "calendar.weekday.fri",
+            "calendar.weekday.sat"
+        ]
+        return L10n.tr(keys[max(0, min(weekdayIndex - 1, keys.count - 1))])
     }
 
     static func shortRange(_ offsets: [Int]) -> String {
         guard let first = offsets.first, let last = offsets.last else { return "" }
         let start = day(offset: first)
         let end = day(offset: last)
-        let startDay = Calendar.current.component(.day, from: start)
-        let endDay = Calendar.current.component(.day, from: end)
-        return "\(month(start))\(startDay)-\(endDay)日"
+        let formatter = DateIntervalFormatter()
+        formatter.locale = L10n.locale
+        formatter.dateTemplate = L10n.currentLanguage == .en ? "MMM d" : "Md"
+        return formatter.string(from: start, to: end)
     }
 
     static func clock(_ minuteOfDay: Int) -> String {
@@ -147,9 +157,9 @@ enum Calendar2Format {
     static func duration(_ minutes: Int) -> String {
         let hours = minutes / 60
         let mins = minutes % 60
-        if hours > 0 && mins > 0 { return "\(hours)小时\(mins)分" }
-        if hours > 0 { return "\(hours)小时" }
-        return "\(mins)分钟"
+        if hours > 0 && mins > 0 { return L10n.tr("calendar.duration.hour_minute", hours, mins) }
+        if hours > 0 { return L10n.tr("calendar.duration.hour_only", hours) }
+        return L10n.tr("calendar.duration.minute_only", mins)
     }
 }
 

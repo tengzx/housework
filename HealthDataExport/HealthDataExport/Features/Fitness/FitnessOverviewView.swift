@@ -33,26 +33,26 @@ final class FitnessOverviewViewModel: ObservableObject {
     private static func describe(_ error: Error) -> String {
         switch error {
         case let urlError as URLError:
-            return "网络错误：\(urlError.localizedDescription)"
+            return L10n.tr("fitness.overview.network_error", urlError.localizedDescription)
         case let decodingError as DecodingError:
-            return "数据解析失败：\(Self.decodingDetail(decodingError))"
+            return L10n.tr("fitness.overview.decoding_error", Self.decodingDetail(decodingError))
         default:
-            return "加载失败：\(error.localizedDescription)"
+            return L10n.tr("fitness.overview.load_failed", error.localizedDescription)
         }
     }
 
     private static func decodingDetail(_ error: DecodingError) -> String {
         switch error {
         case let .keyNotFound(key, ctx):
-            return "缺少字段 \(key.stringValue)（\(Self.path(ctx))）"
+            return L10n.tr("fitness.overview.decoding.key_not_found", key.stringValue, Self.path(ctx))
         case let .typeMismatch(_, ctx):
-            return "类型不符（\(Self.path(ctx))）"
+            return L10n.tr("fitness.overview.decoding.type_mismatch", Self.path(ctx))
         case let .valueNotFound(_, ctx):
-            return "值为空（\(Self.path(ctx))）"
+            return L10n.tr("fitness.overview.decoding.value_not_found", Self.path(ctx))
         case let .dataCorrupted(ctx):
             return ctx.debugDescription
         @unknown default:
-            return "未知解析错误"
+            return L10n.tr("fitness.overview.decoding.unknown")
         }
     }
 
@@ -136,10 +136,10 @@ struct FitnessOverviewView: View {
     private var headerSection: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("健身")
+                Text(L10n.tr("fitness.overview.title"))
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(.primary)
-                Text("近 30 天训练概览")
+                Text(L10n.tr("fitness.overview.subtitle"))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
@@ -149,7 +149,7 @@ struct FitnessOverviewView: View {
                 HStack(spacing: 5) {
                     Image(systemName: "figure.strengthtraining.traditional")
                         .font(.system(size: 13, weight: .semibold))
-                    Text("开始训练")
+                    Text(L10n.tr("fitness.overview.start_workout"))
                         .font(.system(size: 14, weight: .semibold))
                 }
                 .foregroundStyle(.white)
@@ -169,19 +169,19 @@ struct FitnessOverviewView: View {
         return HStack(spacing: 10) {
             statCard(
                 value: "\(sessionCount)",
-                label: "近期次数",
+                label: L10n.tr("fitness.overview.recent_sessions"),
                 symbol: "calendar.badge.checkmark",
                 color: Color(hex: "FF7847")
             )
             statCard(
                 value: totalVolume >= 1000 ? String(format: "%.1ft", totalVolume / 1000) : "\(Int(totalVolume))kg",
-                label: "近30天总量",
+                label: L10n.tr("fitness.overview.total_volume_30d"),
                 symbol: "scalemass.fill",
                 color: Color(hex: "5B8AF0")
             )
             statCard(
                 value: dash.strengthProgress.hasData ? "\(dash.strengthProgress.items.count)" : "—",
-                label: "力量动作",
+                label: L10n.tr("fitness.overview.strength_exercises"),
                 symbol: "chart.line.uptrend.xyaxis",
                 color: Color(hex: "30C46E")
             )
@@ -211,7 +211,7 @@ struct FitnessOverviewView: View {
 
     private func strengthSection(_ items: [StrengthProgressItem]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("力量进展", symbol: "chart.line.uptrend.xyaxis")
+            sectionHeader(L10n.tr("fitness.overview.strength_progress"), symbol: "chart.line.uptrend.xyaxis")
 
             VStack(spacing: 1) {
                 ForEach(items.prefix(4)) { item in
@@ -228,7 +228,7 @@ struct FitnessOverviewView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.exerciseName)
                     .font(.system(size: 15, weight: .medium))
-                Text("估算 1RM: \(String(format: "%.1f", item.currentEstimated1Rm)) kg")
+                Text(L10n.tr("fitness.overview.estimated_1rm", String(format: "%.1f", item.currentEstimated1Rm)))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -251,7 +251,7 @@ struct FitnessOverviewView: View {
 
     private func muscleSection(_ items: [MuscleVolumeItem]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("肌群训练量", symbol: "figure.arms.open")
+            sectionHeader(L10n.tr("fitness.overview.muscle_volume"), symbol: "figure.arms.open")
 
             let sorted = items.sorted { $0.volumeKg > $1.volumeKg }
             let maxVol = sorted.first?.volumeKg ?? 1
@@ -297,7 +297,7 @@ struct FitnessOverviewView: View {
 
     private func templatesSection(_ templates: [FitnessTemplateSummary]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("训练模板", symbol: "doc.text.fill")
+            sectionHeader(L10n.tr("fitness.overview.templates"), symbol: "doc.text.fill")
 
             VStack(spacing: 1) {
                 ForEach(templates.prefix(5)) { tpl in
@@ -323,7 +323,7 @@ struct FitnessOverviewView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(tpl.name)
                     .font(.system(size: 15, weight: .medium))
-                Text("\(tpl.exerciseCount) 个动作 · \(tpl.setCount) 组")
+                Text(L10n.tr("fitness.overview.template_summary", tpl.exerciseCount, tpl.setCount))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -341,7 +341,7 @@ struct FitnessOverviewView: View {
 
     private func recentSessionsSection(_ sessions: [FitnessSessionSummary]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("最近训练", symbol: "clock.fill")
+            sectionHeader(L10n.tr("fitness.overview.recent_workouts"), symbol: "clock.fill")
 
             VStack(spacing: 8) {
                 ForEach(sessions) { session in
@@ -377,15 +377,15 @@ struct FitnessOverviewView: View {
                     value: session.totalVolumeKg.map {
                         $0 >= 1000 ? String(format: "%.1ft", $0 / 1000) : "\(Int($0))kg"
                     } ?? "--",
-                    label: "总量"
+                    label: L10n.tr("fitness.overview.metric_volume")
                 )
                 Divider().frame(height: 28)
-                sessionMetric(value: session.totalSets.map { "\($0)" } ?? "--", label: "组数")
+                sessionMetric(value: session.totalSets.map { "\($0)" } ?? "--", label: L10n.tr("fitness.overview.metric_sets"))
                 Divider().frame(height: 28)
-                sessionMetric(value: "\(session.totalExercises)", label: "动作")
+                sessionMetric(value: "\(session.totalExercises)", label: L10n.tr("fitness.overview.metric_exercises"))
                 if let dur = session.durationSeconds {
                     Divider().frame(height: 28)
-                    sessionMetric(value: formatDuration(dur), label: "时长")
+                    sessionMetric(value: formatDuration(dur), label: L10n.tr("fitness.overview.metric_duration"))
                 }
             }
             .padding(.horizontal, 4)

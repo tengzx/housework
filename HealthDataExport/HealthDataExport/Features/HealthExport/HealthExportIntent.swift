@@ -2,6 +2,57 @@ import AppIntents
 import Foundation
 import UIKit
 
+private enum IntentStrings {
+    static func text(_ key: String, _ arguments: CVarArg...) -> String {
+        let language = UserDefaults.standard.string(forKey: AppLanguage.storageKey) ?? AppLanguage.system.rawValue
+        let template = AppIntentLocalizer.text(key, languageCode: language)
+        guard !arguments.isEmpty else { return template }
+        let locale = language == AppLanguage.en.rawValue ? Locale(identifier: "en") : Locale(identifier: "zh-Hans")
+        return String(format: template, locale: locale, arguments: arguments)
+    }
+}
+
+private enum AppIntentLocalizer {
+    private static let tableDirectory = "Resources/I18n"
+    private static let fallbackLanguage = "zh-Hans"
+    private static let lock = NSLock()
+    private static var cache: [String: [String: String]] = [:]
+
+    static func text(_ key: String, languageCode: String) -> String {
+        if languageCode == AppLanguage.system.rawValue {
+            for candidate in Locale.preferredLanguages {
+                let code = candidate.hasPrefix("en") ? "en" : "zh-Hans"
+                if let value = dictionary(for: code)?[key] {
+                    return value
+                }
+            }
+        } else if let value = dictionary(for: languageCode)?[key] {
+            return value
+        }
+        return dictionary(for: fallbackLanguage)?[key] ?? key
+    }
+
+    private static func dictionary(for languageCode: String) -> [String: String]? {
+        lock.lock()
+        if let cached = cache[languageCode] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        guard let url = Bundle.main.url(forResource: languageCode, withExtension: "json", subdirectory: tableDirectory),
+              let data = try? Data(contentsOf: url),
+              let dictionary = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return nil
+        }
+
+        lock.lock()
+        cache[languageCode] = dictionary
+        lock.unlock()
+        return dictionary
+    }
+}
+
 struct ExportConfigurationEntity: AppEntity {
     static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "健康数据接口")
     static var defaultQuery = ExportConfigurationEntityQuery()
@@ -53,17 +104,17 @@ struct SendHealthDataIntent: AppIntent {
         }
 
         guard let exportConfiguration else {
-            return .result(dialog: "没有找到接口配置，请先打开 Health Export App 添加配置")
+            return .result(dialog: IntentDialog(stringLiteral: IntentStrings.text("intent.send_health_data.dialog.missing_config")))
         }
 
         do {
             let result = try await HealthKitExporter().send(configuration: exportConfiguration, shouldRequestAuthorization: false)
             await ConfigurationStore.shared.markSent(id: exportConfiguration.id, status: result)
-            return .result(dialog: "\(exportConfiguration.name)：\(result)")
+            return .result(dialog: IntentDialog(stringLiteral: "\(exportConfiguration.name): \(result)"))
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             await ConfigurationStore.shared.markSent(id: exportConfiguration.id, status: message)
-            return .result(dialog: "\(exportConfiguration.name)：\(message)")
+            return .result(dialog: IntentDialog(stringLiteral: "\(exportConfiguration.name): \(message)"))
         }
     }
 }
@@ -85,14 +136,14 @@ struct StartAppSessionIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let trimmedApp = appName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedApp.isEmpty else {
-            return .result(dialog: "App 名称不能为空")
+            return .result(dialog: IntentDialog(stringLiteral: IntentStrings.text("intent.start_app_session.dialog.empty_app_name")))
         }
         do {
             try await AppSessionAPI.start(appName: trimmedApp, bundleId: bundleId, note: note)
-            return .result(dialog: "已开始计时：\(trimmedApp)")
+            return .result(dialog: IntentDialog(stringLiteral: IntentStrings.text("intent.start_app_session.dialog.success", trimmedApp)))
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            return .result(dialog: "开始失败：\(message)")
+            return .result(dialog: IntentDialog(stringLiteral: IntentStrings.text("intent.start_app_session.dialog.failure", message)))
         }
     }
 }
@@ -111,10 +162,10 @@ struct EndAppSessionIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         do {
             try await AppSessionAPI.end(note: note, endReason: endReason)
-            return .result(dialog: "已结束 App 计时")
+            return .result(dialog: IntentDialog(stringLiteral: IntentStrings.text("intent.end_app_session.dialog.success")))
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            return .result(dialog: "结束失败：\(message)")
+            return .result(dialog: IntentDialog(stringLiteral: IntentStrings.text("intent.end_app_session.dialog.failure", message)))
         }
     }
 }
@@ -173,7 +224,7 @@ enum AppSessionAPI {
             return try await HTTPClient.shared.data(url: url, method: .post, body: body)
         } catch let error as HTTPClientError {
             if case let .httpFailure(statusCode, data) = error {
-                let message = (try? JSONDecoder().decode(AppSessionErrorResponse.self, from: data))?.error ?? "请求失败"
+                let message = (try? JSONDecoder().decode(AppSessionErrorResponse.self, from: data))?.error ?? IntentStrings.text("intent.app_session.request_failed")
                 throw AppSessionAPIError(statusCode: statusCode, message: message)
             }
             throw error

@@ -123,7 +123,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             do {
                 detail = try await FitnessAPIClient.sessionDetail(id: payload.sessionId)
             } catch {
-                errorMessage = "训练详情加载失败"
+                errorMessage = SharedL10n.tr("fitness.session.load_failed")
             }
             isLoading = false
         } while needsReloadAfterCurrentLoad
@@ -240,7 +240,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             }
             await load()
         } catch {
-            errorMessage = "保存组状态失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.session.save_set_failed")
         }
     }
 
@@ -282,7 +282,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
-            errorMessage = "添加组失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.session.add_set_failed")
         }
     }
 
@@ -344,7 +344,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
-            errorMessage = "删除组失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.session.delete_set_failed")
         }
     }
 
@@ -375,7 +375,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
-            errorMessage = "删除动作失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.session.delete_exercise_failed")
         }
     }
 
@@ -426,7 +426,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
-            errorMessage = "添加动作失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.session.add_exercise_failed")
         }
     }
 
@@ -467,7 +467,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
             await load()
         } catch {
-            errorMessage = "调整顺序失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.session.reorder_failed")
             await load()
         }
     }
@@ -556,7 +556,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             if FitnessAPIClient.isMissingResourceError(error) {
                 return true
             }
-            errorMessage = "完成训练失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.session.complete_failed")
             return false
         }
     }
@@ -584,7 +584,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             if FitnessAPIClient.isMissingResourceError(error) {
                 return true
             }
-            errorMessage = "保存并更新模板失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.session.complete_update_template_failed")
             return false
         }
     }
@@ -651,7 +651,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
                 PhoneWatchSync.shared.requestWorkoutDeletion(sessionId: payload.sessionId)
                 return true
             }
-            errorMessage = "删除训练失败，请检查网络"
+            errorMessage = SharedL10n.tr("fitness.session.discard_failed")
             return false
         }
     }
@@ -695,7 +695,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             let paused = contexts.first { $0.set.timerStatus == "paused" && !$0.set.isCompleted }
             return WorkoutMiniPlayerState(
                 title: paused?.exercise.name ?? detail.name,
-                prefix: "训练暂停",
+                prefix: SharedL10n.tr("fitness.session.prefix.paused_workout"),
                 timeText: paused.map { Self.clockText($0.set.timerAccumulatedSeconds ?? 0) } ?? Self.clockText(elapsedSeconds(at: now)),
                 tint: Color(hex: "8E8E93"), actionSymbol: "play.fill",
                 actionFill: .white, actionForeground: Color(hex: "1C1C1E"),
@@ -707,7 +707,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             let base = running.set.timerAccumulatedSeconds ?? 0
             let live = running.set.timerStartedAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
             return WorkoutMiniPlayerState(
-                title: running.exercise.name, prefix: "运动",
+                title: running.exercise.name, prefix: SharedL10n.tr("fitness.session.prefix.active"),
                 timeText: Self.clockText(base + live),
                 tint: Color(hex: "FF7847"), actionSymbol: "checkmark",
                 actionFill: Color(hex: "34C982"), actionForeground: .white,
@@ -717,7 +717,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
 
         if let paused = contexts.first(where: { $0.set.timerStatus == "paused" && !$0.set.isCompleted }) {
             return WorkoutMiniPlayerState(
-                title: paused.exercise.name, prefix: "暂停",
+                title: paused.exercise.name, prefix: SharedL10n.tr("fitness.session.prefix.paused"),
                 timeText: Self.clockText(paused.set.timerAccumulatedSeconds ?? 0),
                 tint: Color(hex: "8E8E93"), actionSymbol: "play.fill",
                 actionFill: .white, actionForeground: Color(hex: "1C1C1E"),
@@ -737,7 +737,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
             let remaining = max(0, restSeconds - elapsed)
             return WorkoutMiniPlayerState(
                 title: next.exercise.name,
-                prefix: remaining == 0 ? "休息完成" : "休息",
+                prefix: remaining == 0 ? SharedL10n.tr("fitness.session.prefix.rest_done") : SharedL10n.tr("fitness.session.prefix.resting"),
                 timeText: Self.clockText(remaining),
                 tint: remaining == 0 ? Color(hex: "34C982") : Color(hex: "4B8CFF"),
                 actionSymbol: "play.fill",
@@ -753,7 +753,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
         let next = contexts.first { !$0.set.isCompleted && $0.set.timerStatus != "running" }
         if next == nil && !contexts.isEmpty {
             return WorkoutMiniPlayerState(
-                title: detail.name, prefix: "完成",
+                title: detail.name, prefix: SharedL10n.tr("common.done"),
                 timeText: Self.clockText(elapsedSeconds(at: now)),
                 tint: Color(hex: "34C982"), actionSymbol: "flag.checkered",
                 actionFill: Color(hex: "34C982"), actionForeground: .white,
@@ -762,7 +762,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
         }
 
         return WorkoutMiniPlayerState(
-            title: next?.exercise.name ?? detail.name, prefix: "准备",
+            title: next?.exercise.name ?? detail.name, prefix: SharedL10n.tr("fitness.session.prefix.ready"),
             timeText: "00:00", tint: Color(hex: "4B8CFF"), actionSymbol: "play.fill",
             actionFill: .white, actionForeground: Color(hex: "1C1C1E"),
             actionDisabled: next == nil, restDueSetId: nil
@@ -825,7 +825,7 @@ final class FitnessActiveSessionViewModel: ObservableObject {
                 PhoneWatchSync.shared.broadcastSessionChanged(payload.sessionId)
                 errorMessage = nil
             } catch {
-                errorMessage = "训练操作未同步，稍后自动重试"
+                errorMessage = SharedL10n.tr("fitness.session.pending_retry")
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 if pendingOperations.first?.operationId == operation.operationId {
                     Task { await flushPendingOperations() }

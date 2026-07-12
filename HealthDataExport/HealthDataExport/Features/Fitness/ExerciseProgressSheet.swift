@@ -32,7 +32,7 @@ private final class ExerciseProgressViewModel: ObservableObject {
         do {
             progress = try await FitnessAPIClient.exerciseProgress(exerciseId: target.exerciseId, range: selectedRange)
         } catch {
-            errorMessage = "历史记录加载失败"
+            errorMessage = SharedL10n.tr("fitness.progress.load_failed")
         }
     }
 
@@ -89,7 +89,7 @@ struct ExerciseProgressSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { Haptics.tap(); dismiss() }
+                    Button(SharedL10n.tr("fitness.progress.close")) { Haptics.tap(); dismiss() }
                 }
             }
         }
@@ -102,7 +102,11 @@ struct ExerciseProgressSheet: View {
 
     private var rangePickerBar: some View {
         HStack(spacing: 8) {
-            ForEach([("30d", "30天"), ("90d", "90天"), ("1y", "1年")], id: \.0) { range, label in
+            ForEach([
+                ("30d", SharedL10n.tr("fitness.progress.range.30d")),
+                ("90d", SharedL10n.tr("fitness.progress.range.90d")),
+                ("1y", SharedL10n.tr("fitness.progress.range.1y"))
+            ], id: \.0) { range, label in
                 Button {
                     Task { await vm.changeRange(range) }
                 } label: {
@@ -129,10 +133,10 @@ struct ExerciseProgressSheet: View {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(Color(hex: "8E8E93"))
-            Text("暂无历史记录")
+            Text(SharedL10n.tr("fitness.progress.empty_title"))
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(Color(hex: "1C1C1E"))
-            Text("完成几次包含该动作的训练后，这里会显示进展趋势和历史记录。")
+            Text(SharedL10n.tr("fitness.progress.empty_subtitle"))
                 .font(.system(size: 15))
                 .foregroundStyle(Color(hex: "6F6F76"))
                 .multilineTextAlignment(.center)
@@ -210,7 +214,7 @@ struct ExerciseProgressSheet: View {
                 Text(summary.latestMetricValue.map { Self.cleanNumber($0) } ?? "--")
                     .font(.system(size: 30, weight: .heavy))
                     .foregroundStyle(Color(hex: "1C1C1E"))
-                Text("kg")
+                Text(L10n.tr("fitness.common.kilogram_short"))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color(hex: "8E8E93"))
             }
@@ -255,25 +259,25 @@ struct ExerciseProgressSheet: View {
     private func statCells(_ summary: ExerciseProgressSummaryData, display: ExerciseProgressDisplayConfig) -> [(String, String)] {
         if display.usesDistance && display.usesDuration {
             return [
-                (summary.bestDistanceMeters.map(Self.distanceText) ?? "--", "最远距离"),
-                (summary.bestDurationSeconds.map(Self.durationText) ?? "--", "最长用时"),
-                (summary.totalDistanceMeters.map(Self.distanceText) ?? "--", "累计距离"),
-                ("\(summary.sessionCount)", "训练次数")
+                (summary.bestDistanceMeters.map(Self.distanceText) ?? "--", SharedL10n.tr("fitness.progress.stat.farthest_distance")),
+                (summary.bestDurationSeconds.map(Self.durationText) ?? "--", SharedL10n.tr("fitness.progress.stat.longest_elapsed")),
+                (summary.totalDistanceMeters.map(Self.distanceText) ?? "--", SharedL10n.tr("fitness.progress.stat.total_distance")),
+                ("\(summary.sessionCount)", SharedL10n.tr("fitness.progress.stat.session_count"))
             ]
         }
         if display.usesDuration {
             return [
-                (summary.bestDurationSeconds.map(Self.durationText) ?? "--", "最长时长"),
-                (summary.totalDurationSeconds.map(Self.durationText) ?? "--", "累计时长"),
-                ("\(summary.completedSetCount)", "完成组数"),
-                ("\(summary.sessionCount)", "训练次数")
+                (summary.bestDurationSeconds.map(Self.durationText) ?? "--", SharedL10n.tr("fitness.progress.stat.longest_duration")),
+                (summary.totalDurationSeconds.map(Self.durationText) ?? "--", SharedL10n.tr("fitness.progress.stat.total_duration")),
+                ("\(summary.completedSetCount)", SharedL10n.tr("fitness.progress.stat.completed_sets")),
+                ("\(summary.sessionCount)", SharedL10n.tr("fitness.progress.stat.session_count"))
             ]
         }
         return [
-            (summary.bestWeightKg.map { "\(Self.cleanNumber($0)) kg" } ?? "--", "最大重量"),
-            (summary.bestReps.map { "\($0) 次" } ?? "--", "最多次数"),
-            (summary.totalVolumeKg.map { $0 >= 1000 ? String(format: "%.1ft", $0/1000) : "\(Int($0))kg" } ?? "--", "总训练量"),
-            ("\(summary.sessionCount)", "训练次数")
+            (summary.bestWeightKg.map { Self.weightText($0) } ?? "--", SharedL10n.tr("fitness.progress.stat.max_weight")),
+            (summary.bestReps.map { SharedL10n.tr("fitness.progress.reps_value", $0) } ?? "--", SharedL10n.tr("fitness.progress.stat.max_reps")),
+            (summary.totalVolumeKg.map(Self.volumeText) ?? "--", SharedL10n.tr("fitness.progress.stat.total_volume")),
+            ("\(summary.sessionCount)", SharedL10n.tr("fitness.progress.stat.session_count"))
         ]
     }
 
@@ -297,7 +301,7 @@ struct ExerciseProgressSheet: View {
         let kind = effectiveKind(display)
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("进展趋势")
+                Text(SharedL10n.tr("fitness.progress.trend_title"))
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(Color(hex: "1C1C1E"))
                 Spacer()
@@ -323,7 +327,7 @@ struct ExerciseProgressSheet: View {
 
     private func historySection(_ history: [ExerciseHistorySessionItem], display: ExerciseProgressDisplayConfig) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("历史记录")
+            Text(SharedL10n.tr("fitness.progress.history_title"))
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(Color(hex: "1C1C1E"))
             let visible = Array(history.prefix(10))
@@ -379,7 +383,7 @@ struct ExerciseProgressSheet: View {
             }
         } else {
             if let metric = session.metricValue {
-                Text("1RM \(Self.cleanNumber(metric)) kg")
+                Text(SharedL10n.tr("fitness.progress.metric.estimated_1rm", Self.cleanNumber(metric)))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color(hex: "8E8E93"))
             }
@@ -388,7 +392,7 @@ struct ExerciseProgressSheet: View {
 
     private func sessionSetRow(_ set: ExerciseHistorySetItem, display: ExerciseProgressDisplayConfig) -> some View {
         HStack(spacing: 6) {
-            Text("组\(set.setOrder)")
+            Text(SharedL10n.tr("fitness.progress.set_index", set.setOrder))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(set.isCompleted ? Color(hex: "FF7847") : Color(hex: "C0C3CC"))
                 .frame(width: 24, alignment: .leading)
@@ -399,7 +403,7 @@ struct ExerciseProgressSheet: View {
 
             if display.metricKind == "estimated_1rm", let rm = set.estimated1Rm, set.isCompleted {
                 Spacer()
-                Text("≈\(Self.cleanNumber(rm)) kg")
+                Text(SharedL10n.tr("fitness.progress.metric.estimated_1rm_approx", Self.cleanNumber(rm)))
                     .font(.system(size: 11))
                     .foregroundStyle(Color(hex: "8E8E93"))
             }
@@ -416,23 +420,23 @@ struct ExerciseProgressSheet: View {
             return set.actualDurationSeconds.map(Self.durationText) ?? "--"
         }
         if display.usesWeight {
-            let w = set.actualWeightKg.map { "\(Self.cleanNumber($0)) kg" } ?? "--"
-            let r = set.actualReps.map { "× \($0)" } ?? ""
+            let w = set.actualWeightKg.map(Self.weightText) ?? "--"
+            let r = set.actualReps.map { SharedL10n.tr("fitness.progress.reps_multiply", $0) } ?? ""
             return "\(w) \(r)".trimmingCharacters(in: .whitespaces)
         }
-        return set.actualReps.map { "\($0) 次" } ?? "--"
+        return set.actualReps.map { SharedL10n.tr("fitness.progress.reps_value", $0) } ?? "--"
     }
 
     // MARK: Display helpers
 
     private func heroLabel(_ kind: String) -> String {
         switch kind {
-        case "distance": return "最近一次总距离"
-        case "duration": return "最近一次总时长"
-        case "volume":   return "最近一次总训练量"
-        case "weight":   return "最近一次最大重量"
-        case "reps":     return "最近一次最多次数"
-        default:         return "当前 1RM 估算"
+        case "distance": return SharedL10n.tr("fitness.progress.hero.distance")
+        case "duration": return SharedL10n.tr("fitness.progress.hero.duration")
+        case "volume":   return SharedL10n.tr("fitness.progress.hero.volume")
+        case "weight":   return SharedL10n.tr("fitness.progress.hero.weight")
+        case "reps":     return SharedL10n.tr("fitness.progress.hero.reps")
+        default:         return SharedL10n.tr("fitness.progress.hero.estimated_1rm")
         }
     }
 
@@ -450,8 +454,20 @@ struct ExerciseProgressSheet: View {
         return String(format: "%02d:%02d", m, s)
     }
 
+    static func weightText(_ value: Double) -> String {
+        SharedL10n.tr("fitness.progress.weight_value", cleanNumber(value))
+    }
+
+    static func volumeText(_ value: Double) -> String {
+        value >= 1000
+            ? SharedL10n.tr("fitness.progress.volume_tonne_value", cleanNumber(value / 1000))
+            : SharedL10n.tr("fitness.progress.volume_kg_value", Int(value))
+    }
+
     static func distanceText(_ meters: Double) -> String {
-        meters >= 1000 ? String(format: "%.2f km", meters / 1000) : "\(Int(meters)) m"
+        meters >= 1000
+            ? SharedL10n.tr("fitness.progress.distance_km_value", cleanNumber(meters / 1000))
+            : SharedL10n.tr("fitness.progress.distance_m_value", Int(meters))
     }
 
     static func shortDateStr(_ dateStr: String) -> String {
