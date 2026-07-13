@@ -194,7 +194,7 @@ struct Calendar2EventFormSheet: View {
                 .frame(width: 13, height: 13)
             Text(isEdit ? L10n.tr("calendar.event_form.title.edit") : L10n.tr("calendar.event_form.title.create"))
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(hex: "23232A"))
+                .foregroundStyle(Calendar2Style.text)
             Spacer()
             if isEdit {
                 Button {
@@ -221,7 +221,7 @@ struct Calendar2EventFormSheet: View {
                         .font(.system(size: 17, weight: .medium))
                         .foregroundStyle(Color(hex: "E5564B"))
                         .frame(width: 38, height: 38)
-                        .background(Color(hex: "FCEBE9"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(Color(lightHex: "FCEBE9", darkHex: "432522"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(Calendar2PressStyle())
             }
@@ -268,7 +268,7 @@ struct Calendar2EventFormSheet: View {
                 .disableAutocorrection(true)
                 .focused($isQuickEntryFocused)
                 .font(.system(size: 21, weight: .semibold))
-                .foregroundStyle(Color(hex: "23232A"))
+                .foregroundStyle(Calendar2Style.text)
                 .tint(Calendar2Style.accent)
                 .padding(.top, 2)
 
@@ -306,13 +306,13 @@ struct Calendar2EventFormSheet: View {
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color(hex: "23232A"))
+                .foregroundStyle(Calendar2Style.text)
                 .padding(.horizontal, 16)
                 .frame(height: 52)
-                .background(.white, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+                        .stroke(Calendar2Style.line, lineWidth: 1.5)
                 )
         }
     }
@@ -345,7 +345,7 @@ struct Calendar2EventFormSheet: View {
                 HStack(spacing: 6) {
                     Image(systemName: "calendar")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Color(hex: "8A8A92"))
+                        .foregroundStyle(Calendar2Style.muted)
                     DatePicker("", selection: dateBinding, displayedComponents: .date)
                         .labelsHidden()
                         .datePickerStyle(.compact)
@@ -363,7 +363,7 @@ struct Calendar2EventFormSheet: View {
             }
         }
         .padding(18)
-        .background(Color(hex: "F6F6F8"), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(Calendar2Style.surface2, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     // MARK: - Category Section
@@ -392,14 +392,14 @@ struct Calendar2EventFormSheet: View {
                             Circle().fill(item.color).frame(width: 9, height: 9)
                             Text(item.label)
                                 .font(.system(size: 15, weight: isOn ? .semibold : .medium))
-                                .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
+                                .foregroundStyle(isOn ? Calendar2Style.text : Calendar2Style.text2)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 46)
                         .background(
-                            isOn ? item.color.opacity(0.13) : Color(hex: "F5F5F7"),
+                            isOn ? item.color.opacity(0.18) : Calendar2Style.surface2,
                             in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                         )
                         .overlay(
@@ -445,14 +445,14 @@ struct Calendar2EventFormSheet: View {
                                 Circle().fill(tint).frame(width: 9, height: 9)
                                 Text(type.label)
                                     .font(.system(size: 15, weight: isOn ? .semibold : .medium))
-                                    .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
+                                    .foregroundStyle(isOn ? Calendar2Style.text : Calendar2Style.text2)
                                     .lineLimit(1)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .frame(height: 44)
                             .padding(.horizontal, 14)
                             .background(
-                                isOn ? tint.opacity(0.13) : Color(hex: "F5F5F7"),
+                                isOn ? tint.opacity(0.18) : Calendar2Style.surface2,
                                 in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                             )
                             .overlay(
@@ -491,10 +491,10 @@ struct Calendar2EventFormSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: symbol)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(isOn ? Calendar2Style.accent : Color(hex: "9A9AA2"))
+                    .foregroundStyle(isOn ? Calendar2Style.accent : Calendar2Style.muted)
                 Text(title)
                     .font(.system(size: 15, weight: isOn ? .semibold : .medium))
-                    .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
+                    .foregroundStyle(isOn ? Calendar2Style.text : Calendar2Style.text2)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -502,7 +502,7 @@ struct Calendar2EventFormSheet: View {
             .frame(height: 44)
             .padding(.horizontal, 14)
             .background(
-                isOn ? Calendar2Style.accent.opacity(0.11) : Color(hex: "F5F5F7"),
+                isOn ? Calendar2Style.accent.opacity(0.16) : Calendar2Style.surface2,
                 in: RoundedRectangle(cornerRadius: 13, style: .continuous)
             )
             .overlay(
@@ -523,13 +523,13 @@ struct Calendar2EventFormSheet: View {
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .font(.system(size: 16))
-                .foregroundStyle(Color(hex: "23232A"))
+                .foregroundStyle(Calendar2Style.text)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
-                .background(.white, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+                        .stroke(Calendar2Style.line, lineWidth: 1.5)
                 )
         }
     }
@@ -584,7 +584,7 @@ struct Calendar2EventFormSheet: View {
         Text(title)
             .font(.system(size: 12.5, weight: .semibold))
             .tracking(0.6)
-            .foregroundStyle(Color(hex: "9A9AA2"))
+            .foregroundStyle(Calendar2Style.muted)
     }
 
     private func openDetails() {

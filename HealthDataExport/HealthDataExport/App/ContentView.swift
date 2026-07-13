@@ -369,6 +369,7 @@ extension View {
 private struct ProfileTabView: View {
     @EnvironmentObject private var localization: LocalizationStore
     @EnvironmentObject private var session: SessionStore
+    @AppStorage(AppAppearance.storageKey) private var appearance = AppAppearance.system
 
     var body: some View {
         NavigationStack {
@@ -392,6 +393,17 @@ private struct ProfileTabView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+                Section(localization.text("profile.section.appearance")) {
+                    Picker(localization.text("profile.appearance.label"), selection: $appearance) {
+                        ForEach(AppAppearance.allCases) { option in
+                            Label(localization.text(option.titleKey), systemImage: appearanceSymbol(for: option))
+                                .tag(option)
+                        }
+                    }
+                    Text(localization.text("profile.appearance.help"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 Section {
                     Button(role: .destructive) {
                         Haptics.tap()
@@ -402,6 +414,14 @@ private struct ProfileTabView: View {
                 }
             }
             .navigationTitle(localization.text("profile.title"))
+        }
+    }
+
+    private func appearanceSymbol(for appearance: AppAppearance) -> String {
+        switch appearance {
+        case .system: "circle.lefthalf.filled"
+        case .light: "sun.max.fill"
+        case .dark: "moon.fill"
         }
     }
 }

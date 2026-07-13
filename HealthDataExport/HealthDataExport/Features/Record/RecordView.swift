@@ -80,13 +80,13 @@ struct RecordView: View {
             AddShortcutSheet(store: store, calendarStore: calendarStore)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(.white)
+                .presentationBackground(Calendar2Style.sheet)
         }
         .sheet(item: $editingTask) { task in
             AddShortcutSheet(store: store, calendarStore: calendarStore, editingTask: task)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(.white)
+                .presentationBackground(Calendar2Style.sheet)
         }
         .sheet(isPresented: $showCalendar) {
             CalendarTrackerView2(store: calendarStore)
@@ -103,7 +103,7 @@ struct RecordView: View {
             })
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
-            .presentationBackground(.white)
+            .presentationBackground(Calendar2Style.sheet)
         }
         .alert(SharedL10n.tr("record.alert.rename_intention"), isPresented: Binding(
             get: { renamingIntention != nil },
@@ -859,7 +859,7 @@ private struct IntentionBoardSheet: View {
                 .foregroundStyle(Calendar2Style.accent)
             Text(SharedL10n.tr("record.intentions.board_title"))
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(hex: "23232A"))
+                .foregroundStyle(Calendar2Style.text)
 
             Spacer()
 
@@ -912,7 +912,7 @@ private struct IntentionBoardSheet: View {
                     HStack(spacing: 10) {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Color(hex: "9A9AA2"))
+                            .foregroundStyle(Calendar2Style.muted)
                             .rotationEffect(.degrees(isCollapsed ? -90 : 0))
 
                         Image(systemName: goal == nil ? "tray" : (goal!.isProject ? "folder.fill" : "target"))
@@ -921,13 +921,13 @@ private struct IntentionBoardSheet: View {
 
                         Text(goal?.name ?? SharedL10n.tr("record.intentions.group_public"))
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(Color(hex: "2A2A30"))
+                            .foregroundStyle(Calendar2Style.text)
                             .lineLimit(1)
 
                         if !groupItems.isEmpty {
                             Text("\(doneCount)/\(groupItems.count)")
                                 .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(Color(hex: "9A9AA2"))
+                                .foregroundStyle(Calendar2Style.muted)
                         }
 
                         if let trackedLabel {
@@ -1010,14 +1010,14 @@ private struct IntentionBoardSheet: View {
             } label: {
                 Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 21, weight: .regular))
-                    .foregroundStyle(item.isCompleted ? Color(hex: "22C55E") : Color(hex: "C9C9CF"))
+                    .foregroundStyle(item.isCompleted ? Color(hex: "22C55E") : Calendar2Style.faint)
             }
             .buttonStyle(HapticButtonStyle())
 
             Text(item.name)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(item.isCompleted ? Color(hex: "9A9AA2") : (isRunning ? Calendar2Style.accent : Color(hex: "2A2A30")))
-                .strikethrough(item.isCompleted, color: Color(hex: "9A9AA2"))
+                .foregroundStyle(item.isCompleted ? Calendar2Style.muted : (isRunning ? Calendar2Style.accent : Calendar2Style.text))
+                .strikethrough(item.isCompleted, color: Calendar2Style.muted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
 
@@ -1035,9 +1035,9 @@ private struct IntentionBoardSheet: View {
                 } label: {
                     Image(systemName: "doc.on.doc")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color(hex: "9A9AA2"))
+                        .foregroundStyle(Calendar2Style.muted)
                         .frame(width: 30, height: 30)
-                        .background(Color(hex: "EFEFF2"), in: Circle())
+                        .background(Calendar2Style.surface2, in: Circle())
                 }
                 .buttonStyle(HapticButtonStyle())
             }
@@ -1068,7 +1068,7 @@ private struct IntentionBoardSheet: View {
         .padding(.horizontal, 13)
         .frame(height: 52)
         .background(
-            isRunning ? Calendar2Style.accent.opacity(0.08) : Color(hex: "F5F5F7"),
+            isRunning ? Calendar2Style.accent.opacity(0.12) : Calendar2Style.surface2,
             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
         .overlay(
@@ -1110,14 +1110,14 @@ private struct IntentionBoardSheet: View {
         HStack(spacing: 11) {
             Image(systemName: "circle")
                 .font(.system(size: 21, weight: .regular))
-                .foregroundStyle(Color(hex: "C9C9CF"))
+                .foregroundStyle(Calendar2Style.faint)
 
             TextField(SharedL10n.tr("record.intentions.draft_placeholder"), text: $draftText)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .focused($isDraftFocused)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color(hex: "2A2A30"))
+                .foregroundStyle(Calendar2Style.text)
                 .submitLabel(.done)
                 .onSubmit {
                     commitDraft()
@@ -1128,10 +1128,10 @@ private struct IntentionBoardSheet: View {
             } label: {
                 Image(systemName: "repeat")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(draftRepeating ? .white : Color(hex: "9A9AA2"))
+                    .foregroundStyle(draftRepeating ? .white : Calendar2Style.muted)
                     .frame(width: 30, height: 30)
                     .background(
-                        draftRepeating ? Calendar2Style.accent : Color(hex: "EFEFF2"),
+                        draftRepeating ? Calendar2Style.accent : Calendar2Style.surface2,
                         in: Circle()
                     )
             }
@@ -1139,7 +1139,7 @@ private struct IntentionBoardSheet: View {
         }
         .padding(.horizontal, 13)
         .frame(height: 52)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Calendar2Style.accent.opacity(0.45), lineWidth: 1.5)
@@ -1196,7 +1196,7 @@ private struct IntentionBoardSheet: View {
                 .background(Calendar2Style.sheet, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+                        .stroke(Calendar2Style.line, lineWidth: 1.5)
                 )
 
             HStack(spacing: 10) {
@@ -1236,7 +1236,7 @@ private struct IntentionBoardSheet: View {
             }
         }
         .padding(14)
-        .background(Color(hex: "F5F5F7"), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background(Calendar2Style.surface2, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 
     private func createGoal() {
@@ -1377,7 +1377,7 @@ private struct AddShortcutSheet: View {
                 .frame(width: 13, height: 13)
             Text(editingTask == nil ? SharedL10n.tr("record.shortcut.title_new") : SharedL10n.tr("record.shortcut.title_edit"))
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(hex: "23232A"))
+                .foregroundStyle(Calendar2Style.text)
             Spacer()
         }
     }
@@ -1392,13 +1392,13 @@ private struct AddShortcutSheet: View {
                 .disableAutocorrection(true)
                 .focused($isNameFocused)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color(hex: "23232A"))
+                .foregroundStyle(Calendar2Style.text)
                 .padding(.horizontal, 16)
                 .frame(height: 52)
                 .background(Calendar2Style.sheet, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+                        .stroke(Calendar2Style.line, lineWidth: 1.5)
                 )
         }
     }
@@ -1417,11 +1417,11 @@ private struct AddShortcutSheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(trimmedName.isEmpty ? SharedL10n.tr("record.shortcut.auto_icon") : trimmedName)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color(hex: "2A2A30"))
+                        .foregroundStyle(Calendar2Style.text)
                         .lineLimit(1)
                     Text(SharedL10n.tr("record.shortcut.auto_icon_rule", "\(category.label)\(pickedType.map { " · \($0.label)" } ?? "")"))
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color(hex: "9A9AA2"))
+                        .foregroundStyle(Calendar2Style.muted)
                         .lineLimit(1)
                 }
                 Spacer()
@@ -1429,10 +1429,10 @@ private struct AddShortcutSheet: View {
             .padding(.horizontal, 14)
             .frame(height: 68)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(hex: "F5F5F7"), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .background(Calendar2Style.surface2, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(Color(hex: "ECECEF"), lineWidth: 1.5)
+                    .stroke(Calendar2Style.line, lineWidth: 1.5)
             )
         }
     }
@@ -1458,14 +1458,14 @@ private struct AddShortcutSheet: View {
                             Circle().fill(item.color).frame(width: 9, height: 9)
                             Text(item.label)
                                 .font(.system(size: 15, weight: isOn ? .semibold : .medium))
-                                .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
+                                .foregroundStyle(isOn ? Calendar2Style.text : Calendar2Style.text2)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 46)
                         .background(
-                            isOn ? item.color.opacity(0.13) : Color(hex: "F5F5F7"),
+                            isOn ? item.color.opacity(0.18) : Calendar2Style.surface2,
                             in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                         )
                         .overlay(
@@ -1505,14 +1505,14 @@ private struct AddShortcutSheet: View {
                                 Circle().fill(tint).frame(width: 9, height: 9)
                                 Text(type.label)
                                     .font(.system(size: 15, weight: isOn ? .semibold : .medium))
-                                    .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
+                                    .foregroundStyle(isOn ? Calendar2Style.text : Calendar2Style.text2)
                                     .lineLimit(1)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .frame(height: 44)
                             .padding(.horizontal, 14)
                             .background(
-                                isOn ? tint.opacity(0.13) : Color(hex: "F5F5F7"),
+                                isOn ? tint.opacity(0.18) : Calendar2Style.surface2,
                                 in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                             )
                             .overlay(
@@ -1577,7 +1577,7 @@ private struct AddShortcutSheet: View {
         Text(title)
             .font(.system(size: 12.5, weight: .semibold))
             .tracking(0.6)
-            .foregroundStyle(Color(hex: "9A9AA2"))
+            .foregroundStyle(Calendar2Style.muted)
     }
 
     private func save() {
@@ -1686,19 +1686,19 @@ private extension View {
 }
 
 private enum Design {
-    static let bg = Color(hex: "F5F6F8")
-    static let surface = Color(hex: "FFFFFF")
-    static let surface2 = Color(hex: "F0F1F4")
-    static let line = Color(hex: "E9EBF0")
-    static let text = Color(hex: "1E2333")
-    static let muted = Color(hex: "8A8F9C")
-    static let icon = Color(hex: "6F7480")
-    static let iconSurface = Color(hex: "F7F8FA")
-    static let iconLine = Color(hex: "EEF0F3")
+    static let bg = Calendar2Style.bg
+    static let surface = Calendar2Style.surface
+    static let surface2 = Calendar2Style.surface2
+    static let line = Calendar2Style.line
+    static let text = Calendar2Style.text
+    static let muted = Calendar2Style.muted
+    static let icon = Calendar2Style.text2
+    static let iconSurface = Calendar2Style.surface2
+    static let iconLine = Calendar2Style.line
     // Prototype primary is blue; the 结束 button is dark navy.
     static let accentHex = "0A84FF"
     static let accent = Color(hex: accentHex)
-    static let accentSoft = Color(hex: "EAF4FF")
+    static let accentSoft = Color(lightHex: "EAF4FF", darkHex: "172C42")
     // "结束" button: muted blue-gray slate with a white label.
     static let stopFill = Color(hex: "5A6479")
     static let green = Color(hex: "22C55E")

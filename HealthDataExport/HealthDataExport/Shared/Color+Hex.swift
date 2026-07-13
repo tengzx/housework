@@ -2,6 +2,14 @@ import SwiftUI
 import UIKit
 
 extension Color {
+#if os(iOS)
+    init(lightHex: String, darkHex: String) {
+        self.init(uiColor: UIColor { traits in
+            UIColor(Color(hex: traits.userInterfaceStyle == .dark ? darkHex : lightHex))
+        })
+    }
+#endif
+
     init(hex: String) {
         var value = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.hasPrefix("#") {

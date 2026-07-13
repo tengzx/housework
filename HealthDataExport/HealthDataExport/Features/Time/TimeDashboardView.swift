@@ -450,6 +450,23 @@ final class TimeDashboardViewModel: ObservableObject {
 
     var taskID: String { "\(granularity.rawValue)-\(anchorDate.dashboardDateString)" }
 
+    func selectGranularity(_ value: DashboardGranularity) {
+        granularity = value
+        anchorDate = .now
+    }
+
+    func resetToCurrentPeriod() {
+        anchorDate = .now
+    }
+
+    func switchGranularity(by offset: Int) {
+        let values = DashboardGranularity.allCases
+        guard let currentIndex = values.firstIndex(of: granularity) else { return }
+        let nextIndex = currentIndex + offset
+        guard values.indices.contains(nextIndex) else { return }
+        selectGranularity(values[nextIndex])
+    }
+
     var selectedComposition: DashboardCompositionResponse? {
         guard let kind = selectedCard?.loadKind else { return nil }
         return compositionMap[kind]
@@ -470,8 +487,12 @@ final class TimeDashboardViewModel: ObservableObject {
         case .day:
             let fmt = DateFormatter()
             fmt.locale = L10n.locale
-            fmt.setLocalizedDateFormatFromTemplate("M d EEEE")
-            return fmt.string(from: anchorDate)
+            fmt.setLocalizedDateFormatFromTemplate("Md")
+            return SharedL10n.tr(
+                "time.dashboard.date.day",
+                fmt.string(from: anchorDate),
+                localizedWeekday(for: anchorDate, calendar: cal)
+            )
         case .week:
             let weekday = cal.component(.weekday, from: anchorDate)
             let daysToMon = (weekday - 2 + 7) % 7
@@ -481,10 +502,7 @@ final class TimeDashboardViewModel: ObservableObject {
             let weekOfMonth = (day - 1) / 7 + 1
             return SharedL10n.tr("time.dashboard.week_of_month", month, weekOfMonth)
         case .month:
-            let fmt = DateFormatter()
-            fmt.locale = L10n.locale
-            fmt.setLocalizedDateFormatFromTemplate("yMMMM")
-            return fmt.string(from: anchorDate)
+            return localizedMonth(for: anchorDate, calendar: cal)
         }
     }
 
@@ -504,9 +522,29 @@ final class TimeDashboardViewModel: ObservableObject {
             fmt.setLocalizedDateFormatFromTemplate("Md")
             return SharedL10n.tr("time.dashboard.range_between", fmt.string(from: monday), fmt.string(from: sunday))
         case .month:
-            fmt.setLocalizedDateFormatFromTemplate("yMMMM")
-            return fmt.string(from: anchorDate)
+            return localizedMonth(for: anchorDate, calendar: cal)
         }
+    }
+
+    private func localizedWeekday(for date: Date, calendar: Calendar) -> String {
+        let keys = [
+            "time.dashboard.weekday.sunday",
+            "time.dashboard.weekday.monday",
+            "time.dashboard.weekday.tuesday",
+            "time.dashboard.weekday.wednesday",
+            "time.dashboard.weekday.thursday",
+            "time.dashboard.weekday.friday",
+            "time.dashboard.weekday.saturday"
+        ]
+        let index = max(0, min(calendar.component(.weekday, from: date) - 1, keys.count - 1))
+        return SharedL10n.tr(keys[index])
+    }
+
+    private func localizedMonth(for date: Date, calendar: Calendar) -> String {
+        let month = calendar.component(.month, from: date)
+        let year = calendar.component(.year, from: date)
+        let monthName = SharedL10n.tr("time.dashboard.month_name.\(month)")
+        return SharedL10n.tr("time.dashboard.date.month", monthName, year)
     }
 
     func load() async {
@@ -616,8 +654,20 @@ final class TimeDashboardViewModel: ObservableObject {
 
 // MARK: - Main View
 
+private enum TimeDashboardStyle {
+    static let background = Color(lightHex: "F5F6F8", darkHex: "0F1014")
+    static let surface = Color(lightHex: "FFFFFF", darkHex: "1B1C21")
+    static let secondarySurface = Color(lightHex: "F7F5F0", darkHex: "24252B")
+    static let subtleFill = Color(lightHex: "F0ECE3", darkHex: "303139")
+    static let separator = Color(lightHex: "E4E4E9", darkHex: "383941")
+    static let primaryText = Color(lightHex: "1C1B1A", darkHex: "F4F4F6")
+    static let secondaryText = Color(lightHex: "6B6864", darkHex: "B8B8C0")
+    static let tertiaryText = Color(lightHex: "A6A29C", darkHex: "8F909A")
+}
+
 struct TimeDashboardView: View {
     @ObservedObject var viewModel: TimeDashboardViewModel
+    @State private var granularityTransitionDirection = 1
 
     var body: some View {
         ScrollView {
@@ -665,11 +715,11 @@ struct TimeDashboardView: View {
                     HStack {
                         Text(SharedL10n.tr("time.dashboard.section.load_cards"))
                             .font(.system(size: 15, weight: .heavy))
-                            .foregroundStyle(Color(hex: "1C1B1A"))
+                            .foregroundStyle(TimeDashboardStyle.primaryText)
                         Spacer()
                         Text(SharedL10n.tr("time.dashboard.section.load_cards_hint"))
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color(hex: "A6A29C"))
+                            .foregroundStyle(TimeDashboardStyle.tertiaryText)
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 12)
@@ -689,11 +739,11 @@ struct TimeDashboardView: View {
                         HStack {
                             Text(SharedL10n.tr("time.dashboard.section.mobile_usage"))
                                 .font(.system(size: 15, weight: .heavy))
-                                .foregroundStyle(Color(hex: "1C1B1A"))
+                                .foregroundStyle(TimeDashboardStyle.primaryText)
                             Spacer()
                             Text(SharedL10n.tr("time.dashboard.section.top_apps"))
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Color(hex: "A6A29C"))
+                                .foregroundStyle(TimeDashboardStyle.tertiaryText)
                         }
                         .padding(.horizontal, 20)
                         .padding(.top, 22)
@@ -721,14 +771,16 @@ struct TimeDashboardView: View {
                 }
             }
             .padding(.bottom, 32)
+            .id(viewModel.granularity)
+            .transition(granularityTransition)
         }
         .collapsibleTabScroll()
-        .background(Color(hex: "F5F6F8").ignoresSafeArea())
+        .simultaneousGesture(granularitySwipeGesture)
+        .background(TimeDashboardStyle.background.ignoresSafeArea())
         .tint(Color(hex: "0A84FF"))
-        // The analytics prototype currently uses a fixed light palette. Keep the
-        // entire day/week/month surface (and presented sheets) in light mode so
-        // system-dynamic text never turns white on the fixed white cards.
-        .environment(\.colorScheme, .light)
+        .onAppear {
+            viewModel.resetToCurrentPeriod()
+        }
         .task(id: viewModel.taskID) {
             await viewModel.load()
         }
@@ -773,11 +825,11 @@ struct TimeDashboardView: View {
         HStack(alignment: .firstTextBaseline) {
             Text(SharedL10n.tr("time.dashboard.title"))
                 .font(.system(size: 24, weight: .heavy))
-                .foregroundStyle(Color(hex: "1C1B1A"))
+                .foregroundStyle(TimeDashboardStyle.primaryText)
             Spacer()
             Text(viewModel.topSubtitle)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color(hex: "A6A29C"))
+                .foregroundStyle(TimeDashboardStyle.tertiaryText)
         }
     }
 
@@ -785,16 +837,16 @@ struct TimeDashboardView: View {
         HStack(spacing: 2) {
             ForEach(DashboardGranularity.allCases, id: \.self) { g in
                 Button {
-                    viewModel.granularity = g
+                    switchGranularity(to: g)
                 } label: {
                     Text(g.tabLabel)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(viewModel.granularity == g ? Color(hex: "1C1B1A") : Color(hex: "6B6864"))
+                        .foregroundStyle(viewModel.granularity == g ? TimeDashboardStyle.primaryText : TimeDashboardStyle.secondaryText)
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
                         .background(
                             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .fill(viewModel.granularity == g ? Color.white : Color.clear)
+                                .fill(viewModel.granularity == g ? TimeDashboardStyle.surface : Color.clear)
                                 .shadow(color: .black.opacity(viewModel.granularity == g ? 0.05 : 0), radius: 8, x: 0, y: 1)
                         )
                         .animation(.spring(response: 0.22, dampingFraction: 0.8), value: viewModel.granularity)
@@ -803,7 +855,50 @@ struct TimeDashboardView: View {
             }
         }
         .padding(4)
-        .background(Color(hex: "ECEDF0"), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(TimeDashboardStyle.subtleFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var granularitySwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .onEnded { value in
+                let horizontalDistance = value.predictedEndTranslation.width
+                let verticalDistance = value.predictedEndTranslation.height
+                guard abs(horizontalDistance) > 55,
+                      abs(horizontalDistance) > abs(verticalDistance) * 1.25 else { return }
+                let offset = horizontalDistance < 0 ? 1 : -1
+                let values = DashboardGranularity.allCases
+                guard let currentIndex = values.firstIndex(of: viewModel.granularity),
+                      values.indices.contains(currentIndex + offset) else { return }
+                switchGranularity(to: values[currentIndex + offset])
+            }
+    }
+
+    private var granularityTransition: AnyTransition {
+        let insertionEdge: Edge = granularityTransitionDirection > 0 ? .trailing : .leading
+        let removalEdge: Edge = granularityTransitionDirection > 0 ? .leading : .trailing
+        return .asymmetric(
+            insertion: .move(edge: insertionEdge).combined(with: .opacity),
+            removal: .move(edge: removalEdge).combined(with: .opacity)
+        )
+    }
+
+    private func switchGranularity(to value: DashboardGranularity) {
+        let values = DashboardGranularity.allCases
+        guard let currentIndex = values.firstIndex(of: viewModel.granularity),
+              let targetIndex = values.firstIndex(of: value) else { return }
+
+        if currentIndex == targetIndex {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                viewModel.selectGranularity(value)
+            }
+            return
+        }
+
+        granularityTransitionDirection = targetIndex > currentIndex ? 1 : -1
+        Haptics.tap()
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+            viewModel.selectGranularity(value)
+        }
     }
 
     private var dateNavigatorBar: some View {
@@ -811,10 +906,10 @@ struct TimeDashboardView: View {
             Button { viewModel.navigate(by: -1) } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(hex: "6B6864"))
+                    .foregroundStyle(TimeDashboardStyle.secondaryText)
                     .frame(width: 30, height: 30)
-                    .background(Color.white, in: Circle())
-                    .overlay(Circle().stroke(Color(hex: "E4E4E9"), lineWidth: 1))
+                    .background(TimeDashboardStyle.surface, in: Circle())
+                    .overlay(Circle().stroke(TimeDashboardStyle.separator, lineWidth: 1))
             }
             .buttonStyle(HapticButtonStyle())
 
@@ -822,17 +917,17 @@ struct TimeDashboardView: View {
 
             Text(viewModel.rangeLabel)
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color(hex: "1C1B1A"))
+                .foregroundStyle(TimeDashboardStyle.primaryText)
 
             Spacer()
 
             Button { viewModel.navigate(by: 1) } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(hex: "6B6864"))
+                    .foregroundStyle(TimeDashboardStyle.secondaryText)
                     .frame(width: 30, height: 30)
-                    .background(Color.white, in: Circle())
-                    .overlay(Circle().stroke(Color(hex: "E4E4E9"), lineWidth: 1))
+                    .background(TimeDashboardStyle.surface, in: Circle())
+                    .overlay(Circle().stroke(TimeDashboardStyle.separator, lineWidth: 1))
             }
             .buttonStyle(HapticButtonStyle())
         }
@@ -845,22 +940,22 @@ private struct MonthlyAnalysisSections:View{
  let data:MonthlyAnalysisResponse
  private let projectPalette=["A9C7E8","F2BE8D","B9DDCB","E9B9C4","C9C2EA","E9DA9B","B8D7D9","F1B8A8"]
  var body:some View{VStack(spacing:22){milestones;calendar;structure;routine}}
- private var milestones:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.milestones",hintKey:"time.dashboard.month.week_bars");VStack(spacing:0){ForEach(Array(data.goals.enumerated()),id:\.element.id){index,g in HStack{VStack(alignment:.leading,spacing:6){Text(g.goalName).font(.headline);Text(duration(g.totalMinutes)).font(.title3.bold());Text(SharedL10n.tr("time.dashboard.month.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)};Spacer();MiniBars(values:g.weeklyMinutes,color:projectColor(index))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
- private var calendar:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.calendar",hintKey:"time.dashboard.month.calendar_hint");VStack(alignment:.leading,spacing:12){LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:6),count:7),spacing:6){ForEach(data.calendar){d in Text("\(d.day)").font(.caption.bold()).frame(maxWidth:.infinity).frame(height:38).background(dayColor(d),in:RoundedRectangle(cornerRadius:10))}};calendarLegend}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
- private var structure:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.structure",hintKey:"time.dashboard.month.weekly_share");VStack(alignment:.leading,spacing:12){HStack(alignment:.bottom,spacing:12){ForEach(data.structure){w in VStack(spacing:5){LoadStructureBar(percentages:w.percentages,minutes:w.minutes,color:loadColor).frame(maxWidth:.infinity).frame(height:108);Text(SharedL10n.tr("time.dashboard.month.week",w.week)).font(.caption2).foregroundStyle(.secondary)}.frame(maxWidth:.infinity)}}.frame(height:125,alignment:.bottom);structureInsight;structureLegend}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
- private var routine:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.routine",hintKey:"time.dashboard.month.range");VStack(spacing:14){HStack(alignment:.firstTextBaseline){Text(SharedL10n.tr("time.dashboard.month.score"));Spacer();VStack(alignment:.trailing,spacing:2){Text("\(data.routine.score)").font(.title.bold());Text(routineDeltaText).font(.caption.bold()).foregroundStyle((data.routine.scoreDelta ?? 0) >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"))}};Text(SharedL10n.tr("time.dashboard.month.routine_hint")).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E")).frame(maxWidth:.infinity,alignment:.leading);routineRow("time.dashboard.month.wake",data.routine.averageWakeMinute,data.routine.wakeDeviation,data.routine.previousAverageWakeMinute,Color(hex:"A8DCC5"));routineRow("time.dashboard.month.first_focus",data.routine.averageFirstFocusMinute,data.routine.firstFocusDeviation,data.routine.previousAverageFirstFocusMinute,Color(hex:"F3C9A8"));routineRow("time.dashboard.month.sleep",data.routine.averageSleepMinute,data.routine.sleepDeviation,data.routine.previousAverageSleepMinute,Color(hex:"C6CDDC"));routineAxis}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))}}
+ private var milestones:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.milestones",hintKey:"time.dashboard.month.week_bars");VStack(spacing:0){ForEach(Array(data.goals.enumerated()),id:\.element.id){index,g in HStack{VStack(alignment:.leading,spacing:6){Text(g.goalName).font(.headline);Text(duration(g.totalMinutes)).font(.title3.bold());Text(SharedL10n.tr("time.dashboard.month.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)};Spacer();MiniBars(values:g.weeklyMinutes,color:projectColor(index))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(TimeDashboardStyle.surface,in:RoundedRectangle(cornerRadius:20))}}
+ private var calendar:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.calendar",hintKey:"time.dashboard.month.calendar_hint");VStack(alignment:.leading,spacing:12){LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:6),count:7),spacing:6){ForEach(data.calendar){d in Text("\(d.day)").font(.caption.bold()).frame(maxWidth:.infinity).frame(height:38).background(dayColor(d),in:RoundedRectangle(cornerRadius:10))}};calendarLegend}.padding(16).background(TimeDashboardStyle.surface,in:RoundedRectangle(cornerRadius:20))}}
+ private var structure:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.structure",hintKey:"time.dashboard.month.weekly_share");VStack(alignment:.leading,spacing:12){HStack(alignment:.bottom,spacing:12){ForEach(data.structure){w in VStack(spacing:5){LoadStructureBar(percentages:w.percentages,minutes:w.minutes,color:loadColor).frame(maxWidth:.infinity).frame(height:108);Text(SharedL10n.tr("time.dashboard.month.week",w.week)).font(.caption2).foregroundStyle(.secondary)}.frame(maxWidth:.infinity)}}.frame(height:125,alignment:.bottom);structureInsight;structureLegend}.padding(16).background(TimeDashboardStyle.surface,in:RoundedRectangle(cornerRadius:20))}}
+ private var routine:some View{VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.month.routine",hintKey:"time.dashboard.month.range");VStack(spacing:14){HStack(alignment:.firstTextBaseline){Text(SharedL10n.tr("time.dashboard.month.score"));Spacer();VStack(alignment:.trailing,spacing:2){Text("\(data.routine.score)").font(.title.bold());Text(routineDeltaText).font(.caption.bold()).foregroundStyle((data.routine.scoreDelta ?? 0) >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"))}};Text(SharedL10n.tr("time.dashboard.month.routine_hint")).font(.system(size:10)).foregroundStyle(TimeDashboardStyle.tertiaryText).frame(maxWidth:.infinity,alignment:.leading);routineRow("time.dashboard.month.wake",data.routine.averageWakeMinute,data.routine.wakeDeviation,data.routine.previousAverageWakeMinute,Color(hex:"A8DCC5"));routineRow("time.dashboard.month.first_focus",data.routine.averageFirstFocusMinute,data.routine.firstFocusDeviation,data.routine.previousAverageFirstFocusMinute,Color(hex:"F3C9A8"));routineRow("time.dashboard.month.sleep",data.routine.averageSleepMinute,data.routine.sleepDeviation,data.routine.previousAverageSleepMinute,Color(hex:"C6CDDC"));routineAxis}.padding(16).background(TimeDashboardStyle.surface,in:RoundedRectangle(cornerRadius:20))}}
  private var routineDeltaText:String{guard let delta=data.routine.scoreDelta else{return SharedL10n.tr("time.dashboard.month.routine_compare.none")};if delta==0{return SharedL10n.tr("time.dashboard.month.routine_compare.flat")};return SharedL10n.tr(delta>0 ? "time.dashboard.month.routine_compare.up":"time.dashboard.month.routine_compare.down",abs(delta))}
  private func routineRow(_ key:String,_ minute:Int?,_ dev:Int?,_ previousMinute:Int?,_ color:Color)->some View{VStack(spacing:7){HStack{Text(SharedL10n.tr(key)).font(.subheadline.bold());Spacer();Text(minute.map{String(format:"%02d:%02d ±%dm",$0/60,$0%60,dev ?? 0)} ?? "—").font(.caption).foregroundStyle(.secondary)};RoutineRangeBar(minute:minute,deviation:dev,previousMinute:previousMinute,color:color).frame(height:14)}}
- private var routineAxis:some View{HStack{Text("6:00");Spacer();Text("12:00");Spacer();Text("18:00");Spacer();Text("24:00")}.font(.system(size:10)).foregroundStyle(Color(hex:"C7C7CC"))}
- private var calendarLegend:some View{VStack(alignment:.leading,spacing:8){HStack(spacing:12){calendarLegendItem(color:Color(hex:"8ED2B6"),key:"time.dashboard.month.calendar_legend.focus");calendarLegendItem(color:Color(hex:"E9B1BD"),key:"time.dashboard.month.calendar_legend.distraction");calendarLegendItem(color:Color(hex:"ECECEE"),key:"time.dashboard.month.calendar_legend.none")};Text(SharedL10n.tr("time.dashboard.month.calendar_legend.depth")).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E"))}}
- private func calendarLegendItem(color:Color,key:String)->some View{HStack(spacing:5){RoundedRectangle(cornerRadius:3).fill(color).frame(width:14,height:10);Text(SharedL10n.tr(key)).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E")).lineLimit(1)}}
+ private var routineAxis:some View{HStack{Text("6:00");Spacer();Text("12:00");Spacer();Text("18:00");Spacer();Text("24:00")}.font(.system(size:10)).foregroundStyle(TimeDashboardStyle.tertiaryText)}
+ private var calendarLegend:some View{VStack(alignment:.leading,spacing:8){HStack(spacing:12){calendarLegendItem(color:Color(hex:"8ED2B6"),key:"time.dashboard.month.calendar_legend.focus");calendarLegendItem(color:Color(hex:"E9B1BD"),key:"time.dashboard.month.calendar_legend.distraction");calendarLegendItem(color:TimeDashboardStyle.separator,key:"time.dashboard.month.calendar_legend.none")};Text(SharedL10n.tr("time.dashboard.month.calendar_legend.depth")).font(.system(size:10)).foregroundStyle(TimeDashboardStyle.tertiaryText)}}
+ private func calendarLegendItem(color:Color,key:String)->some View{HStack(spacing:5){RoundedRectangle(cornerRadius:3).fill(color).frame(width:14,height:10);Text(SharedL10n.tr(key)).font(.system(size:10)).foregroundStyle(TimeDashboardStyle.tertiaryText).lineLimit(1)}}
  private var structureLegend:some View{LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],alignment:.leading,spacing:8){structureLegendItem("OBLIGATION","time.dashboard.load_kind.obligation");structureLegendItem("PROACTIVE","time.dashboard.load_kind.proactive");structureLegendItem("RECOVERY","time.dashboard.load_kind.recovery");structureLegendItem("DISTRACTION","time.dashboard.load_kind.distraction")}}
- private func structureLegendItem(_ kind:String,_ key:String)->some View{HStack(spacing:5){Circle().fill(loadColor(kind)).frame(width:8,height:8);Text(SharedL10n.tr(key)).font(.system(size:10)).foregroundStyle(Color(hex:"8A8A8E")).lineLimit(1)}}
- private var structureInsight:some View{Text(structureInsightText).font(.system(size:11,weight:.medium)).foregroundStyle(Color(hex:"6B6864")).fixedSize(horizontal:false,vertical:true)}
+ private func structureLegendItem(_ kind:String,_ key:String)->some View{HStack(spacing:5){Circle().fill(loadColor(kind)).frame(width:8,height:8);Text(SharedL10n.tr(key)).font(.system(size:10)).foregroundStyle(TimeDashboardStyle.tertiaryText).lineLimit(1)}}
+ private var structureInsight:some View{Text(structureInsightText).font(.system(size:11,weight:.medium)).foregroundStyle(TimeDashboardStyle.secondaryText).fixedSize(horizontal:false,vertical:true)}
  private var structureInsightText:String{let weeks=data.structure.filter{weekTotal($0)>0};guard let first=weeks.first,let last=weeks.last else{return SharedL10n.tr("time.dashboard.month.structure_insight.neutral")};let firstHealthy=structureShare(first,["PROACTIVE","RECOVERY"]);let lastHealthy=structureShare(last,["PROACTIVE","RECOVERY"]);let healthyDelta=lastHealthy-firstHealthy;let distractionDelta=structureShare(last,["DISTRACTION"])-structureShare(first,["DISTRACTION"]);if healthyDelta >= 5 && distractionDelta <= 3{return SharedL10n.tr("time.dashboard.month.structure_insight.better",healthyDelta)};if distractionDelta >= 5 && healthyDelta <= 3{return SharedL10n.tr("time.dashboard.month.structure_insight.worse",distractionDelta)};return SharedL10n.tr("time.dashboard.month.structure_insight.steady",lastHealthy)}
  private func weekTotal(_ week:MonthlyWeek)->Int{let values=week.minutes ?? week.percentages;return values.values.reduce(0,+)}
  private func structureShare(_ week:MonthlyWeek,_ kinds:[String])->Int{let values=week.minutes ?? week.percentages;let total=max(values.values.reduce(0,+),1);let part=kinds.reduce(0){$0+(values[$1] ?? 0)};return Int(round(Double(part)*100/Double(total)))}
- private func dayColor(_ d:MonthlyDay)->Color{if d.distractionMinutes>d.focusMinutes{return Color(hex:"C9485B").opacity(min(0.22+Double(d.distractionMinutes)/180,0.75))};if d.focusMinutes==0{return Color(hex:"ECECEE")};return Color(hex:"279E77").opacity(min(0.22+Double(d.focusMinutes)/180,0.78))}
+ private func dayColor(_ d:MonthlyDay)->Color{if d.distractionMinutes>d.focusMinutes{return Color(hex:"C9485B").opacity(min(0.22+Double(d.distractionMinutes)/180,0.75))};if d.focusMinutes==0{return TimeDashboardStyle.separator};return Color(hex:"279E77").opacity(min(0.22+Double(d.focusMinutes)/180,0.78))}
  private func loadColor(_ k:String)->Color{switch k{case"PROACTIVE":Color(hex:"F0A468");case"RECOVERY":Color(hex:"A8DCC5");case"DISTRACTION":Color(hex:"E9A9B8");default:Color(hex:"AEB9CE")}}
  private func projectColor(_ index:Int)->Color{Color(hex:projectPalette[index % projectPalette.count])}
 }
@@ -932,7 +1027,7 @@ private struct RoutineRangeBar: View {
 
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color(hex: "ECECEE"))
+                    .fill(TimeDashboardStyle.separator)
                     .frame(height: 8)
 
                 if let range {
@@ -952,7 +1047,7 @@ private struct RoutineRangeBar: View {
 
                 if let previous {
                     RoundedRectangle(cornerRadius: 1, style: .continuous)
-                        .fill(Color(hex: "6B6864"))
+                        .fill(TimeDashboardStyle.secondaryText)
                         .frame(width: 2, height: 14)
                         .offset(x: max(0, min(width - 2, previous - 1)))
                 }
@@ -988,9 +1083,9 @@ private struct WeeklyAnalysisSections: View {
     var body: some View { VStack(spacing:22) { goals; rhythm; focusTrend; structure } }
     private var goals: some View { VStack(spacing:0) {
         DailySectionTitle(titleKey:"time.dashboard.week.goals",hintKey:"time.dashboard.week.goals_hint")
-        VStack(spacing:0){ForEach(Array(data.goals.enumerated()),id:\.element.id){index,g in HStack{VStack(alignment:.leading,spacing:5){Text(g.goalName).font(.system(size:15,weight:.semibold));HStack{Text(duration(g.totalMinutes)).font(.system(size:18,weight:.heavy));Text(String(format:"%+d%%",g.changePercent)).font(.caption.bold()).foregroundStyle(g.changePercent >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"));Text(SharedL10n.tr("time.dashboard.week.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)}};Spacer();MiniBars(values:g.dailyMinutes,color:projectColor(index))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(.white,in:RoundedRectangle(cornerRadius:20)) } }
-    private var rhythm: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.rhythm",hintKey:"time.dashboard.week.rhythm_hint");VStack(spacing:7){HStack{Text("").frame(width:42);ForEach(days,id:\.self){Text(SharedL10n.tr($0)).frame(maxWidth:.infinity)}}.font(.caption2).foregroundStyle(.secondary);ForEach(0..<5,id:\.self){slot in HStack{Text(SharedL10n.tr("time.dashboard.week.slot.\(slot)")).frame(width:42,alignment:.leading);ForEach(0..<7,id:\.self){d in let f=data.rhythm.indices.contains(d) ? data.rhythm[d].focusMinutes[slot]:0;let x=data.rhythm.indices.contains(d) ? data.rhythm[d].distractionMinutes[slot]:0;RoundedRectangle(cornerRadius:6).fill(x>f ? Color(hex:"E8B7C1") : Color(hex:"3FA78A").opacity(min(0.2+Double(f)/120,1))).frame(height:26)}}}}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))} }
-    private var focusTrend: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.focus_trend",hintKey:"time.dashboard.week.shorter_better");VStack(alignment:.leading,spacing:16){Text(SharedL10n.tr("time.dashboard.daily.focus.longest")).font(.subheadline.bold());WeeklyTrendBars(values:data.focusTrend.map(\.longestMinutes),unitKey:"time.dashboard.daily.duration.minutes",base:Color(hex:"F3C9A8"),highlight:Color(hex:"E5772E"),highIsGood:true);Divider();Text(SharedL10n.tr("time.dashboard.daily.focus.return")).font(.subheadline.bold());WeeklyTrendBars(values:data.focusTrend.map{$0.averageReturnSeconds/60},unitKey:"time.dashboard.daily.duration.minutes",base:Color(hex:"EFC3CC"),highlight:Color(hex:"C2455E"),best:Color(hex:"B3DECC"),highIsGood:false)}.padding(16).background(.white,in:RoundedRectangle(cornerRadius:20))} }
+        VStack(spacing:0){ForEach(Array(data.goals.enumerated()),id:\.element.id){index,g in HStack{VStack(alignment:.leading,spacing:5){Text(g.goalName).font(.system(size:15,weight:.semibold));HStack{Text(duration(g.totalMinutes)).font(.system(size:18,weight:.heavy));Text(String(format:"%+d%%",g.changePercent)).font(.caption.bold()).foregroundStyle(g.changePercent >= 0 ? Color(hex:"3FA78A"):Color(hex:"C9485B"));Text(SharedL10n.tr("time.dashboard.week.previous",duration(g.previousMinutes))).font(.caption).foregroundStyle(.secondary)}};Spacer();MiniBars(values:g.dailyMinutes,color:projectColor(index))}.padding(.vertical,14);Divider()}}.padding(.horizontal,16).background(TimeDashboardStyle.surface,in:RoundedRectangle(cornerRadius:20)) } }
+    private var rhythm: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.rhythm",hintKey:"time.dashboard.week.rhythm_hint");VStack(spacing:7){HStack{Text("").frame(width:42);ForEach(days,id:\.self){Text(SharedL10n.tr($0)).frame(maxWidth:.infinity)}}.font(.caption2).foregroundStyle(.secondary);ForEach(0..<5,id:\.self){slot in HStack{Text(SharedL10n.tr("time.dashboard.week.slot.\(slot)")).frame(width:42,alignment:.leading);ForEach(0..<7,id:\.self){d in let f=data.rhythm.indices.contains(d) ? data.rhythm[d].focusMinutes[slot]:0;let x=data.rhythm.indices.contains(d) ? data.rhythm[d].distractionMinutes[slot]:0;RoundedRectangle(cornerRadius:6).fill(x>f ? Color(hex:"E8B7C1") : Color(hex:"3FA78A").opacity(min(0.2+Double(f)/120,1))).frame(height:26)}}}}.padding(16).background(TimeDashboardStyle.surface,in:RoundedRectangle(cornerRadius:20))} }
+    private var focusTrend: some View { VStack(spacing:0){DailySectionTitle(titleKey:"time.dashboard.week.focus_trend",hintKey:"time.dashboard.week.shorter_better");VStack(alignment:.leading,spacing:16){Text(SharedL10n.tr("time.dashboard.daily.focus.longest")).font(.subheadline.bold());WeeklyTrendBars(values:data.focusTrend.map(\.longestMinutes),unitKey:"time.dashboard.daily.duration.minutes",base:Color(hex:"F3C9A8"),highlight:Color(hex:"E5772E"),highIsGood:true);Divider();Text(SharedL10n.tr("time.dashboard.daily.focus.return")).font(.subheadline.bold());WeeklyTrendBars(values:data.focusTrend.map{$0.averageReturnSeconds/60},unitKey:"time.dashboard.daily.duration.minutes",base:Color(hex:"EFC3CC"),highlight:Color(hex:"C2455E"),best:Color(hex:"B3DECC"),highIsGood:false)}.padding(16).background(TimeDashboardStyle.surface,in:RoundedRectangle(cornerRadius:20))} }
     private var structure: some View {
         VStack(spacing: 0) {
             DailySectionTitle(titleKey: "time.dashboard.week.structure", hintKey: "time.dashboard.week.daily_share")
@@ -1008,7 +1103,7 @@ private struct WeeklyAnalysisSections: View {
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             Text(SharedL10n.tr(days[index]))
                                 .font(.system(size: 10))
-                                .foregroundStyle(Color(hex: "B0B0B4"))
+                                .foregroundStyle(TimeDashboardStyle.tertiaryText)
                         }
                         .frame(maxWidth: .infinity)
                     }
@@ -1023,7 +1118,7 @@ private struct WeeklyAnalysisSections: View {
                 }
             }
             .padding(16)
-            .background(.white, in: RoundedRectangle(cornerRadius: 20))
+            .background(TimeDashboardStyle.surface, in: RoundedRectangle(cornerRadius: 20))
         }
     }
     private func loadLegend(_ kind: String, _ key: String) -> some View {
@@ -1031,7 +1126,7 @@ private struct WeeklyAnalysisSections: View {
             Circle().fill(color(kind)).frame(width: 8, height: 8)
             Text(SharedL10n.tr(key))
                 .font(.system(size: 10))
-                .foregroundStyle(Color(hex: "8A8A8E"))
+                .foregroundStyle(TimeDashboardStyle.tertiaryText)
                 .lineLimit(1)
         }
     }
@@ -1058,7 +1153,7 @@ private struct WeeklyTrendBars: View {
                 VStack(spacing: 5) {
                     Text(duration(value))
                         .font(.system(size: 10, weight: value == values.max() ? .bold : .medium))
-                        .foregroundStyle(Color(hex: "8A8A8E"))
+                        .foregroundStyle(TimeDashboardStyle.tertiaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     RoundedRectangle(cornerRadius: 4)
@@ -1066,7 +1161,7 @@ private struct WeeklyTrendBars: View {
                         .frame(height: CGFloat(max(4, value * 54 / maximum)))
                     Text(SharedL10n.tr(dayKeys[index]))
                         .font(.system(size: 10))
-                        .foregroundStyle(Color(hex: "B0B0B4"))
+                        .foregroundStyle(TimeDashboardStyle.tertiaryText)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -1075,7 +1170,7 @@ private struct WeeklyTrendBars: View {
     }
 
     private func barColor(_ value: Int, minimumPositive: Int?) -> Color {
-        if value == 0 { return Color(hex: "EFEFF1") }
+        if value == 0 { return TimeDashboardStyle.subtleFill }
         if highIsGood, value == values.max() { return highlight }
         if !highIsGood, value == values.max() { return highlight }
         if !highIsGood, value == minimumPositive { return best ?? base }
@@ -1091,11 +1186,11 @@ private struct DailySectionTitle: View {
         HStack(alignment: .firstTextBaseline) {
             Text(SharedL10n.tr(titleKey))
                 .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(Color(hex: "1C1B1A"))
+                .foregroundStyle(TimeDashboardStyle.primaryText)
             Spacer()
             Text(SharedL10n.tr(hintKey))
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(hex: "A6A29C"))
+                .foregroundStyle(TimeDashboardStyle.tertiaryText)
         }
         .padding(.horizontal, 4)
         .padding(.bottom, 12)
@@ -1113,7 +1208,7 @@ private struct DailyGoalProgressSectionView: View {
                 if goals.isEmpty {
                     Text(SharedL10n.tr("time.dashboard.daily.goals.empty"))
                         .font(.system(size: 13))
-                        .foregroundStyle(Color(hex: "A6A29C"))
+                        .foregroundStyle(TimeDashboardStyle.tertiaryText)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 24)
                 } else {
@@ -1124,7 +1219,7 @@ private struct DailyGoalProgressSectionView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(TimeDashboardStyle.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
 
@@ -1139,16 +1234,16 @@ private struct DailyGoalProgressSectionView: View {
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color(hex: "F0F0F2"))
+                    Capsule().fill(TimeDashboardStyle.subtleFill)
                     Capsule().fill(color).frame(width: geo.size.width * CGFloat(goal.totalMinutes) / CGFloat(scale))
-                    Rectangle().fill(Color(hex: "1C1B1A")).frame(width: 2, height: 12)
+                    Rectangle().fill(TimeDashboardStyle.primaryText).frame(width: 2, height: 12)
                         .offset(x: max(0, geo.size.width * CGFloat(goal.averageMinutes) / CGFloat(scale) - 1), y: -3)
                 }
             }
             .frame(height: 6)
             Text(detail(goal))
                 .font(.system(size: 12))
-                .foregroundStyle(Color(hex: "8A8A8E"))
+                .foregroundStyle(TimeDashboardStyle.tertiaryText)
         }
         .padding(.vertical, 14)
     }
@@ -1182,7 +1277,7 @@ private struct DailyFocusQualitySectionView: View {
                     Divider()
                     HStack {
                         Text(SharedL10n.tr("time.dashboard.daily.focus.blocks"))
-                            .font(.system(size: 13, weight: .bold)).foregroundStyle(Color(hex: "6E6E73"))
+                            .font(.system(size: 13, weight: .bold)).foregroundStyle(TimeDashboardStyle.secondaryText)
                         Spacer()
                         if focus.totalFragmentedBlockCount > focus.blocks.count {
                             Button(SharedL10n.tr("time.dashboard.daily.focus.more"), action: onShowAll)
@@ -1193,19 +1288,19 @@ private struct DailyFocusQualitySectionView: View {
                     HStack(spacing: 6) {
                         RoundedRectangle(cornerRadius: 2).fill(Color(hex: "C9485B")).frame(width: 8, height: 12)
                         Text(SharedL10n.tr("time.dashboard.daily.focus.legend"))
-                            .font(.system(size: 11)).foregroundStyle(Color(hex: "A6A29C"))
+                            .font(.system(size: 11)).foregroundStyle(TimeDashboardStyle.tertiaryText)
                     }
                 }
             }
             .padding(16)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(TimeDashboardStyle.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
 
     private func metric(_ value: String, _ key: String, _ danger: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.system(size: 22, weight: .heavy)).foregroundStyle(danger ? Color(hex: "C9485B") : Color(hex: "1C1B1A"))
-            Text(SharedL10n.tr(key)).font(.system(size: 12)).foregroundStyle(Color(hex: "8A8A8E"))
+            Text(value).font(.system(size: 22, weight: .heavy)).foregroundStyle(danger ? Color(hex: "C9485B") : TimeDashboardStyle.primaryText)
+            Text(SharedL10n.tr(key)).font(.system(size: 12)).foregroundStyle(TimeDashboardStyle.tertiaryText)
         }
     }
 
@@ -1214,7 +1309,7 @@ private struct DailyFocusQualitySectionView: View {
             HStack {
                 Text(block.title).font(.system(size: 12, weight: .semibold))
                 Spacer()
-                Text("\(block.startLabel) – \(block.endLabel)").font(.system(size: 12)).foregroundStyle(Color(hex: "8A8A8E"))
+                Text("\(block.startLabel) – \(block.endLabel)").font(.system(size: 12)).foregroundStyle(TimeDashboardStyle.tertiaryText)
             }
             GeometryReader { geo in
                 let total = max(block.segmentMinutes.reduce(0, +), 1)
@@ -1231,7 +1326,7 @@ private struct DailyFocusQualitySectionView: View {
             }.frame(height: 16)
             let longest = block.segmentMinutes.max() ?? 0
             Text(SharedL10n.tr("time.dashboard.daily.focus.block_detail", block.segmentMinutes.count, duration(longest), block.interruptionApps.joined(separator: " · ")))
-                .font(.system(size: 12)).foregroundStyle(Color(hex: "8A8A8E"))
+                .font(.system(size: 12)).foregroundStyle(TimeDashboardStyle.tertiaryText)
         }
     }
 
@@ -1259,7 +1354,7 @@ private struct FocusBlocksSheetView: View {
                     .padding(16)
                 }
             }
-            .background(Color(hex: "F5F6F8"))
+            .background(TimeDashboardStyle.background)
             .navigationTitle(SharedL10n.tr("time.dashboard.daily.focus.all_blocks"))
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -1275,7 +1370,7 @@ private struct DailyFocusBlockCard: View {
                 Text(block.title).font(.system(size: 14, weight: .bold))
                 Spacer()
                 Text("\(block.startLabel) – \(block.endLabel)")
-                    .font(.system(size: 12)).foregroundStyle(Color(hex: "8A8A8E"))
+                    .font(.system(size: 12)).foregroundStyle(TimeDashboardStyle.tertiaryText)
             }
             GeometryReader { geo in
                 let total = max(block.segmentMinutes.reduce(0, +), 1)
@@ -1296,10 +1391,10 @@ private struct DailyFocusBlockCard: View {
                 duration(block.segmentMinutes.max() ?? 0),
                 block.interruptionApps.joined(separator: " · ")
             ))
-            .font(.system(size: 12)).foregroundStyle(Color(hex: "8A8A8E"))
+            .font(.system(size: 12)).foregroundStyle(TimeDashboardStyle.tertiaryText)
         }
         .padding(16)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(TimeDashboardStyle.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -1332,19 +1427,19 @@ private struct VerdictCardView: View {
                 Text(eyebrow.uppercased())
                     .font(.system(size: 11, weight: .heavy))
                     .tracking(1.5)
-                    .foregroundStyle(Color(hex: "A6A29C"))
+                    .foregroundStyle(TimeDashboardStyle.tertiaryText)
                     .padding(.bottom, 10)
 
                 Text(localizedHeadline.title)
                     .font(.system(size: 22, weight: .heavy))
                     .lineSpacing(3)
-                    .foregroundStyle(Color(hex: "1C1B1A"))
+                    .foregroundStyle(TimeDashboardStyle.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 8)
 
                 Text(localizedHeadline.summary)
                     .font(.system(size: 14))
-                    .foregroundStyle(Color(hex: "6B6864"))
+                    .foregroundStyle(TimeDashboardStyle.secondaryText)
                     .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 14)
@@ -1354,7 +1449,7 @@ private struct VerdictCardView: View {
                     if showReviewHint {
                         Text(SharedL10n.tr("time.dashboard.review.view"))
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color(hex: "A6A29C"))
+                            .foregroundStyle(TimeDashboardStyle.tertiaryText)
                     }
                 }
             }
@@ -1366,7 +1461,7 @@ private struct VerdictCardView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 22)
-        .background(Color.white)
+        .background(TimeDashboardStyle.surface)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 1, x: 0, y: 1)
         .shadow(color: .black.opacity(0.05), radius: 24, x: 0, y: 8)
@@ -1397,7 +1492,7 @@ private struct HealthRingView: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color(hex: "EFEBE2"), lineWidth: 10)
+                .stroke(TimeDashboardStyle.separator, lineWidth: 10)
 
             Circle()
                 .trim(from: 0, to: min(CGFloat(score.score) / 100.0, 1.0))
@@ -1411,10 +1506,10 @@ private struct HealthRingView: View {
             VStack(spacing: 2) {
                 Text("\(score.score)")
                     .font(.system(size: 20, weight: .heavy))
-                    .foregroundStyle(Color(hex: "1C1B1A"))
+                    .foregroundStyle(TimeDashboardStyle.primaryText)
                 Text(SharedL10n.tr("time.dashboard.health_score"))
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color(hex: "A6A29C"))
+                    .foregroundStyle(TimeDashboardStyle.tertiaryText)
             }
         }
     }
@@ -1436,7 +1531,7 @@ private struct LoadCardView: View {
         case "minimize", "decrease", "less", "越少越好":
             return (SharedL10n.tr("time.dashboard.goal.minimize"), Color(hex: "C9485B").opacity(0.1), Color(hex: "C9485B"))
         default:
-            return (SharedL10n.tr("time.dashboard.goal.maintain"), Color(hex: "F0ECE3"), Color(hex: "A6A29C"))
+            return (SharedL10n.tr("time.dashboard.goal.maintain"), TimeDashboardStyle.subtleFill, TimeDashboardStyle.tertiaryText)
         }
     }
 
@@ -1444,7 +1539,7 @@ private struct LoadCardView: View {
         switch card.tone?.lowercased() {
         case "good": return Color(hex: "3FA78A")
         case "warn", "bad": return Color(hex: "C9485B")
-        default: return Color(hex: "A6A29C")
+        default: return TimeDashboardStyle.tertiaryText
         }
     }
 
@@ -1457,7 +1552,7 @@ private struct LoadCardView: View {
                         .frame(width: 9, height: 9)
                     Text(card.label)
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(hex: "1C1B1A"))
+                        .foregroundStyle(TimeDashboardStyle.primaryText)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
@@ -1479,7 +1574,7 @@ private struct LoadCardView: View {
 
             Text(card.totalLabel)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(hex: "A6A29C"))
+                .foregroundStyle(TimeDashboardStyle.tertiaryText)
                 .padding(.bottom, 8)
 
             Text(card.changeLabel)
@@ -1492,7 +1587,7 @@ private struct LoadCardView: View {
         }
         .padding(15)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white)
+        .background(TimeDashboardStyle.surface)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 1, x: 0, y: 1)
         .shadow(color: .black.opacity(0.05), radius: 24, x: 0, y: 8)
@@ -1544,7 +1639,7 @@ struct CompositionSheetView: View {
         case "minimize", "decrease", "less", "越少越好":
             return (SharedL10n.tr("time.dashboard.goal.minimize"), Color(hex: "C9485B").opacity(0.1), Color(hex: "C9485B"))
         default:
-            return (SharedL10n.tr("time.dashboard.goal.maintain"), Color(hex: "F0ECE3"), Color(hex: "A6A29C"))
+            return (SharedL10n.tr("time.dashboard.goal.maintain"), TimeDashboardStyle.subtleFill, TimeDashboardStyle.tertiaryText)
         }
     }
 
@@ -1568,7 +1663,7 @@ struct CompositionSheetView: View {
                     Text(SharedL10n.tr("time.dashboard.composition.title"))
                         .font(.system(size: 12, weight: .bold))
                         .tracking(0.5)
-                        .foregroundStyle(Color(hex: "A6A29C"))
+                        .foregroundStyle(TimeDashboardStyle.tertiaryText)
                         .padding(.bottom, 6)
 
                     ForEach(comp.categories, id: \.categoryId) { cat in
@@ -1601,7 +1696,7 @@ struct CompositionSheetView: View {
             .padding(.top, 20)
             .padding(.bottom, 48)
         }
-        .background(Color.white)
+        .background(TimeDashboardStyle.surface)
     }
 
     private var sheetHeader: some View {
@@ -1611,7 +1706,7 @@ struct CompositionSheetView: View {
                 .frame(width: 11, height: 11)
             Text(card.label)
                 .font(.system(size: 20, weight: .heavy))
-                .foregroundStyle(Color(hex: "1C1B1A"))
+                .foregroundStyle(TimeDashboardStyle.primaryText)
             Spacer()
             let goal = goalDisplay
             Text(goal.label)
@@ -1626,12 +1721,12 @@ struct CompositionSheetView: View {
 
     private func metaText(_ comp: DashboardCompositionResponse) -> some View {
         (
-            Text(SharedL10n.tr("time.dashboard.period.current_prefix")).foregroundStyle(Color(hex: "6B6864"))
-            + Text(comp.summary.totalLabel).fontWeight(.bold).foregroundStyle(Color(hex: "1C1B1A"))
-            + Text(SharedL10n.tr("time.dashboard.period.of_total_prefix")).foregroundStyle(Color(hex: "6B6864"))
-            + Text("\(comp.summary.percentOfAllTracked)%").fontWeight(.bold).foregroundStyle(Color(hex: "1C1B1A"))
-            + Text(SharedL10n.tr("time.dashboard.period.compare_prefix")).foregroundStyle(Color(hex: "6B6864"))
-            + Text(comp.summary.deltaLabel).fontWeight(.bold).foregroundStyle(Color(hex: "1C1B1A"))
+            Text(SharedL10n.tr("time.dashboard.period.current_prefix")).foregroundStyle(TimeDashboardStyle.secondaryText)
+            + Text(comp.summary.totalLabel).fontWeight(.bold).foregroundStyle(TimeDashboardStyle.primaryText)
+            + Text(SharedL10n.tr("time.dashboard.period.of_total_prefix")).foregroundStyle(TimeDashboardStyle.secondaryText)
+            + Text("\(comp.summary.percentOfAllTracked)%").fontWeight(.bold).foregroundStyle(TimeDashboardStyle.primaryText)
+            + Text(SharedL10n.tr("time.dashboard.period.compare_prefix")).foregroundStyle(TimeDashboardStyle.secondaryText)
+            + Text(comp.summary.deltaLabel).fontWeight(.bold).foregroundStyle(TimeDashboardStyle.primaryText)
         )
         .font(.system(size: 14))
     }
@@ -1654,7 +1749,7 @@ struct DailyReviewSheetView: View {
                         .foregroundStyle(Color(hex: "E8743B"))
                     Text(title)
                         .font(.system(size: 20, weight: .heavy))
-                        .foregroundStyle(Color(hex: "1C1B1A"))
+                        .foregroundStyle(TimeDashboardStyle.primaryText)
                     Spacer()
                 }
                 .padding(.bottom, 18)
@@ -1678,17 +1773,17 @@ struct DailyReviewSheetView: View {
             .padding(.top, 20)
             .padding(.bottom, 48)
         }
-        .background(Color.white)
+        .background(TimeDashboardStyle.surface)
     }
 
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: errorMessage.isEmpty ? "text.badge.checkmark" : "exclamationmark.triangle")
                 .font(.system(size: 30))
-                .foregroundStyle(Color(hex: "C6C2BB"))
+                .foregroundStyle(TimeDashboardStyle.tertiaryText)
             Text(errorMessage.isEmpty ? SharedL10n.tr("time.dashboard.review.empty") : errorMessage)
                 .font(.system(size: 14))
-                .foregroundStyle(Color(hex: "A6A29C"))
+                .foregroundStyle(TimeDashboardStyle.tertiaryText)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -1717,7 +1812,7 @@ private struct DailyReviewRowView: View {
                 Text(dateLabel)
                     .font(.system(size: 12, weight: .bold))
                     .tracking(0.5)
-                    .foregroundStyle(Color(hex: "A6A29C"))
+                    .foregroundStyle(TimeDashboardStyle.tertiaryText)
                     .padding(.bottom, 8)
             }
 
@@ -1726,13 +1821,13 @@ private struct DailyReviewRowView: View {
             if let model = review.modelName, !model.isEmpty {
                 Text(model)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color(hex: "C6C2BB"))
+                    .foregroundStyle(TimeDashboardStyle.tertiaryText)
                     .padding(.top, 10)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Color(hex: "F7F5F0"))
+        .background(TimeDashboardStyle.secondarySurface)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .padding(.bottom, 12)
     }
@@ -1758,25 +1853,25 @@ private struct MarkdownContentView: View {
                 case let .heading(level, text):
                     Text(inline(text))
                         .font(.system(size: level == 1 ? 18 : (level == 2 ? 16 : 14), weight: .heavy))
-                        .foregroundStyle(Color(hex: "1C1B1A"))
+                        .foregroundStyle(TimeDashboardStyle.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, level <= 2 ? 6 : 0)
                 case let .bullet(text):
                     HStack(alignment: .top, spacing: 8) {
                         Text("•")
                             .font(.system(size: 15))
-                            .foregroundStyle(Color(hex: "A6A29C"))
+                            .foregroundStyle(TimeDashboardStyle.tertiaryText)
                         Text(inline(text))
                             .font(.system(size: 15))
                             .lineSpacing(4)
-                            .foregroundStyle(Color(hex: "3A3936"))
+                            .foregroundStyle(TimeDashboardStyle.primaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 case let .paragraph(text):
                     Text(inline(text))
                         .font(.system(size: 15))
                         .lineSpacing(5)
-                        .foregroundStyle(Color(hex: "3A3936"))
+                        .foregroundStyle(TimeDashboardStyle.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -1845,21 +1940,21 @@ private struct CategoryRowView: View {
                     .frame(width: 10, height: 10)
                 Text(category.categoryName)
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color(hex: "1C1B1A"))
+                    .foregroundStyle(TimeDashboardStyle.primaryText)
                 Spacer()
                 Text(category.durationLabel)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(hex: "6B6864"))
+                    .foregroundStyle(TimeDashboardStyle.secondaryText)
                 Text("\(category.percent)%")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(hex: "A6A29C"))
+                    .foregroundStyle(TimeDashboardStyle.tertiaryText)
                     .frame(width: 40, alignment: .trailing)
             }
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(Color(hex: "F0ECE3"))
+                        .fill(TimeDashboardStyle.subtleFill)
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
                         .fill(Color(hex: category.color))
                         .frame(width: geo.size.width * CGFloat(category.percent) / 100.0)
@@ -1873,15 +1968,15 @@ private struct CategoryRowView: View {
                     ForEach(category.subtypes, id: \.typeId) { sub in
                         HStack(spacing: 0) {
                             Text(sub.typeName)
-                                .foregroundStyle(Color(hex: "6B6864"))
+                                .foregroundStyle(TimeDashboardStyle.secondaryText)
                             Text(" \(sub.durationLabel)")
-                                .foregroundStyle(Color(hex: "A6A29C"))
+                                .foregroundStyle(TimeDashboardStyle.tertiaryText)
                                 .fontWeight(.semibold)
                         }
                         .font(.system(size: 12, weight: .medium))
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4)
-                        .background(Color(hex: "F4F1EA"))
+                        .background(TimeDashboardStyle.subtleFill)
                         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
                 }
@@ -1892,7 +1987,7 @@ private struct CategoryRowView: View {
         .padding(.vertical, 13)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Color(hex: "E4E4E9"))
+                .fill(TimeDashboardStyle.separator)
                 .frame(height: 1)
         }
     }
@@ -1907,7 +2002,7 @@ private struct TrendSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Rectangle()
-                .fill(Color(hex: "E4E4E9"))
+                .fill(TimeDashboardStyle.separator)
                 .frame(height: 1)
                 .padding(.top, 20)
 
@@ -1915,12 +2010,12 @@ private struct TrendSectionView: View {
                 Text(SharedL10n.tr("time.dashboard.trend.title"))
                     .font(.system(size: 12, weight: .bold))
                     .tracking(0.5)
-                    .foregroundStyle(Color(hex: "A6A29C"))
+                    .foregroundStyle(TimeDashboardStyle.tertiaryText)
                 Spacer()
                 if let last = trend.points.last, !trend.points.isEmpty {
-                    (Text(SharedL10n.tr("time.dashboard.period.current_prefix")).foregroundStyle(Color(hex: "A6A29C"))
+                    (Text(SharedL10n.tr("time.dashboard.period.current_prefix")).foregroundStyle(TimeDashboardStyle.tertiaryText)
                      + Text(minutesLabel(last.totalMinutes)).foregroundStyle(color).fontWeight(.bold)
-                     + Text(SharedL10n.tr("time.dashboard.trend.average", minutesLabel(trend.averageMinutes))).foregroundStyle(Color(hex: "A6A29C")))
+                     + Text(SharedL10n.tr("time.dashboard.trend.average", minutesLabel(trend.averageMinutes))).foregroundStyle(TimeDashboardStyle.tertiaryText))
                         .font(.system(size: 12))
                 }
             }
@@ -1974,7 +2069,7 @@ private struct TrendBarChart: View {
                     linePath.addLine(to: CGPoint(x: size.width, y: avgY))
                     ctx.stroke(
                         linePath,
-                        with: .color(Color(hex: "A6A29C").opacity(0.5)),
+                        with: .color(TimeDashboardStyle.tertiaryText.opacity(0.5)),
                         style: StrokeStyle(lineWidth: 1, dash: [5, 3])
                     )
 
@@ -2024,7 +2119,7 @@ private struct TrendBarChart: View {
                     let isCurrent = i == points.count - 1
                     Text(shortLabel(pt.label))
                         .font(.system(size: 11))
-                        .foregroundStyle(isCurrent ? color : Color(hex: "A6A29C"))
+                        .foregroundStyle(isCurrent ? color : TimeDashboardStyle.tertiaryText)
                         .fontWeight(isCurrent ? .semibold : .regular)
                         .frame(maxWidth: .infinity)
                         .lineLimit(1)
@@ -2138,7 +2233,7 @@ private struct MobileUsageSectionView: View {
                     Text(periodLabel.uppercased())
                         .font(.system(size: 11, weight: .bold))
                         .tracking(0.5)
-                        .foregroundStyle(Color(hex: "A6A29C"))
+                        .foregroundStyle(TimeDashboardStyle.tertiaryText)
                     Text(summary.totalDurationLabel)
                         .font(.system(size: 36, weight: .heavy))
                         .foregroundStyle(Color(hex: "C9485B"))
@@ -2159,7 +2254,7 @@ private struct MobileUsageSectionView: View {
 
             // Divider before app list
             Rectangle()
-                .fill(Color(hex: "E9E4DA"))
+                .fill(TimeDashboardStyle.subtleFill)
                 .frame(height: 1)
 
             // Top 5 app rows
@@ -2171,7 +2266,7 @@ private struct MobileUsageSectionView: View {
         .padding(.horizontal, 18)
         .padding(.top, 18)
         .padding(.bottom, 6)
-        .background(Color.white)
+        .background(TimeDashboardStyle.surface)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 1, x: 0, y: 1)
         .shadow(color: .black.opacity(0.05), radius: 24, x: 0, y: 8)
@@ -2192,7 +2287,7 @@ private struct MobileAppRowView: View {
         HStack(alignment: .center, spacing: 11) {
             Text("\(app.rank)")
                 .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(Color(hex: "A6A29C"))
+                .foregroundStyle(TimeDashboardStyle.tertiaryText)
                 .frame(width: 14, alignment: .center)
 
             AppIconView(bundleId: app.bundleId, fallbackName: app.appName)
@@ -2201,13 +2296,13 @@ private struct MobileAppRowView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(app.appName)
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color(hex: "1C1B1A"))
+                    .foregroundStyle(TimeDashboardStyle.primaryText)
                     .lineLimit(1)
 
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(Color(hex: "F0ECE3"))
+                            .fill(TimeDashboardStyle.subtleFill)
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(Color(hex: "C9485B"))
                             .frame(width: geo.size.width * fraction)
@@ -2219,10 +2314,10 @@ private struct MobileAppRowView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(app.durationLabel)
                     .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Color(hex: "1C1B1A"))
+                    .foregroundStyle(TimeDashboardStyle.primaryText)
                 Text(app.openCountLabel)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(hex: "A6A29C"))
+                    .foregroundStyle(TimeDashboardStyle.tertiaryText)
             }
             .frame(minWidth: 52, alignment: .trailing)
         }
@@ -2230,7 +2325,7 @@ private struct MobileAppRowView: View {
         .overlay(alignment: .bottom) {
             if !isLast {
                 Rectangle()
-                    .fill(Color(hex: "E9E4DA"))
+                    .fill(TimeDashboardStyle.subtleFill)
                     .frame(height: 1)
             }
         }
@@ -2267,10 +2362,10 @@ private struct AppIconView: View {
 
     private var fallbackView: some View {
         ZStack {
-            Color(hex: "E9E4DA")
+            TimeDashboardStyle.subtleFill
             Text(String(fallbackName.unicodeScalars.first.map(Character.init) ?? "?"))
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color(hex: "6B6864"))
+                .foregroundStyle(TimeDashboardStyle.secondaryText)
         }
     }
 

@@ -15,18 +15,18 @@ enum Calendar2Layout {
 }
 
 enum Calendar2Style {
-    static let bg       = Color(hex: "F5F6F8")
-    static let sheet    = Color(hex: "FFFFFF")
-    static let surface  = Color(hex: "FFFFFF")
-    static let surface2 = Color(hex: "F0F1F4")
-    static let line     = Color(hex: "E4E6EB")
-    static let line2    = Color(hex: "E4E6EB")
-    static let gridLine = Color(hex: "E4E6EB")
+    static let bg       = Color(lightHex: "F5F6F8", darkHex: "0F1014")
+    static let sheet    = Color(lightHex: "FFFFFF", darkHex: "191A1F")
+    static let surface  = Color(lightHex: "FFFFFF", darkHex: "202126")
+    static let surface2 = Color(lightHex: "F0F1F4", darkHex: "2A2B31")
+    static let line     = Color(lightHex: "E4E6EB", darkHex: "383A42")
+    static let line2    = Color(lightHex: "E4E6EB", darkHex: "383A42")
+    static let gridLine = Color(lightHex: "E4E6EB", darkHex: "30323A")
     static let accent   = Color(hex: "0A84FF")
-    static let text     = Color(hex: "1A1C20")
-    static let muted    = Color(hex: "8A8F9C")
-    static let faint    = Color(hex: "A0A5AE")
-    static let text2    = Color(hex: "6F7480")
+    static let text     = Color(lightHex: "1A1C20", darkHex: "F4F4F6")
+    static let muted    = Color(lightHex: "8A8F9C", darkHex: "A7A9B2")
+    static let faint    = Color(lightHex: "A0A5AE", darkHex: "858892")
+    static let text2    = Color(lightHex: "6F7480", darkHex: "C1C3CA")
 }
 
 enum Calendar2Format {

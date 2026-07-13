@@ -289,7 +289,7 @@ struct IdealDayView: View {
                 .padding(.horizontal, 16).padding(.bottom, 32)
             }
             .refreshable { await store.loadTodayComparison() }
-            .background(Color(hex: "F7F8FC").ignoresSafeArea())
+            .background(Calendar2Style.bg.ignoresSafeArea())
             .navigationTitle(SharedL10n.tr("ideal_day.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -393,7 +393,7 @@ struct IdealDayView: View {
                 }
             }
         }
-        .padding(18).background(.white, in: RoundedRectangle(cornerRadius: 24))
+        .padding(18).background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private var flexibleCard: some View {
@@ -413,7 +413,7 @@ struct IdealDayView: View {
             Toggle(SharedL10n.tr("ideal_day.reminder_toggle"), isOn: $draft.remindersEnabled).font(.headline)
             Text(SharedL10n.tr("ideal_day.reminder_description"))
                 .font(.caption).foregroundStyle(.secondary)
-        }.padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
+        }.padding(18).background(Calendar2Style.surface, in: RoundedRectangle(cornerRadius: 20))
     }
 
     private func binding(for kind: IdealDayKind) -> Binding<Double> {

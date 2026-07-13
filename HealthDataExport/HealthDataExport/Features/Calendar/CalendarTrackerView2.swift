@@ -1127,7 +1127,7 @@ private struct Calendar2SelectionNameSheet: View {
                 .submitLabel(.done)
                 .onSubmit { commit() }
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(Color(hex: "23232A"))
+                .foregroundStyle(Calendar2Style.text)
                 .tint(Calendar2Style.accent)
 
             if !errorMessage.isEmpty {

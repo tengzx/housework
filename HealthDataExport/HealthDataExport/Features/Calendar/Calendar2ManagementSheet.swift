@@ -57,7 +57,7 @@ struct Calendar2ManagementSheet: View {
             HStack {
                 Text(tab == .category ? L10n.tr("calendar.management.title.category") : L10n.tr("calendar.management.title.subcategory"))
                     .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(hex: "23232A"))
+                    .foregroundStyle(Calendar2Style.text)
                 Spacer()
                 if isSaving {
                     ProgressView()
@@ -79,7 +79,7 @@ struct Calendar2ManagementSheet: View {
                 tabSegment(L10n.tr("calendar.management.tab.subcategory"), value: .subcategory)
             }
             .padding(4)
-            .background(Color(hex: "F0F0F3"), in: RoundedRectangle(cornerRadius: 11))
+            .background(Calendar2Style.surface2, in: RoundedRectangle(cornerRadius: 11))
             .padding(.horizontal, 20)
             .padding(.bottom, 14)
 
@@ -120,11 +120,11 @@ struct Calendar2ManagementSheet: View {
         } label: {
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(tab == value ? Color(hex: "23232A") : Color(hex: "8A8A92"))
+                .foregroundStyle(tab == value ? Calendar2Style.text : Calendar2Style.muted)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
                 .background(
-                    tab == value ? Color.white : Color.clear,
+                    tab == value ? Calendar2Style.surface : Color.clear,
                     in: RoundedRectangle(cornerRadius: 9)
                 )
                 .shadow(color: tab == value ? .black.opacity(0.12) : .clear, radius: 3, x: 0, y: 1)
@@ -164,7 +164,7 @@ struct Calendar2ManagementSheet: View {
 
                         TextField(L10n.tr("calendar.management.category.name_placeholder"), text: $cat.name)
                             .font(.system(size: 16))
-                            .foregroundStyle(Color(hex: "23232A"))
+                            .foregroundStyle(Calendar2Style.text)
 
                         loadKindMenu(selection: $cat.loadKind, inherited: nil, allowsInheritance: false)
 
@@ -178,7 +178,7 @@ struct Calendar2ManagementSheet: View {
                         } label: {
                             Image(systemName: "trash")
                                 .font(.system(size: 14))
-                                .foregroundStyle(Color(hex: "C6C6CC"))
+                                .foregroundStyle(Calendar2Style.faint)
                                 .frame(width: 30, height: 30)
                         }
                         .buttonStyle(HapticButtonStyle())
@@ -226,12 +226,12 @@ struct Calendar2ManagementSheet: View {
                                 Circle().fill(cat.color).frame(width: 8, height: 8)
                                 Text(cat.name.isEmpty ? L10n.tr("calendar.management.category.no_name") : cat.name)
                                     .font(.system(size: 14, weight: isOn ? .semibold : .medium))
-                                    .foregroundStyle(isOn ? Color(hex: "2A2A30") : Color(hex: "4A4A52"))
+                                    .foregroundStyle(isOn ? Calendar2Style.text : Calendar2Style.text2)
                             }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 9)
                             .background(
-                                isOn ? cat.color.opacity(0.13) : Color(hex: "F5F5F7"),
+                                isOn ? cat.color.opacity(0.18) : Calendar2Style.surface2,
                                 in: Capsule()
                             )
                             .overlay(
@@ -298,7 +298,7 @@ struct Calendar2ManagementSheet: View {
 
                 TextField(L10n.tr("calendar.management.subcategory.name_placeholder"), text: $subs[idx].name)
                     .font(.system(size: 16))
-                    .foregroundStyle(Color(hex: "23232A"))
+                    .foregroundStyle(Calendar2Style.text)
 
                 let inheritedKind = cats.first(where: { $0.id == subs[idx].catId })?.loadKind
                 loadKindMenu(selection: $subs[idx].loadKindOverride, inherited: inheritedKind, allowsInheritance: true)
@@ -312,7 +312,7 @@ struct Calendar2ManagementSheet: View {
                         Text(L10n.tr("calendar.management.subcategory.focus"))
                             .font(.system(size: 10))
                     }
-                    .foregroundStyle(subs[idx].tracksFocus ? Calendar2Style.accent : Color(hex: "C6C6CC"))
+                    .foregroundStyle(subs[idx].tracksFocus ? Calendar2Style.accent : Calendar2Style.faint)
                     .frame(width: 34, height: 30)
                 }
                 .buttonStyle(HapticButtonStyle())
@@ -326,7 +326,7 @@ struct Calendar2ManagementSheet: View {
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color(hex: "C6C6CC"))
+                        .foregroundStyle(Calendar2Style.faint)
                         .frame(width: 30, height: 30)
                 }
                 .buttonStyle(HapticButtonStyle())
@@ -375,7 +375,7 @@ struct Calendar2ManagementSheet: View {
                     .font(.system(size: 9))
                     .lineLimit(1)
             }
-            .foregroundStyle(selection.wrappedValue == nil && inherited == nil ? Color(hex: "C6C6CC") : Calendar2Style.accent)
+            .foregroundStyle(selection.wrappedValue == nil && inherited == nil ? Calendar2Style.faint : Calendar2Style.accent)
             .frame(width: 48, height: 34)
         }
         .buttonStyle(HapticButtonStyle())
